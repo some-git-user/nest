@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "esModuleInterop": true,
+    "target": "ESNext",
+    "moduleResolution": "NodeNext",
+    "sourceMap": true,
+    "rootDir": "./",
+    "typeRoots": ["src/@types", "node_modules/@types"],
+    "outDir": "dist",
+    "baseUrl": "src",
+    "paths": { "@/*": ["./*"] },
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts"]
+}
