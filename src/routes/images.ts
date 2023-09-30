@@ -1,4 +1,4 @@
-import { getImage, getImages } from '@/controllers/images';
+import { getImage, getImages, createImage, deleteImages } from '@/controllers/images';
 import express from 'express';
 
 const router = express.Router();
@@ -7,11 +7,12 @@ const router = express.Router();
 
 router
     .route('/')
-    .get(getImages);
+    .get(getImages)
+    .post(createImage)
+    .delete(deleteImages);
     
 router
-    .route(
-        '/:imageId',
-    ).get(getImage);
+    .route('/:imageId')
+    .get(getImage);
 
 export default router;

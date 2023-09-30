@@ -6,8 +6,7 @@ import { Types } from 'mongoose';
  *  @arg      imageId
  *  @returns  Image Doc
  */
-export const getImage = async (imageId: string) =>
-{
+export const get = async (imageId: string) => {
     const image = await Image.findById(new Types.ObjectId(imageId));
 
     return { image };
@@ -17,9 +16,35 @@ export const getImage = async (imageId: string) =>
  *  This function is used to get all images
  *  @returns  Images Doc Array
  */
-export const getAllImages = async () =>
-{
-    const images = await Image.find();
+export const getAll = async () => {
+    const images = await Image.find({limit: 100});
+    console.log(images);
 
     return { images };
+};
+
+/**
+ *  This function is used to create a single image
+ *  @arg      data
+ *  @returns  Image Doc
+ */
+export const create = async (data: typeof Image) => {
+    const image = await Image.create(data);
+
+    return { image };
+};
+
+/**
+ *  This function is used to delete images
+ *  @arg      data
+ *  @returns  Image Doc
+ */
+export const deleteMany = async (data: string[]) => {
+    const imageIds = (data).map(
+        (imageIdsString) => new Types.ObjectId(imageIdsString),
+    );
+  
+    const result = await Image.deleteMany({ _id: { $in: imageIds } });
+
+    return result.deletedCount !== 0;
 };

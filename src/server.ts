@@ -10,6 +10,8 @@ connectMongoDB();
 
 const app: Application = express();
 
+app.use(express.json());
+
 // route files
 app.use('/api/v1/image', images);
 
@@ -23,7 +25,7 @@ const server = app.listen(
   ) as never,
 );
 
-// Handle undhandled promise rejections - dont use try catch at db.js
+// Handle unhandled promise rejections - dont use try catch at db.js
 process.on('unhandledRejection', (err: { message: string }) => {
     console.log(`Error: ${err.message}`);
     // close server & exit process
