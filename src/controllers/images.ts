@@ -30,7 +30,7 @@ export const getImages = async (req: Request, res: Response, next: NextFunction)
     }
 };
 
-// @desc     create a image
+// @desc     Create a image
 // @route    POST /api/v1/image
 // @access   Private TODO
 export const createImage = async (req: Request, res: Response, next: NextFunction) => {

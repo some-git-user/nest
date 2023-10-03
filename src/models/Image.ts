@@ -6,6 +6,7 @@ interface ImageBase {
   imageName: string;
   imagePath: string;
   imageType: string;
+  imageData: string;
 }
 /**
  * A model for a Image.
@@ -31,6 +32,10 @@ const ImageSchema = new mongoose.Schema<ImageBase, ImageModel>(
             required: true,
         },
         imageType: {
+            type: String,
+            required: true,
+        },
+        imageData: {
             type: String,
             required: true,
         },

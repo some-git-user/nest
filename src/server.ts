@@ -4,6 +4,7 @@ import { env } from '@/config/env';
 import { runScheduler } from '@/lib/cron/scheduler';
 import connectMongoDB from '@/lib/db/mongodb';
 import images from '@/routes/images';
+import { startFtpServer } from './lib/ftp/ftp-server';
 
 // connect database
 connectMongoDB();
@@ -43,6 +44,8 @@ process.on('SIGTERM', (err: { message: string }) => {
     // close server & exit process
     server.close(() => process.exit(1));
 });
+
+startFtpServer();
 
 // start cron scheduler
 runScheduler();

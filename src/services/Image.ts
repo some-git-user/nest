@@ -18,7 +18,6 @@ export const get = async (imageId: string) => {
  */
 export const getAll = async () => {
     const images = await Image.find({limit: 100});
-    console.log(images);
 
     return { images };
 };

@@ -47,6 +47,9 @@ export const env = cleanEnv(process.env, {
     FRONTEND_URL: url({ devDefault: 'http://localhost:3000' }),
     COOKIE_DOMAIN: str({ devDefault: 'localhost' }),
 
+    FTP_ROOT: nonEmptyStrValidator(),
+    FTP_PORT: nonEmptyStrValidator(),
+
     JWT_SECRET: nonEmptyStrValidator(),
     JWT_EXPIRE: nonEmptyStrValidator(),
     JWT_COOKIE_EXPIRE: num(),
