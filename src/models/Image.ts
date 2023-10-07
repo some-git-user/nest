@@ -4,7 +4,7 @@ import { EmptyObject } from '../@types/utils';
 interface ImageBase {
   ftpUserName: string;
   imageName: string;
-  imagePath: string;
+  imageSize: number;
   imageType: string;
   imageData: string;
 }
@@ -27,8 +27,8 @@ const ImageSchema = new mongoose.Schema<ImageBase, ImageModel>(
             type: String,
             required: true,
         },
-        imagePath: {
-            type: String,
+        imageSize: {
+            type: Number,
             required: true,
         },
         imageType: {

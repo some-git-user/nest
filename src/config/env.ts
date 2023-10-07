@@ -49,6 +49,7 @@ export const env = cleanEnv(process.env, {
 
     FTP_ROOT: nonEmptyStrValidator(),
     FTP_PORT: nonEmptyStrValidator(),
+    FTP_MAX_UPLOAD_SIZE: nonEmptyStrValidator(),
 
     JWT_SECRET: nonEmptyStrValidator(),
     JWT_EXPIRE: nonEmptyStrValidator(),
