@@ -15,7 +15,7 @@ export const createNagiosReturnMessage = (
   };
 
   if (performanceData) {
-    console.log(performanceData);
+    console.debug(performanceData);
     if (!Array.isArray(performanceData)) {
       performanceData = [performanceData];
     }
