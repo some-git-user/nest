@@ -1,0 +1,12 @@
+[Unit]
+Description=Nest Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nest
+Restart=on-failure
+User=nest
+
+[Install]
+WantedBy=multi-user.target

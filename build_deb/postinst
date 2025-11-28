@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Create 'nest' user if not exists
+id -u nest &>/dev/null || useradd --system --no-create-home nest
+
+# Create 'nest-plugins' directory if not exists under /opt
+mkdir -p /opt/nest-plugins
+
+# Set ownership and permissions
+chown -R nest:nest /opt/nest-plugins
+
+# Install systemd service
+systemctl daemon-reload
+systemctl enable nest.service
+
+# Start the service
+systemctl start nest.service

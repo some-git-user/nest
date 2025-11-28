@@ -6,6 +6,7 @@
   "scripts": {
     "build": "npx tsc",
     "build:release": "npx tsc && esbuild dist/src/server.js --bundle --platform=node --outfile=standalone/server-bundled.js && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
+    "build:deb": "npm run build:release && cd build_deb && ./make_deb.sh",
     "start": "node dist/server.js",
     "dev": "nodemon -r tsconfig-paths/register src/server.ts --inspect",
     "lint": "npx eslint . --ext .ts --fix",
@@ -17,7 +18,7 @@
     "type": "git",
     "url": "git+ssh://git@github.com/some-git-user/nest.git"
   },
-  "author": "Viktor Dembizki",
+  "author": "Viktor Keller",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/some-git-user/nest/issues"
