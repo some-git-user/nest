@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Request, Response, Application } from "express";
 import { env } from "@/config/env";
 import { runScheduler } from "@/lib/cron/scheduler";
 import dynamicRoutes from "@/routes/dynamic-routes";
@@ -8,7 +8,7 @@ const app: Application = express();
 app.use(express.json());
 
 // route files
-app.get("/favicon.ico", (req, res) => res.status(204));
+app.get("/favicon.ico", (_req: Request, res: Response) => res.status(204));
 app.use("/", dynamicRoutes);
 
 const server = app.listen(

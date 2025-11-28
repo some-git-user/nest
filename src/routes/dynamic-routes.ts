@@ -1,5 +1,5 @@
 import { createNagiosReturnMessage } from "@/lib/nagios";
-import express from "express";
+import express, { Request, Response } from "express";
 import fs from "fs";
 import path from "path";
 import ts from "typescript";
@@ -36,7 +36,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
       `GET route initialized for plugin: ${filePath}: http://${process.env.HOST}:${process.env.PORT}${kebabCasePath}`
     );
 
-    router.get(kebabCasePath, (req, res) => {
+    router.get(kebabCasePath, (req: Request, res: Response) => {
       import(`${jsFilePath}?t=${Date.now()}`)
         .then((module) => {
           const func =
