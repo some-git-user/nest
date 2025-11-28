@@ -1,0 +1,27 @@
+name: Daily Dependency Vulnerability Audit
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: npm install --omit=dev
+
+      - name: Check vulnerabilities
+        run: npm run check:vulnerabilities
+
+      - name: Attempt fix
+        run: npm run fix:vulnerabilities
