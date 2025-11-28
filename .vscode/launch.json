@@ -6,8 +6,12 @@
       "request": "launch",
       "name": "Debug App",
       "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/nodemon",
-      "runtimeArgs": ["-r", "tsconfig-paths/register"],
-      "program": "${workspaceFolder}/src/server.ts",
+      "runtimeArgs": [
+        "-r",
+        "tsconfig-paths/register",
+        "${workspaceFolder}/src/server.ts",
+        "--inspect"
+      ],
       "restart": true,
       "sourceMaps": true,
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],

@@ -1,51 +1,42 @@
-import errorHandler from '@/lib/middleware/errorHandler';
-import express, { Application } from 'express';
-import { env } from '@/config/env';
-import { runScheduler } from '@/lib/cron/scheduler';
-import connectMongoDB from '@/lib/db/mongodb';
-import images from '@/routes/images';
-import { startFtpServer } from './lib/ftp/ftp-server';
-
-// connect database
-connectMongoDB();
+import express, { Application } from "express";
+import { env } from "@/config/env";
+import { runScheduler } from "@/lib/cron/scheduler";
+import dynamicRoutes from "@/routes/dynamic-routes";
 
 const app: Application = express();
 
 app.use(express.json());
 
 // route files
-app.use('/api/v1/image', images);
-
-// init errorHandlerToClient - to send individuel res to client
-app.use(errorHandler);
+app.get("/favicon.ico", (req, res) => res.status(204));
+app.use("/", dynamicRoutes);
 
 const server = app.listen(
-    env.PORT,
+  env.PORT,
+  env.HOST,
   console.log(
-      `Server running in ${env.NODE_ENV} mode on port ${env.PORT} with PID ${process.pid}`,
-  ) as never,
+    `Server running in ${env.NODE_ENV} mode on host ${env.HOST} and port ${env.PORT} with PID ${process.pid}`
+  ) as never
 );
 
-// Handle unhandled promise rejections - dont use try catch at db.js
-process.on('unhandledRejection', (err: { message: string }) => {
-    console.log(`Error: ${err.message}`);
-    // close server & exit process
-    server.close(() => process.exit(1));
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err: { message: string }) => {
+  console.log(`Error: ${err.message}`);
+  // close server & exit process
+  server.close(() => process.exit(1));
 });
 
-process.on('uncaughtException', (err: { message: string }) => {
-    console.log(`Error: ${err.message}`);
-    // close server & exit process
-    server.close(() => process.exit(1));
+process.on("uncaughtException", (err: { message: string }) => {
+  console.log(`Error: ${err.message}`);
+  // close server & exit process
+  server.close(() => process.exit(1));
 });
 
-process.on('SIGTERM', (err: { message: string }) => {
-    console.log(`Error: ${err.message}`);
-    // close server & exit process
-    server.close(() => process.exit(1));
+process.on("SIGTERM", (err: { message: string }) => {
+  console.log(`Error: ${err.message}`);
+  // close server & exit process
+  server.close(() => process.exit(1));
 });
-
-startFtpServer();
 
 // start cron scheduler
 runScheduler();

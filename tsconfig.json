@@ -1,15 +1,14 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
+    "module": "node20",
     "esModuleInterop": true,
     "target": "ESNext",
-    "moduleResolution": "NodeNext",
     "sourceMap": true,
     "rootDir": "./",
     "typeRoots": ["src/@types", "node_modules/@types"],
     "outDir": "dist",
     "baseUrl": "src",
-    "paths": { "@/*": ["./*"] },
+    "paths": { "@/*": ["./*"] }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "**/*.spec.ts"]
