@@ -10,7 +10,8 @@
     "dev": "nodemon -r tsconfig-paths/register src/server.ts --inspect",
     "lint": "npx eslint . --ext .ts --fix",
     "format": "npx prettier --write .",
-    "check:vulnerabilities": "npm audit --omit=dev"
+    "check:vulnerabilities": "npm audit --omit=dev",
+    "fix:vulnerabilities": "npm audit fix --omit=dev"
   },
   "repository": {
     "type": "git",
