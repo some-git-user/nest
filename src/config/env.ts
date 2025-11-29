@@ -1,4 +1,3 @@
-import { config } from "dotenv";
 import {
   cleanEnv,
   email,
@@ -10,8 +9,42 @@ import {
   str,
   url,
 } from "envalid";
+import * as fs from "fs";
+import * as path from "path";
 
-config();
+function loadEnvFile(filepath: string) {
+  if (!fs.existsSync(filepath)) {
+    return;
+  }
+  const lines = fs.readFileSync(filepath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+function getConfigPath(): string {
+  const argv = process.argv;
+  const idx = argv.indexOf("--configPath");
+  if (idx !== -1 && argv[idx + 1]) {
+    return argv[idx + 1];
+  }
+  if (process.env.NEST_CONFIG_FILE) return process.env.NEST_CONFIG_FILE;
+  return path.resolve(process.cwd(), ".env");
+}
+
+loadEnvFile(getConfigPath());
 
 const nonEmptyStrValidator = makeValidator<string>((input: string) => {
   const trimmedInput = input.trim();
@@ -29,7 +62,7 @@ export const strList = makeValidator<Array<string>>((input: string) => {
     if (Array.isArray(input)) {
       return input.map(nonEmptyStr._parse);
     } else {
-      const inputArray = input.split(/,\s*/).filter((str) => str !== ""); // Use regex for splitting and filtering empty strings
+      const inputArray = input.split(/,\s*/).filter((str) => str !== "");
       return validateList(inputArray);
     }
   };
@@ -42,7 +75,8 @@ export const strList = makeValidator<Array<string>>((input: string) => {
 });
 
 export const env = cleanEnv(process.env, {
-  NODE_ENV: str({ devDefault: "development" }),
-  HOST: host(),
-  PORT: port({ default: 5000 }),
+  NODE_ENV: str({ default: "production" }),
+  HOST: host({ default: "localhost" }),
+  PORT: port({ default: 5002 }),
+  PLUGINS_DIR: str({ default: "plugins" }),
 });
