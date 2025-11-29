@@ -3,6 +3,7 @@ import { env } from "@/config/env";
 import { runScheduler } from "@/lib/cron/scheduler";
 import dynamicRoutes from "@/routes/dynamic-routes";
 import { createNagiosReturnMessage } from "./lib/nagios";
+import { logger } from "./lib/logger";
 
 const app: Application = express();
 
@@ -23,26 +24,26 @@ app.use((req: Request, res: Response) => {
 const server = app.listen(
   env.PORT,
   env.HOST,
-  console.info(
+  logger.info(
     `Server running in ${env.NODE_ENV} mode on host ${env.HOST} and port ${env.PORT} with PID ${process.pid}`
   ) as never
 );
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (err: { message: string }) => {
-  console.error(`Error: ${err.message}`);
+  logger.error(`Error: ${err.message}`);
   // close server & exit process
   server.close(() => process.exit(1));
 });
 
 process.on("uncaughtException", (err: { message: string }) => {
-  console.error(`Error: ${err.message}`);
+  logger.error(`Error: ${err.message}`);
   // close server & exit process
   server.close(() => process.exit(1));
 });
 
 process.on("SIGTERM", (err: { message: string }) => {
-  console.error(`Error: ${err.message}`);
+  logger.error(`Error: ${err.message}`);
   // close server & exit process
   server.close(() => process.exit(1));
 });

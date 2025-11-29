@@ -77,6 +77,8 @@ export const strList = makeValidator<Array<string>>((input: string) => {
 export const env = cleanEnv(process.env, {
   NODE_ENV: str({ default: "production" }),
   HOST: host({ default: "localhost" }),
-  PORT: port({ default: 5002 }),
+  PORT: port({ default: 5000 }),
   PLUGINS_DIR: str({ default: "plugins" }),
+  LOG_FILE_PATH: str({ default: "logs/nest.log" }),
+  MAX_LOG_FILE_SIZE: num({ default: 1024 * 1024 }), // 1MB in bytes
 });

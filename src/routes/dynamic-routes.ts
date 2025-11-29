@@ -1,4 +1,5 @@
 import { env } from "@/config/env";
+import { logger } from "@/lib/logger";
 import { createNagiosReturnMessage } from "@/lib/nagios";
 import express, { Request, Response } from "express";
 import fs from "fs";
@@ -8,7 +9,7 @@ import ts from "typescript";
 const router = express.Router();
 
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
-console.info(`Use plugins directory: ${pluginsDir}`);
+logger.info(`Use plugins directory: ${pluginsDir}`);
 
 fs.readdirSync(pluginsDir)?.forEach((file) => {
   const filePath = path.join(pluginsDir, file);
@@ -34,7 +35,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
       .basename(file, path.extname(file))
       .replace(/[^a-zA-Z0-9]/g, "-")
       .toLowerCase()}`;
-    console.info(
+    logger.info(
       `GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`
     );
 
@@ -50,7 +51,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                   throw new Error("Function not found");
                 });
           if (typeof func === "function") {
-            console.debug(req.url);
+            logger.debug(req.url);
 
             const urlParams = req.url
               .split(/\?|&/)
@@ -75,7 +76,10 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               const codeString = code?.toString() ?? "";
               const codeNumber = Number.parseInt(codeString, 10);
               const isValidCode = validNagiosReturnValues.includes(codeNumber);
-              console.debug(message, code, performanceData);
+              const debugTemplate = `Debug: message=${message}, code=${code}, performanceData=${
+                performanceData ? JSON.stringify(performanceData) : "undefined"
+              }`;
+              logger.debug(debugTemplate);
 
               if (isValidCode && typeof message === "string") {
                 const nagiosReturn = createNagiosReturnMessage(
@@ -83,7 +87,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                   code,
                   performanceData
                 );
-                console.debug(nagiosReturn);
+                logger.debug(nagiosReturn);
 
                 return res.send(nagiosReturn);
               } else {
@@ -96,7 +100,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               }
             }
           } else {
-            console.error("Plugin must export a function");
+            logger.error("Plugin must export a function");
             res
               .status(500)
               .send(
@@ -108,7 +112,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
           }
         })
         .catch((err) => {
-          console.error(err);
+          logger.error(err);
           res
             .status(500)
             .send(

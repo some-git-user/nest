@@ -10,3 +10,6 @@ standalone
 
 # nagios plugins
 plugins
+
+# log directory
+logs

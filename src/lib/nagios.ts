@@ -3,6 +3,7 @@ import {
   nagiosReturnValuesEnum,
   PerformanceData,
 } from "@/@types/nagios";
+import { logger } from "./logger";
 
 export const createNagiosReturnMessage = (
   message: string,
@@ -15,7 +16,7 @@ export const createNagiosReturnMessage = (
   };
 
   if (performanceData) {
-    console.debug(performanceData);
+    logger.debug(performanceData);
     if (!Array.isArray(performanceData)) {
       performanceData = [performanceData];
     }
@@ -37,7 +38,7 @@ export const createNagiosReturnMessage = (
         .join(" ")
         .trimStart();
     } else {
-      console.error(`Error parsing performance data: ${performanceData}`);
+      logger.error(`Error parsing performance data: ${performanceData}`);
     }
   }
 
