@@ -1,14 +1,16 @@
 #!/bin/bash
 set -e
 
-# Create 'nest' user if not exists
-id -u nest &>/dev/null || useradd --system --no-create-home nest
+# Load variables from /etc/nest/nest.conf
+if [ -f /etc/nest/nest.conf ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source /etc/nest/nest.conf
+    set +a
+fi
 
-# Create 'nest-plugins' directory if not exists under /opt
-mkdir -p /opt/nest-plugins
-
-# Set ownership and permissions
-chown -R nest:nest /opt/nest-plugins
+# Use the PLUGINS_DIR variable from config and create the directory
+mkdir -p "${PLUGINS_DIR:-/opt/nest-plugins}"
 
 # Install systemd service
 systemctl daemon-reload

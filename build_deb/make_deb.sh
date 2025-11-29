@@ -11,6 +11,7 @@ DESC=$(jq -r .description $PACKAGE_JSON)
 
 BUILD_DIR="./nest-deb"
 BIN_SOURCE="../standalone/nest"
+BUILD_DEB="nest-deb.deb"
 
 if [ ! -f "$BIN_SOURCE" ]; then
   echo "Nest binary not found at $BIN_SOURCE. Build it first!"
@@ -19,18 +20,23 @@ fi
 
 # Cleanup
 rm -rf "$BUILD_DIR"
+rm -rf "$BUILD_DEB"
 mkdir -p "$BUILD_DIR/DEBIAN"
 mkdir -p "$BUILD_DIR/usr/bin"
 mkdir -p "$BUILD_DIR/lib/systemd/system"
+mkdir -p "$BUILD_DIR/etc/nest"
 
 # Copy files
 cp "$BIN_SOURCE" "$BUILD_DIR/usr/bin/nest"
 cp nest.service "$BUILD_DIR/lib/systemd/system/nest.service"
 cp postinst "$BUILD_DIR/DEBIAN/postinst"
+cp nest.conf "$BUILD_DIR/etc/nest/nest.conf"
 
 # Set permissions
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 chmod 755 "$BUILD_DIR/usr/bin/nest"
+chmod 640 "$BUILD_DIR/lib/systemd/system/nest.service"
+chmod 755 "$BUILD_DIR/etc/nest/nest.conf"
 
 # Create control file
 cat > "$BUILD_DIR/DEBIAN/control" <<EOF
@@ -38,6 +44,7 @@ Package: $PKG_NAME
 Version: $PKG_VERSION
 Section: base
 Priority: optional
+Installed-Size: $(du -s "$BUILD_DIR" | awk '{print $1}')
 Architecture: $PKG_ARCH
 Maintainer: $MAINTAINER
 Description: $DESC
@@ -46,7 +53,7 @@ EOF
 # Build package
 dpkg-deb --build --root-owner-group "$BUILD_DIR"
 
-echo "Package built: $(pwd)/nest-deb.deb"
+echo "Package built: $(pwd)/$BUILD_DEB"
 
 # Cleanup
 rm -rf "$BUILD_DIR"
