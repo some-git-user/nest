@@ -1,3 +1,4 @@
+import { env } from "@/config/env";
 import { createNagiosReturnMessage } from "@/lib/nagios";
 import express, { Request, Response } from "express";
 import fs from "fs";
@@ -6,7 +7,8 @@ import ts from "typescript";
 
 const router = express.Router();
 
-const pluginsDir = path.join(process.cwd(), "plugins");
+const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
+console.info(`Use plugins directory: ${pluginsDir}`);
 
 fs.readdirSync(pluginsDir)?.forEach((file) => {
   const filePath = path.join(pluginsDir, file);
@@ -33,7 +35,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
       .replace(/[^a-zA-Z0-9]/g, "-")
       .toLowerCase()}`;
     console.info(
-      `GET route initialized for plugin: ${filePath}: http://${process.env.HOST}:${process.env.PORT}${kebabCasePath}`
+      `GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`
     );
 
     router.get(kebabCasePath, (req: Request, res: Response) => {
@@ -85,19 +87,36 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
 
                 return res.send(nagiosReturn);
               } else {
-                return res.send("Error: Invalid response format");
+                return res.send(
+                  createNagiosReturnMessage(
+                    message ?? `Unknown command ${req.url}`,
+                    3
+                  )
+                );
               }
             }
           } else {
             console.error("Plugin must export a function");
-            res.status(500).send("Plugin must export a function");
+            res
+              .status(500)
+              .send(
+                createNagiosReturnMessage(
+                  `Plugin ${jsFilePath} must export a function`,
+                  3
+                )
+              );
           }
         })
         .catch((err) => {
           console.error(err);
           res
             .status(500)
-            .send(`Error loading plugin: ${jsFilePath}. Error: ${err}`);
+            .send(
+              createNagiosReturnMessage(
+                `Error loading plugin: ${jsFilePath}. Error: ${err}`,
+                3
+              )
+            );
         });
     });
   }
