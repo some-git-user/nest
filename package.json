@@ -8,7 +8,7 @@
     "build:release": "npm run build && esbuild dist/src/server.js --bundle --platform=node --outfile=standalone/server-bundled.js && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && rm -rf nest && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
     "build:deb": "npm run build:release && cd build_deb && ./make_deb.sh",
     "start": "node dist/server.js",
-    "dev": "nodemon -r tsconfig-paths/register src/server.ts --inspect",
+    "dev": "NODE_ENV=development nodemon -r tsconfig-paths/register src/server.ts --inspect",
     "lint": "npx eslint . --ext .ts --fix",
     "format": "npx prettier --write .",
     "check:vulnerabilities": "npm audit --omit=dev",
