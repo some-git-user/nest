@@ -83,13 +83,53 @@ jobs:
           fi
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
+      - name: Generate changelog from commits since previous tag
+        id: changelog
+        run: |
+          set -euo pipefail
+          tag="${{ steps.vars.outputs.tag }}"
+          echo "Generating changelog for $tag"
+
+          # Find previous tag by creatordate, excluding the current tag
+          prev_tag=$(git tag --sort=-creatordate | grep -v "^${tag}$" | head -n1 || true)
+
+          # If no previous tag found, fall back to the initial commit
+          if [ -z "$prev_tag" ]; then
+            prev_tag=$(git rev-list --max-parents=0 HEAD)
+            echo "No previous tag found; using initial commit: $prev_tag"
+          else
+            echo "Previous tag detected: $prev_tag"
+          fi
+
+          # Build range for git log (use prev_tag..HEAD)
+          range="${prev_tag}..HEAD"
+
+          # Generate a compact changelog: one line per commit with subject, short sha and author
+          changelog=$(git --no-pager log --pretty=format:'- %s (%h) — %an' $range || true)
+
+          if [ -z "$changelog" ]; then
+            changelog="No changes detected since the previous release."
+          fi
+
+          # Add header and format
+          cat > changelog.md <<EOF
+          Changelog for ${tag}
+
+          ${changelog}
+          EOF
+
+          # Expose multiline output via GITHUB_OUTPUT (proper multiline delim)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat changelog.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           release_name: "Release ${{ steps.vars.outputs.tag }}"
-          body: "Automated .deb release from build:deb script"
+          body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: false
         env:
