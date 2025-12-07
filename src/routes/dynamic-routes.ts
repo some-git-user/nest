@@ -41,15 +41,18 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
 
     router.get(kebabCasePath, (req: Request, res: Response) => {
       import(`${jsFilePath}?t=${Date.now()}`)
-        .then((module) => {
-          const func =
-            typeof module.default === "function"
-              ? module.default
-              : module.checkTest ||
-                (module.default && module.default.checkTest) ||
-                (() => {
-                  throw new Error("Function not found");
-                });
+        .then(async (module) => {
+          let func: Function = () => {
+            throw new Error("Function not found");
+          };
+
+          const funcMatch = Object.values(module).find(
+            (value) => typeof value === "function"
+          );
+          if (funcMatch) {
+            func = funcMatch as Function;
+          }
+
           if (typeof func === "function") {
             logger.debug(req.url);
 
@@ -64,7 +67,10 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               paramsObj[key] = value;
             });
 
-            const result = func(paramsObj);
+            try {
+              const result = await func(paramsObj);
+
+              if (res.headersSent) return;
 
             if (result instanceof Promise) {
               result
@@ -98,6 +104,18 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                   )
                 );
               }
+            } catch (err) {
+              logger.error(err);
+              return res
+                .status(500)
+                .send(
+                  createNagiosReturnMessage(
+                    `Plugin ${jsFilePath} failed: ${
+                      err?.message ?? String(err)
+                    }`,
+                    3
+                  )
+                );
             }
           } else {
             logger.error("Plugin must export a function");
