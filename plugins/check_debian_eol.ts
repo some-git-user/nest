@@ -71,7 +71,6 @@ export const checkDebianEol = async (params: {
     const latestMatchingRelease = jsonResponse.result.releases.find(
       (release) => release.name === debianVersion
     );
-    console.log(latestMatchingRelease);
 
     if (!latestMatchingRelease) {
       returnObject.message = `Debian version "${debianVersion}" does not match any releases from ${eolUrl}`;
@@ -90,19 +89,14 @@ export const checkDebianEol = async (params: {
     if (daysRemaining <= criticalEolRemainingDays) {
       returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
       returnObject.code = 2; // CRITICAL
-      console.log(returnObject);
     } else if (daysRemaining <= warningEolRemainingDays) {
       returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
       returnObject.code = 1; // WARNING
-      console.log(returnObject);
     } else if (daysRemaining > warningEolRemainingDays) {
       returnObject.message = `Debian version "${debianVersion}" is not EOL. Remaining days: ${daysRemaining}`;
       returnObject.code = 0; // OK
-      console.log(returnObject);
     }
   }
-
-  console.log(returnObject);
 
   return returnObject;
 };
