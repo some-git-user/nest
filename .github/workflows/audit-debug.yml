@@ -1,0 +1,68 @@
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  audit-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print runner and environment info
+        run: |
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner temp: $RUNNER_TEMP"
+          uname -a
+          lsb_release -a || true
+          echo "Date: $(date -u)"
+          env | sort
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: List repo files and show workflow file bytes
+        run: |
+          echo "PWD: $(pwd)"
+          ls -la
+          echo "--- head of .nvmrc (cat) ---"
+          if [ -f .nvmrc ]; then
+            cat .nvmrc || true
+            echo "--- hexdump of first 40 bytes of .nvmrc ---"
+            hexdump -C .nvmrc | sed -n '1,10p'
+            echo "--- show CR/LF visible ---"
+            sed -n '1,10p' .nvmrc | sed -n '1,10l'
+          else
+            echo ".nvmrc not found in repo root"
+          fi
+
+      - name: Set up Node.js (from .nvmrc) and verify
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Print node and npm versions
+        run: |
+          echo "Which node: $(which node || echo 'no node')"
+          node -v || true
+          npm -v || true
+          corepack --version || true
+
+      - name: Install dependencies (debug)
+        run: |
+          echo "npm config list"
+          npm config list
+          npm install --omit=dev
+        continue-on-error: false
+
+      - name: Check vulnerabilities (debug)
+        run: |
+          echo "npm run check:vulnerabilities"
+          npm run check:vulnerabilities
+        continue-on-error: false
+
+      - name: Attempt fix (debug)
+        run: |
+          echo "npm run fix:vulnerabilities"
+          npm run fix:vulnerabilities
+        continue-on-error: true
