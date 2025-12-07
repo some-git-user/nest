@@ -1,3 +1,4 @@
+import { NagiosReturnValuesEnum } from "@/@types/nagios";
 import { env } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { createNagiosReturnMessage } from "@/lib/nagios";
@@ -72,11 +73,6 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
 
               if (res.headersSent) return;
 
-            if (result instanceof Promise) {
-              result
-                .then((data) => res.send(data))
-                .catch((err) => res.status(500).send(err));
-            } else {
               const { message, code, performanceData } = result ?? {};
               const codeString = code?.toString() ?? "";
               const codeNumber = Number.parseInt(codeString, 10);
