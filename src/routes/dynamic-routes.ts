@@ -78,10 +78,20 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                 .catch((err) => res.status(500).send(err));
             } else {
               const { message, code, performanceData } = result ?? {};
-              const validNagiosReturnValues = [0, 1, 2, 3];
               const codeString = code?.toString() ?? "";
               const codeNumber = Number.parseInt(codeString, 10);
-              const isValidCode = validNagiosReturnValues.includes(codeNumber);
+              const isValidCode = Object.values(NagiosReturnValuesEnum).some(
+                (value) => value === codeNumber
+              );
+              if (!isValidCode) {
+                const errorMessage = `Invalid return code "${code}" for plugin ${jsFilePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`;
+                logger.warn(errorMessage);
+                const nagiosReturn = createNagiosReturnMessage(
+                  errorMessage,
+                  NagiosReturnValuesEnum.UNKNOWN
+                );
+                return res.send(nagiosReturn);
+              }
               const debugTemplate = `Debug: message=${message}, code=${code}, performanceData=${
                 performanceData ? JSON.stringify(performanceData) : undefined
               }`;
