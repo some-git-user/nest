@@ -8,8 +8,8 @@ node_modules/
 dist
 standalone
 
-# nagios plugins
-plugins
+# nagios plugins (transpiled files)
+plugins/*.js
 
 # log directory
 logs
