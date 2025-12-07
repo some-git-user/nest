@@ -1,0 +1,135 @@
+name: Release .deb (build:deb)
+
+on:
+  push:
+    # release on semantic tags like v1.2.3
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional tag to use for the release (e.g. v1.2.3). If omitted, uses the tag that triggered the workflow or package.json version."
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure make_deb.sh (and any make scripts) are executable
+        run: |
+          # make_deb.sh might live in various places; make it executable wherever it is found
+          find . -type f -name "make_deb.sh" -exec chmod +x {} \; || true
+          # also ensure npm scripts that call shell scripts have execution permission
+          git ls-files | grep -E '\.sh$' || true
+          echo "Executable shell scripts:"
+          find . -type f -name "*.sh" -exec ls -la {} \;
+
+      - name: Run build:deb (uses package.json script which should call make_deb.sh)
+        id: build
+        run: |
+          echo "Running npm run build:deb"
+          npm run build:deb
+
+      - name: Find produced .deb files
+        id: find_debs
+        run: |
+          shopt -s globstar nullglob
+          mapfile -t debs < <(find . -type f -name "*.deb" -print)
+          if [ ${#debs[@]} -eq 0 ]; then
+            echo "No .deb files found after build!"
+            echo "Listing files for debugging:"
+            find . -maxdepth 3 -type f -print
+            exit 1
+          fi
+          echo "Found .deb files:"
+          for f in "${debs[@]}"; do
+            echo " - $f"
+          done
+          # Export list for later steps
+          printf "%s\n" "${debs[@]}" > debs-list.txt
+          echo "debs_list=debs-list.txt" >> $GITHUB_OUTPUT
+
+      - name: Determine release tag name
+        id: vars
+        run: |
+          # if workflow triggered by push tag, use that; if workflow_dispatch input provided use that; otherwise use package.json version with v prefix
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            echo "Detected tag-triggered run: $tag"
+          elif [ -n "${{ github.event.inputs.tag }}" ]; then
+            tag="${{ github.event.inputs.tag }}"
+            echo "Using tag from workflow_dispatch input: $tag"
+          else
+            # Read package.json version (node must be available - this step runs after setup-node)
+            ver=$(node -p "require('./package.json').version")
+            tag="v${ver}"
+            echo "Using package.json version: $tag"
+          fi
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          release_name: "Release ${{ steps.vars.outputs.tag }}"
+          body: "Automated .deb release from build:deb script"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .deb assets to release
+        run: |
+          set -euo pipefail
+          upload_url="${{ steps.create_release.outputs.upload_url }}"
+          token="${{ secrets.GITHUB_TOKEN }}"
+          if [ -z "$upload_url" ]; then
+            echo "No upload_url from create_release step"
+            exit 1
+          fi
+          # read list of debs
+          if [ ! -f debs-list.txt ]; then
+            echo "debs-list.txt not found"
+            exit 1
+          fi
+          while IFS= read -r asset; do
+            [ -z "$asset" ] && continue
+            if [ ! -f "$asset" ]; then
+              echo "Asset not found: $asset"
+              exit 1
+            fi
+            name=$(basename "$asset")
+            mime="application/vnd.debian.binary-package"
+            echo "Uploading $asset as $name"
+            # upload_url already contains {?name,label}; simply append name param
+            url="${upload_url}?name=${name}"
+            curl -sSL \
+              -X POST \
+              -H "Authorization: token $token" \
+              -H "Content-Type: $mime" \
+              --data-binary @"$asset" \
+              "$url"
+          done < debs-list.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Done
+        run: |
+          echo "Release created: ${{ steps.create_release.outputs.html_url }}"
