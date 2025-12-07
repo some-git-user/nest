@@ -54,9 +54,13 @@ parse_json() {
     local response="$1"
     message=$(echo "$response" | jq -r '.message')
     code=$(echo "$response" | jq -r '.code')
-    performanceData=$(echo "$response" | jq -r '.performanceData')
+    performanceData=$(echo "$response" | jq -r '.performanceData | select(. != null)')
     # Formatting to Nagios output
-    echo "$message | code=$code;$performanceData"
+    if [ -z "$performanceData" ]; then
+        echo "$message | code=$code"
+    else
+        echo "$message | code=$code;$performanceData"
+    fi
 }
 
 # Main script execution starts here
@@ -77,7 +81,7 @@ response=$(eval "curl -s -G $parameters \"$url\"")
 
 # Output response for debugging
 if [[ $? -ne 0 ]]; then
-    echo "Error: curl command failed."
+    echo "Error: curl command failed. Response: '$response'"
     exit 1
 fi
 

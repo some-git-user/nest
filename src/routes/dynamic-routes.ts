@@ -77,7 +77,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               const codeNumber = Number.parseInt(codeString, 10);
               const isValidCode = validNagiosReturnValues.includes(codeNumber);
               const debugTemplate = `Debug: message=${message}, code=${code}, performanceData=${
-                performanceData ? JSON.stringify(performanceData) : "undefined"
+                performanceData ? JSON.stringify(performanceData) : undefined
               }`;
               logger.debug(debugTemplate);
 
