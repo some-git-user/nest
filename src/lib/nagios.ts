@@ -1,13 +1,13 @@
 import {
   NagiosReturnMessage,
-  nagiosReturnValuesEnum,
+  NagiosReturnValuesEnum,
   PerformanceData,
 } from "@/@types/nagios";
 import { logger } from "./logger";
 
 export const createNagiosReturnMessage = (
   message: string,
-  code: nagiosReturnValuesEnum,
+  code: NagiosReturnValuesEnum,
   performanceData?: PerformanceData | PerformanceData[]
 ): NagiosReturnMessage => {
   const nagiosReturnMessage: NagiosReturnMessage = {

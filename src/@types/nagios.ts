@@ -1,15 +1,8 @@
-export enum nagiosReturnValuesEnum {
+export enum NagiosReturnValuesEnum {
   OK = 0,
   WARNING = 1,
   CRITICAL = 2,
   UNKNOWN = 3,
-}
-
-export enum nagiosReturnMessagesEnum {
-  OK = "OK",
-  WARNING = "WARNING",
-  CRITICAL = "CRITICAL",
-  UNKNOWN = "UNKNOWN",
 }
 
 export type PerformanceDataFormat = string;
@@ -47,6 +40,6 @@ export interface PerformanceData {
 
 export interface NagiosReturnMessage {
   message: string;
-  code: nagiosReturnValuesEnum;
+  code: NagiosReturnValuesEnum;
   performanceData?: PerformanceDataFormat;
 }
