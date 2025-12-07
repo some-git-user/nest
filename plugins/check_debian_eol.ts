@@ -26,6 +26,9 @@ type endoflifeResponseType = {
   };
 };
 
+// Usage: check_nest.sh check-debian-eol [warningEolRemainingDays=30] [criticalEolRemainingDays=60]
+// Check the end of life (EOL) of the Debian OS and return a Nagios compatible string
+// The parameters are optional and default to 30 and 60 days respectively
 export const checkDebianEol = async (params: {
   warningEolRemainingDays: number;
   criticalEolRemainingDays: number;
