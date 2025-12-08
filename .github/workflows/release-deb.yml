@@ -135,37 +135,56 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload .deb assets to release
+      - name: Upload .deb assets to release (robust)
         run: |
           set -euo pipefail
           upload_url="${{ steps.create_release.outputs.upload_url }}"
           token="${{ secrets.GITHUB_TOKEN }}"
+
           if [ -z "$upload_url" ]; then
             echo "No upload_url from create_release step"
             exit 1
           fi
-          # read list of debs
+
           if [ ! -f debs-list.txt ]; then
             echo "debs-list.txt not found"
             exit 1
           fi
+
           while IFS= read -r asset; do
             [ -z "$asset" ] && continue
             if [ ! -f "$asset" ]; then
               echo "Asset not found: $asset"
               exit 1
             fi
+
             name=$(basename "$asset")
+            # URL-encode the asset name to be safe
+            encoded_name=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$name")
+
             mime="application/vnd.debian.binary-package"
-            echo "Uploading $asset as $name"
-            # upload_url already contains {?name,label}; simply append name param
-            url="${upload_url}?name=${name}"
-            curl -sSL \
-              -X POST \
+            echo "Uploading $asset as $name (encoded: $encoded_name)"
+
+            # Use --fail so curl exits non-zero on HTTP errors, and show response for debugging
+            resp=$(curl -sS --fail -X POST \
               -H "Authorization: token $token" \
               -H "Content-Type: $mime" \
               --data-binary @"$asset" \
-              "$url"
+              --write-out "\n%{http_code}" \
+              "${upload_url}?name=${encoded_name" }" || true)
+
+            # Split response & HTTP code
+            http_code=$(echo "$resp" | tail -n1)
+            body=$(echo "$resp" | sed '$d' || true)
+
+            echo "HTTP status: $http_code"
+            if [ "$http_code" != "201" ] && [ "$http_code" != "200" ]; then
+              echo "Upload failed for $name. Response body:"
+              echo "$body"
+              exit 1
+            fi
+
+            echo "Uploaded $name successfully."
           done < debs-list.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
