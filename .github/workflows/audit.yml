@@ -11,6 +11,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Set up Node.js (from .nvmrc)
         uses: actions/setup-node@v4
@@ -22,3 +25,15 @@ jobs:
 
       - name: Attempt fix
         run: npm run fix:vulnerabilities
+
+      - name: Create PR if lockfile changed
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): npm audit fix"
+          title: "chore(deps): npm audit fix"
+          body: |
+            Automated dependency fixes produced by `npm audit fix`.
+            Please review the lockfile changes and run CI/tests before merging.
+          branch: "audit-fix-${{ github.run_id }}"
+          labels: "dependencies, automated"
