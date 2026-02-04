@@ -3,6 +3,7 @@
   "version": "0.0.3",
   "description": "Nagios Rest Server",
   "main": "dist/server.js",
+  "module": "ESNext",
   "scripts": {
     "build": "rm -rf dist && npx tsc",
     "build:release": "npm run build && esbuild dist/src/server.js --bundle --platform=node --outfile=standalone/server-bundled.js && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && rm -rf nest && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
@@ -12,7 +13,9 @@
     "lint": "npx eslint . --ext .ts --fix",
     "format": "npx prettier --write .",
     "check:vulnerabilities": "npm audit --omit=dev",
-    "fix:vulnerabilities": "npm audit fix --omit=dev"
+    "fix:vulnerabilities": "npm audit fix --omit=dev",
+    "test": "jest --watch",
+    "test:ci": "jest"
   },
   "repository": {
     "type": "git",
@@ -26,6 +29,8 @@
   "homepage": "https://github.com/some-git-user/nest#readme",
   "devDependencies": {
     "@types/express": "^5.0.5",
+    "@types/jest": "^30.0.0",
+    "@types/typescript": "^0.4.29",
     "@typescript-eslint/eslint-plugin": "^8.46.2",
     "@typescript-eslint/parser": "^8.46.2",
     "esbuild": "0.25.11",
@@ -33,7 +38,9 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-n": "^17.23.1",
     "eslint-plugin-promise": "^7.2.1",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.10",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3"
