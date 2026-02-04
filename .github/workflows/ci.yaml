@@ -1,0 +1,112 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node (from .nvmrc) + enable npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: |
+          npm ci
+          npx lerna bootstrap --ci
+
+      - name: Prettier check
+        run: npm run format:check
+
+  lint-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node (from .nvmrc) + enable npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: |
+          npm ci
+          npx lerna bootstrap --ci
+
+      - name: ESLint check
+        run: npm run lint:check
+
+  build-check:
+    needs: [format-check, lint-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node (from .nvmrc) + enable npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps
+        run: |
+          npm ci
+          npx lerna bootstrap --ci
+
+      - name: Build (release)
+        run: npm run build:release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            dist/**
+            packages/**/dist/**
+
+  unit-tests:
+    needs: [build-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node (from .nvmrc) + enable npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./build_artifacts
+
+      - name: Install deps (for running tests)
+        run: |
+          npm ci
+          npx lerna bootstrap --ci
+
+      - name: Run unit tests
+        run: npm test:ci
