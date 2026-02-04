@@ -27,7 +27,6 @@ jobs:
       - name: Install deps
         run: |
           npm ci
-          npx lerna bootstrap --ci
 
       - name: Prettier check
         run: npm run format:check
@@ -48,7 +47,6 @@ jobs:
       - name: Install deps
         run: |
           npm ci
-          npx lerna bootstrap --ci
 
       - name: ESLint check
         run: npm run lint:check
@@ -70,7 +68,6 @@ jobs:
       - name: Install deps
         run: |
           npm ci
-          npx lerna bootstrap --ci
 
       - name: Build (release)
         run: npm run build:release
@@ -106,7 +103,6 @@ jobs:
       - name: Install deps (for running tests)
         run: |
           npm ci
-          npx lerna bootstrap --ci
 
       - name: Run unit tests
         run: npm test:ci
