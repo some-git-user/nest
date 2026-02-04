@@ -20,7 +20,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
   const result = ts.transpileModule(tsCode, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ESNext,
+      target: ts.ScriptTarget.ES6,
       esModuleInterop: true,
       allowSyntheticDefaultImports: true,
       outDir: path.dirname(jsFilePath),
@@ -37,7 +37,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
       .replace(/[^a-zA-Z0-9]/g, "-")
       .toLowerCase()}`;
     logger.info(
-      `GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`
+      `GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`,
     );
 
     router.get(kebabCasePath, (req: Request, res: Response) => {
@@ -48,7 +48,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
           };
 
           const funcMatch = Object.values(module).find(
-            (value) => typeof value === "function"
+            (value) => typeof value === "function",
           );
           if (funcMatch) {
             func = funcMatch as Function;
@@ -77,14 +77,14 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               const codeString = code?.toString() ?? "";
               const codeNumber = Number.parseInt(codeString, 10);
               const isValidCode = Object.values(NagiosReturnValuesEnum).some(
-                (value) => value === codeNumber
+                (value) => value === codeNumber,
               );
               if (!isValidCode) {
                 const errorMessage = `Invalid return code "${code}" for plugin ${jsFilePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`;
                 logger.warn(errorMessage);
                 const nagiosReturn = createNagiosReturnMessage(
                   errorMessage,
-                  NagiosReturnValuesEnum.UNKNOWN
+                  NagiosReturnValuesEnum.UNKNOWN,
                 );
                 return res.send(nagiosReturn);
               }
@@ -97,7 +97,7 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                 const nagiosReturn = createNagiosReturnMessage(
                   message,
                   code,
-                  performanceData
+                  performanceData,
                 );
                 logger.debug(nagiosReturn);
 
@@ -106,8 +106,8 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                 return res.send(
                   createNagiosReturnMessage(
                     message ?? `Unknown command ${req.url}`,
-                    3
-                  )
+                    3,
+                  ),
                 );
               }
             } catch (err) {
@@ -119,8 +119,8 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
                     `Plugin ${jsFilePath} failed: ${
                       err?.message ?? String(err)
                     }`,
-                    3
-                  )
+                    3,
+                  ),
                 );
             }
           } else {
@@ -130,8 +130,8 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
               .send(
                 createNagiosReturnMessage(
                   `Plugin ${jsFilePath} must export a function`,
-                  3
-                )
+                  3,
+                ),
               );
           }
         })
@@ -142,8 +142,8 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
             .send(
               createNagiosReturnMessage(
                 `Error loading plugin: ${jsFilePath}. Error: ${err}`,
-                3
-              )
+                3,
+              ),
             );
         });
     });
