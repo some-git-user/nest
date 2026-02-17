@@ -105,4 +105,4 @@ jobs:
           npm ci
 
       - name: Run unit tests
-        run: npm test:ci
+        run: npm run test:ci
