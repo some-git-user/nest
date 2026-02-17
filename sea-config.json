@@ -1,6 +1,6 @@
 {
-  "main": "standalone/server-bundled.js",
-  "output": "standalone/sea-prep.blob",
-  "disableExperimentalSEAWarning": true,
-  "useCodeCache": true
+	"main": "standalone/server-bundled.js",
+	"output": "standalone/sea-prep.blob",
+	"disableExperimentalSEAWarning": true,
+	"useCodeCache": true
 }

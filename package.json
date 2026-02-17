@@ -1,62 +1,63 @@
 {
-  "name": "nest",
-  "version": "0.0.3",
-  "description": "Nagios Rest Server",
-  "main": "dist/server.js",
-  "module": "ESNext",
-  "scripts": {
-    "build": "rm -rf dist && npx tsc",
-    "build:release": "npm run build && esbuild dist/src/server.js --bundle --platform=node --outfile=standalone/server-bundled.js && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && rm -rf nest && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
-    "build:deb": "npm run build:release && cd build_deb && ./make_deb.sh",
-    "start": "node dist/server.js",
-    "dev": "NODE_ENV=development nodemon -r tsconfig-paths/register src/server.ts --inspect",
-    "lint:check": "npx eslint . --ext .ts",
-    "lint": "npx eslint . --ext .ts --fix",
-    "format:check": "npx prettier --check .",
-    "format": "npx prettier --write .",
-    "check:vulnerabilities": "npm audit --omit=dev",
-    "fix:vulnerabilities": "npm audit fix --omit=dev",
-    "test": "jest --watch",
-    "test:ci": "jest"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com/some-git-user/nest.git"
-  },
-  "author": "Viktor Keller",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/some-git-user/nest/issues"
-  },
-  "homepage": "https://github.com/some-git-user/nest#readme",
-  "devDependencies": {
-    "@types/express": "^5.0.5",
-    "@types/jest": "^30.0.0",
-    "@types/typescript": "^0.4.29",
-    "@typescript-eslint/eslint-plugin": "^8.46.2",
-    "@typescript-eslint/parser": "^8.46.2",
-    "esbuild": "0.25.11",
-    "eslint": "^9.38.0",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^17.23.1",
-    "eslint-plugin-promise": "^7.2.1",
-    "jest": "^30.2.0",
-    "nodemon": "^3.1.10",
-    "ts-jest": "^29.4.6",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "envalid": "^8.1.0",
-    "express": "^5.1.0",
-    "express-rate-limit": "^8.1.0",
-    "helmet": "^8.1.0",
-    "hpp": "^0.2.3",
-    "http-errors": "^2.0.0",
-    "morgan": "^1.10.1",
-    "node-cron": "^4.2.1",
-    "xss-clean": "^0.1.4"
-  }
+	"name": "nest",
+	"version": "0.0.4",
+	"description": "Nagios Rest Server",
+	"main": "dist/server.js",
+	"module": "ESNext",
+	"scripts": {
+		"build": "rm -rf dist && npx tsc",
+		"build:release": "npm run build && esbuild dist/server.js --bundle --platform=node --outfile=standalone/server-bundled.js && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && rm -rf nest && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
+		"build:deb": "npm run build:release && cd build_deb && ./make_deb.sh",
+		"start": "node dist/server.js",
+		"dev": "NODE_ENV=development nodemon -r tsconfig-paths/register src/server.ts --inspect",
+		"check:format": "prettier --check .",
+		"check:lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+		"fix:format": "prettier --write --list-different .",
+		"fix:lint": "eslint . --report-unused-disable-directives --max-warnings 0 --fix",
+		"check:vulnerabilities": "npm audit --omit=dev",
+		"fix:vulnerabilities": "npm audit fix --omit=dev",
+		"test": "jest --watch",
+		"test:ci": "jest"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+ssh://git@github.com/some-git-user/nest.git"
+	},
+	"author": "Viktor Keller",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/some-git-user/nest/issues"
+	},
+	"homepage": "https://github.com/some-git-user/nest#readme",
+	"devDependencies": {
+		"@trivago/prettier-plugin-sort-imports": "^4.3.0",
+		"@types/express": "^5.0.6",
+		"@types/jest": "^30.0.0",
+		"@typescript-eslint/eslint-plugin": "^8.38.0",
+		"@typescript-eslint/parser": "^8.38.0",
+		"esbuild": "0.25.11",
+		"eslint": "^9.32.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-promise": "^7.2.1",
+		"jest": "^30.2.0",
+		"nodemon": "^3.1.10",
+		"prettier": "3.8.1",
+		"ts-jest": "^29.4.6",
+		"ts-node": "^10.9.2",
+		"tsconfig-paths": "^4.2.0",
+		"typescript": "^5.9.3",
+		"typescript-eslint": "^8.38.0"
+	},
+	"dependencies": {
+		"cors": "^2.8.5",
+		"envalid": "^8.1.0",
+		"express": "^5.1.0",
+		"express-rate-limit": "^8.1.0",
+		"helmet": "^8.1.0",
+		"hpp": "^0.2.3",
+		"http-errors": "^2.0.0",
+		"morgan": "^1.10.1",
+		"node-cron": "^4.2.1",
+		"xss-clean": "^0.1.4"
+	}
 }

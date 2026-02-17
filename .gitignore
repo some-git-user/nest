@@ -7,9 +7,10 @@ node_modules/
 # build directories
 dist
 standalone
+build_deb/**/*.deb
 
 # nagios plugins (transpiled files)
-plugins/*.js
+plugins/**/*.js
 
 # log directory
 logs

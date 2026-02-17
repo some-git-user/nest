@@ -1,8 +1,8 @@
 export enum NagiosReturnValuesEnum {
-  OK = 0,
-  WARNING = 1,
-  CRITICAL = 2,
-  UNKNOWN = 3,
+	OK = 0,
+	WARNING = 1,
+	CRITICAL = 2,
+	UNKNOWN = 3,
 }
 
 export type PerformanceDataFormat = string;
@@ -29,17 +29,17 @@ export type PerformanceDataFormat = string;
         c - a continous counter (such as bytes transmitted on an interface)
 */
 export interface PerformanceData {
-  label: string;
-  value: number | string;
-  uom: string;
-  warn?: string | null;
-  crit?: string | null;
-  min?: number | string | null;
-  max?: number | string | null;
+	label: string;
+	value: number | string;
+	uom: string;
+	warn?: string | null;
+	crit?: string | null;
+	min?: number | string | null;
+	max?: number | string | null;
 }
 
 export interface NagiosReturnMessage {
-  message: string;
-  code: NagiosReturnValuesEnum;
-  performanceData?: PerformanceDataFormat;
+	message: string;
+	code: NagiosReturnValuesEnum;
+	performanceData?: PerformanceDataFormat;
 }

@@ -1,23 +1,23 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "Debug App",
-      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/nodemon",
-      "runtimeArgs": [
-        "-r",
-        "tsconfig-paths/register",
-        "${workspaceFolder}/src/server.ts",
-        "--inspect"
-      ],
-      "restart": true,
-      "sourceMaps": true,
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "env": {
-        "NODE_ENV": "development"
-      }
-    }
-  ]
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug App",
+			"runtimeExecutable": "${workspaceFolder}/node_modules/.bin/nodemon",
+			"runtimeArgs": [
+				"-r",
+				"tsconfig-paths/register",
+				"${workspaceFolder}/src/server.ts",
+				"--inspect"
+			],
+			"restart": true,
+			"sourceMaps": true,
+			"outFiles": ["${workspaceFolder}/dist/**/*.js"],
+			"env": {
+				"NODE_ENV": "development"
+			}
+		}
+	]
 }
