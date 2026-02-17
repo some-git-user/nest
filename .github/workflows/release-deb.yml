@@ -171,7 +171,7 @@ jobs:
               -H "Content-Type: $mime" \
               --data-binary @"$asset" \
               --write-out "\n%{http_code}" \
-              "${upload_url}?name=${encoded_name" }" || true)
+              "${upload_url}?name=${encoded_name}" || true)
 
             # Split response & HTTP code
             http_code=$(echo "$resp" | tail -n1)
