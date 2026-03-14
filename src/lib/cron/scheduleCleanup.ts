@@ -15,7 +15,7 @@ export const scheduleCleanupLogs = () => {
 		{timezone: cronTimeZone},
 	);
 	logger.info(
-		`Cron job "cleanup logs" scheduled to run every minute at time zone ${cronTimeZone}, max logfile size ${env.MAX_LOG_FILE_SIZE} bytes`,
+		`Cron job "cleanup logs" scheduled to run every minute at time zone ${cronTimeZone}, max logfile size ${env.MAX_LOG_FILE_SIZE_BYTES} bytes`,
 	);
 };
 
@@ -30,9 +30,9 @@ const cleanupLogs = async () => {
 	try {
 		const stats = await fs.promises.stat(logFilePath);
 		logger.debug(`Log file size: ${stats.size} bytes`);
-		if (stats.size < env.MAX_LOG_FILE_SIZE) {
+		if (stats.size < env.MAX_LOG_FILE_SIZE_BYTES) {
 			logger.debug(
-				`Log file smaller than ${env.MAX_LOG_FILE_SIZE} bytes; skipping rotation.`,
+				`Log file smaller than ${env.MAX_LOG_FILE_SIZE_BYTES} bytes; skipping rotation.`,
 			);
 			return;
 		}
