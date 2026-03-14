@@ -14,3 +14,6 @@ plugins/**/*.js
 
 # log directory
 logs
+
+# coverage reports
+coverage
