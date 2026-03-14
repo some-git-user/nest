@@ -69,14 +69,86 @@ export const createNagiosReturnMessage = (
  * @returns True if v is a PerformanceData object with required properties (value and uom), false otherwise
  */
 
-export const isPerformanceData = (value: unknown): value is PerformanceData =>
-	typeof value === 'object' &&
-	value !== null &&
-	'value' in (value as Record<string, unknown>) &&
-	(typeof (value as Record<string, unknown>).value === 'number' ||
-		typeof (value as Record<string, unknown>).value === 'string') &&
-	'uom' in (value as Record<string, unknown>) &&
-	typeof (value as Record<string, unknown>).uom === 'string';
+export const isPerformanceData = (value: unknown): value is PerformanceData => {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const v = value as Record<string, unknown>;
+
+	// label: required string, must not contain '=' or single-quote
+	if (!('label' in v) || typeof v.label !== 'string') {
+		return false;
+	}
+	if (/[=']/.test(v.label)) {
+		return false;
+	}
+
+	// value: number or string. If string, allow numeric strings or the literal 'U'
+	if (!('value' in v)) {
+		return false;
+	}
+	const val = v.value;
+	const isNumber = typeof val === 'number';
+	const isNumericString =
+		typeof val === 'string' && (val === 'U' || /^-?\d+(?:\.\d+)?$/.test(val));
+	if (!isNumber && !isNumericString) {
+		return false;
+	}
+
+	// uom: required string, must not include digits, semicolons or quotes
+	if (!('uom' in v) || typeof v.uom !== 'string') {
+		return false;
+	}
+	if (/[0-9;']/.test(String(v.uom))) {
+		return false;
+	}
+
+	// warn/crit: optional string or null
+	if ('warn' in v && v.warn !== null && typeof v.warn !== 'string') {
+		return false;
+	}
+	if ('crit' in v && v.crit !== null && typeof v.crit !== 'string') {
+		return false;
+	}
+
+	// min/max: optional number|string|null
+	if ('min' in v) {
+		const minVal = v.min;
+		if (
+			minVal !== null &&
+			typeof minVal !== 'number' &&
+			typeof minVal !== 'string'
+		) {
+			return false;
+		}
+		if (
+			minVal !== null &&
+			typeof minVal === 'string' &&
+			!/^(-?\d+(\.\d+)?|U)$/.test(minVal)
+		) {
+			return false;
+		}
+	}
+	if ('max' in v) {
+		const maxVal = v.max;
+		if (
+			maxVal !== null &&
+			typeof maxVal !== 'number' &&
+			typeof maxVal !== 'string'
+		) {
+			return false;
+		}
+		if (
+			maxVal !== null &&
+			typeof maxVal === 'string' &&
+			!/^(-?\d+(\.\d+)?|U)$/.test(maxVal)
+		) {
+			return false;
+		}
+	}
+
+	return true;
+};
 
 /**
  * Type guard to check if a value is a valid array of PerformanceData objects.
