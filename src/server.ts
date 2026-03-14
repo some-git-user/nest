@@ -3,6 +3,7 @@ import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
 import {logger} from './lib/logger';
 import {createNagiosReturnMessage} from './lib/nagios';
+import appInfo from './routes/app-info';
 import dynamicRoutes from './routes/dynamic-routes';
 
 const app: Application = express();
@@ -12,6 +13,7 @@ app.use(express.json());
 // route files
 app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204));
 app.use('/', dynamicRoutes);
+app.use('/nagios', appInfo);
 // 404 handler for unknown routes
 app.use((req: Request, res: Response) => {
 	const nagiosReturn = createNagiosReturnMessage(
