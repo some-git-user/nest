@@ -1,5 +1,6 @@
 import express, {Request, Response} from 'express';
 import fs from 'fs';
+import {createRequire} from 'module';
 import path from 'path';
 import ts from 'typescript';
 import {env} from '../config/env';
@@ -12,8 +13,8 @@ import {
 import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
 
 const router = express.Router();
-
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
+
 logger.info(`Use plugins directory: ${pluginsDir}`);
 
 fs.readdirSync(pluginsDir)?.forEach((file) => {
@@ -47,7 +48,17 @@ fs.readdirSync(pluginsDir)?.forEach((file) => {
 		router.get(kebabCasePath, (req: Request, res: Response) => {
 			(async () => {
 				try {
-					const module = await import(`${jsFilePath}?t=${Date.now()}`);
+					const requireFn = createRequire(__filename);
+					// clear require cache to allow reloading updated plugins
+					try {
+						const resolved = requireFn.resolve(jsFilePath);
+						delete require.cache[resolved];
+					} catch (e) {
+						logger.warn(
+							`Could not resolve plugin path for cache clearing: ${jsFilePath}. Error: ${e}`,
+						);
+					}
+					const module = requireFn(jsFilePath);
 
 					let func: (params: {
 						[key: string]: string;
