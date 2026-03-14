@@ -2,6 +2,8 @@ import {EnvError, cleanEnv, host, makeValidator, num, port, str} from 'envalid';
 import * as fs from 'fs';
 import * as path from 'path';
 
+process.env.NODE_ENV = process.env.NODE_ENV ?? 'production';
+
 function loadEnvFile(filepath: string) {
 	if (!fs.existsSync(filepath)) {
 		return;
@@ -37,6 +39,10 @@ function getConfigPath(): string {
 	if (process.env.NEST_CONFIG_FILE) {
 		return process.env.NEST_CONFIG_FILE;
 	}
+	// In production prefer the system config file installed by the package
+	if (process.env.NODE_ENV === 'production') {
+		return '/etc/nest/nest.conf';
+	}
 	return path.resolve(process.cwd(), '.env');
 }
 
@@ -71,10 +77,10 @@ export const strList = makeValidator<Array<string>>((input: string) => {
 });
 
 export const env = cleanEnv(process.env, {
-	NODE_ENV: str({default: 'production'}),
+	NODE_ENV: str({default: 'development'}),
 	HOST: host({default: 'localhost'}),
 	PORT: port({default: 5000}),
 	PLUGINS_DIR: str({default: 'plugins'}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
-	MAX_LOG_FILE_SIZE: num({default: 1024 * 1024}), // 1MB in bytes
+	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes
 });
