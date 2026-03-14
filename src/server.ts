@@ -52,3 +52,5 @@ process.on('SIGTERM', (err: {message: string}) => {
 
 // start cron scheduler
 runScheduler();
+
+logger.info(`Started application in ${env.NODE_ENV} mode...`);

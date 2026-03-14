@@ -51,6 +51,9 @@ class Logger {
 	}
 
 	debug(message: unknown) {
+		if (env.NODE_ENV !== 'production') {
+			return;
+		}
 		const formatted = this.formatMessage('debug', message);
 		console.debug(formatted);
 		this.writeToFile(formatted);
