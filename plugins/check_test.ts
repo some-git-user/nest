@@ -8,10 +8,24 @@ export const checkTest = (params: {
 		`Testplugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosRetunValue=${nagiosReturnValue}, performanceData=${performanceData}`,
 	);
 
-	const returnObject = {
+	const returnObject: {
+		message: string;
+		code: number;
+		performanceData: Array<{
+			label: string;
+			value: number | string;
+			uom?: string;
+			warn?: string | null;
+			crit?: string | null;
+			min?: number | string | null;
+			max?: number | string | null;
+		}>;
+	} = {
 		message: nagiosReturnMessage,
-		code: nagiosReturnValue,
-		performanceData: [{}],
+		code: Number.isInteger(Number(nagiosReturnValue))
+			? Number(nagiosReturnValue)
+			: 3,
+		performanceData: [],
 	};
 
 	if (!nagiosReturnMessage || !nagiosReturnValue) {
@@ -20,13 +34,30 @@ export const checkTest = (params: {
 	}
 
 	if (performanceData) {
-		const label = 'label';
-		const value = 'value';
-		const uom = 'uom';
-		const warn = 'warn';
-		const crit = 'crit';
-		const min = 'min';
-		const max = 'max';
+		let label = 'WATER BOILER TEMP';
+		let value = '55';
+		let uom = 'C°';
+		let warn = '80';
+		let crit = '90';
+		let min = '0';
+		let max = '100';
+		returnObject.performanceData.push({
+			label,
+			value,
+			uom,
+			warn,
+			crit,
+			min,
+			max,
+		});
+
+		label = 'OUTDOOR TEMP';
+		value = '21';
+		uom = 'C°';
+		warn = '30';
+		crit = '40';
+		min = '-20';
+		max = '50';
 		returnObject.performanceData.push({
 			label,
 			value,
