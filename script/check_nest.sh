@@ -16,14 +16,45 @@ fi
 # Function to build parameters for curl
 # Builds parameters for curl from the given arguments
 # Example: ./check_nest.sh check-test nagiosReturnMessage=Test nagiosReturnValue=1 performanceData=true
-# Will generate: -d "nagiosReturnMessage=Test" -d "nagiosReturnValue=1" -d "performanceData=true"
-# Parameters will be passed to curl as query parameters.
+# Will generate curl query arguments for nagiosReturnMessage, nagiosReturnValue, and performanceData.
+# The legacy alias nagiosRetunValue is normalized to nagiosReturnValue.
 build_parameters() {
-    local params=""
-    for param in "${@:2}"; do
-        params+=" -d \"$param\""
+    local -A normalized_values=()
+    local -a parameter_order=()
+    local raw_param=""
+    local key=""
+    local value=""
+    local normalized_key=""
+
+    parameters=()
+
+    for raw_param in "${@:2}"; do
+        key="${raw_param%%=*}"
+        value="${raw_param#*=}"
+
+        if [ "$key" = "$raw_param" ]; then
+            continue
+        fi
+
+        case "$key" in
+            nagiosRetunValue)
+                normalized_key="nagiosReturnValue"
+                ;;
+            *)
+                normalized_key="$key"
+                ;;
+        esac
+
+        if [ -z "${normalized_values[$normalized_key]+x}" ]; then
+            parameter_order+=("$normalized_key")
+        fi
+
+        normalized_values[$normalized_key]="$value"
     done
-    echo "$params"
+
+    for key in "${parameter_order[@]}"; do
+        parameters+=(--data-urlencode "$key=${normalized_values[$key]}")
+    done
 }
 
 # Function to build the URL
@@ -40,11 +71,11 @@ build_url() {
 # 
 # $1 is the JSON response from the Nest API
 # 
-# This function parses the JSON response and formats it according to Nagios standards.
+# This function parses the JSON response once and formats it according to Nagios standards.
 # 
 # The function will output the following format:
 # 
-# message | code=code;performanceData
+# message | code=code performanceData
 # 
 # Where:
 #   - message is the message returned by the Nest API
@@ -52,20 +83,25 @@ build_url() {
 #   - performanceData is the performance data returned by the Nest API, if any
 parse_json() {
     local response="$1"
-    message=$(echo "$response" | jq -r '.message')
-    code=$(echo "$response" | jq -r '.code')
-    performanceData=$(echo "$response" | jq -r '.performanceData | select(. != null)')
+    local parsed_fields
+
+    if ! parsed_fields=$(jq -r '[.message, (.code // 3 | tostring), (.performanceData // "")] | @tsv' <<< "$response"); then
+        return 1
+    fi
+
+    IFS=$'\t' read -r parsed_message parsed_code parsed_performance_data <<< "$parsed_fields"
+
     # Formatting to Nagios output
-    if [ -z "$performanceData" ]; then
-        echo "$message | code=$code"
+    if [ -z "$parsed_performance_data" ]; then
+        nagios_output="$parsed_message | code=$parsed_code"
     else
-        echo "$message | code=$code;$performanceData"
+        nagios_output="$parsed_message | code=$parsed_code $parsed_performance_data"
     fi
 }
 
 # Main script execution starts here
 if [ "$#" -lt 1 ]; then
-    echo "Usage: $0 param1=value1 [param2=value2 ...]"
+    echo "Usage: $0 <command> [param1=value1 param2=value2 ...]"
     exit 1
 fi
 
@@ -73,24 +109,27 @@ fi
 url=$(build_url "$@")
 
 # Build parameters for curl
-parameters=$(build_parameters "$@")
+build_parameters "$@"
 
 # Make GET request and store response in variable
-# Use `eval` to properly expand quoted parameters
-response=$(eval "curl -s -G $parameters \"$url\"")
+response=$(curl -s -G "${parameters[@]}" "$url")
+curl_status=$?
 
-# Output response for debugging
-if [[ $? -ne 0 ]]; then
+# Stop early if curl failed
+if [[ $curl_status -ne 0 ]]; then
     echo "Error: curl command failed. Response: '$response'"
     exit 1
 fi
 
-# Check if response is valid JSON
-if echo "$response" | jq . >/dev/null 2>&1; then
-    # Parse the JSON response
-    nagios_output=$(parse_json "$response")
-    # TODO exit code is not correct
+# Parse the JSON response and stop if it is invalid
+if parse_json "$response"; then
     echo "$nagios_output"
+
+    if [[ "$parsed_code" =~ ^[0-3]$ ]]; then
+        exit "$parsed_code"
+    fi
+
+    exit 3
 else
     echo "Error: Received invalid JSON response."
     exit 3
