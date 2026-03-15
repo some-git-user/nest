@@ -47,8 +47,9 @@ export const clearPluginRequireCache = (
 		const resolved = requireFn.resolve(jsFilePath);
 		delete require.cache[resolved];
 	} catch (e) {
+		const errorMessage = e instanceof Error ? e.message : String(e);
 		onWarn(
-			`Could not resolve plugin path for cache clearing: ${jsFilePath}. Error: ${e}`,
+			`Could not resolve plugin path for cache clearing: ${jsFilePath}. Error: ${errorMessage}`,
 		);
 	}
 };
@@ -103,10 +104,11 @@ export const normalizePluginResult = (
 };
 
 export const isKnownNagiosCode = (code: NagiosReturnValuesEnum): boolean => {
-	const codeString = code?.toString() ?? '';
-	const codeNumber = Number.parseInt(codeString, 10);
-	return Object.values(NagiosReturnValuesEnum).some(
-		(value) => value === codeNumber,
+	return (
+		code === NagiosReturnValuesEnum.OK ||
+		code === NagiosReturnValuesEnum.WARNING ||
+		code === NagiosReturnValuesEnum.CRITICAL ||
+		code === NagiosReturnValuesEnum.UNKNOWN
 	);
 };
 

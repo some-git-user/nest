@@ -1,6 +1,12 @@
 import express from 'express';
 import request from 'supertest';
 
+type NagiosBody = {
+	message: string;
+	code: number;
+	performanceData?: string;
+};
+
 describe('app-info route (branch coverage)', () => {
 	afterEach(() => {
 		jest.restoreAllMocks();
@@ -36,19 +42,21 @@ describe('app-info route (branch coverage)', () => {
 		let appInfoRouter: express.Router;
 		jest.isolateModules(() => {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			appInfoRouter = require('./app-info').default as express.Router;
+			const appInfoModule = require('./app-info') as {default: express.Router};
+			appInfoRouter = appInfoModule.default;
 		});
 
 		const app = express();
 		app.use('/nagios', appInfoRouter!);
 
 		const res = await request(app).get('/nagios');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
-		expect(res.body).toHaveProperty('code', 0);
-		expect(String(res.body.message)).toContain('cpu%=0.00');
-		expect(String(res.body.message)).toContain('mem%=0.00');
-		expect(String(res.body.performanceData)).toContain("'cpu_load_1min':");
-		expect(String(res.body.performanceData)).toContain(
+		expect(body).toHaveProperty('code', 0);
+		expect(String(body.message)).toContain('cpu%=0.00');
+		expect(String(body.message)).toContain('mem%=0.00');
+		expect(String(body.performanceData)).toContain("'cpu_load_1min':");
+		expect(String(body.performanceData)).toContain(
 			"'process_rss_bytes':123456B",
 		);
 	});
@@ -82,15 +90,17 @@ describe('app-info route (branch coverage)', () => {
 		let appInfoRouter: express.Router;
 		jest.isolateModules(() => {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			appInfoRouter = require('./app-info').default as express.Router;
+			const appInfoModule = require('./app-info') as {default: express.Router};
+			appInfoRouter = appInfoModule.default;
 		});
 
 		const app = express();
 		app.use('/nagios', appInfoRouter!);
 
 		const res = await request(app).get('/nagios');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
-		expect(String(res.body.message)).toContain('cpu%=0.00');
-		expect(String(res.body.message)).toContain('mem%=0.00');
+		expect(String(body.message)).toContain('cpu%=0.00');
+		expect(String(body.message)).toContain('mem%=0.00');
 	});
 });

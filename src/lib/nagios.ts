@@ -55,7 +55,9 @@ export const createNagiosReturnMessage = (
 				.join(' ')
 				.trimStart();
 		} else {
-			logger.error(`Error parsing performance data: ${performanceData}`);
+			logger.error(
+				`Error parsing performance data: ${JSON.stringify(performanceData)}`,
+			);
 		}
 	}
 

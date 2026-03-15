@@ -67,7 +67,8 @@ const cleanupLogs = async () => {
 
 		logger.info(`Rotated and zipped log file: ${zippedLogFilePath}`);
 	} catch (err) {
-		logger.error(`Error rotating/zipping log file: ${err}`);
+		const errorMessage = err instanceof Error ? err.message : String(err);
+		logger.error(`Error rotating/zipping log file: ${errorMessage}`);
 	}
 
 	logger.info('finished cleanup logs');

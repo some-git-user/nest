@@ -55,9 +55,8 @@ describe('logger', () => {
 		expect(String(infoSpy.mock.calls[0][0])).toContain('[INFO] hello-info');
 		expect(mkdirSync).toHaveBeenCalledWith('/tmp/nest', {recursive: true});
 		expect(appendFileSync).toHaveBeenCalledTimes(1);
-		expect(String(appendFileSync.mock.calls[0][1])).toContain(
-			'[INFO] hello-info',
-		);
+		const appendArgs = appendFileSync.mock.calls[0] as [string, string];
+		expect(String(appendArgs[1])).toContain('[INFO] hello-info');
 	});
 
 	it('does not write logs when LOG_FILE_PATH is unset', () => {

@@ -4,26 +4,40 @@ type endoflifeResponseType = {
 	result: {
 		label: 'Debian';
 		name: 'debian';
-		releases: [
-			{
-				codename: string;
-				eoesFrom: string;
-				eolFrom: string;
-				isEoes: boolean;
-				isEol: boolean;
-				isLts: boolean;
-				isMaintained: boolean;
-				label: string;
-				latest: {
-					date: string;
-					name: string;
-				};
-				ltsFrom: string;
+		releases: {
+			codename: string;
+			eoesFrom: string;
+			eolFrom: string;
+			isEoes: boolean;
+			isEol: boolean;
+			isLts: boolean;
+			isMaintained: boolean;
+			label: string;
+			latest: {
+				date: string;
 				name: string;
-				releaseDate: string;
-			},
-		];
+			};
+			ltsFrom: string;
+			name: string;
+			releaseDate: string;
+		}[];
 	};
+};
+
+const isEndoflifeResponse = (
+	value: unknown,
+): value is endoflifeResponseType => {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+
+	const record = value as Record<string, unknown>;
+	if (typeof record.result !== 'object' || record.result === null) {
+		return false;
+	}
+
+	const result = record.result as Record<string, unknown>;
+	return Array.isArray(result.releases);
 };
 
 // Usage: check_nest.sh check-debian-eol [warningEolRemainingDays=30] [criticalEolRemainingDays=60]
@@ -60,7 +74,13 @@ export const checkDebianEol = async (params: {
 		returnObject.message = `Error: ${response.status} ${response.statusText}`;
 		return returnObject;
 	}
-	const jsonResponse: endoflifeResponseType = await response.json();
+	const jsonResponseUnknown: unknown = await response.json();
+	if (!isEndoflifeResponse(jsonResponseUnknown)) {
+		returnObject.message = `Error: invalid response format from ${eolUrl}`;
+		return returnObject;
+	}
+
+	const jsonResponse = jsonResponseUnknown;
 
 	if (
 		jsonResponse?.result?.releases &&

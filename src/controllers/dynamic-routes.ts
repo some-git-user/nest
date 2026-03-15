@@ -12,16 +12,28 @@ import {
 	parseUrlParams,
 } from './dynamic-routes/helpers';
 
+const getErrorMessage = (err: unknown): string => {
+	if (err instanceof Error) {
+		return err.message;
+	}
+
+	return String(err);
+};
+
 export const createPluginRouteHandler = (
 	jsFilePath: string,
 	kebabCasePath: string,
 ) => {
 	return async (req: Request, res: Response) => {
 		try {
-			const requireFn = createRequire(__filename);
-			clearPluginRequireCache(requireFn, jsFilePath, logger.warn);
+			const warn = (message: string) => {
+				logger.warn(message);
+			};
 
-			const pluginModule = requireFn(jsFilePath);
+			const requireFn = createRequire(__filename);
+			clearPluginRequireCache(requireFn, jsFilePath, warn);
+
+			const pluginModule: unknown = requireFn(jsFilePath);
 			const pluginFunc = getPluginFunction(pluginModule);
 
 			if (!pluginFunc) {
@@ -41,11 +53,7 @@ export const createPluginRouteHandler = (
 
 			try {
 				const result = await pluginFunc(paramsObj);
-				const normalized = normalizePluginResult(
-					result,
-					jsFilePath,
-					logger.warn,
-				);
+				const normalized = normalizePluginResult(result, jsFilePath, warn);
 
 				if (res.headersSent) {
 					return;
@@ -90,22 +98,24 @@ export const createPluginRouteHandler = (
 				);
 			} catch (err) {
 				logger.error(err);
+				const errorMessage = getErrorMessage(err);
 				return res
 					.status(500)
 					.send(
 						createNagiosReturnMessage(
-							`Plugin ${jsFilePath} failed: ${err && typeof err === 'object' && 'message' in err && err?.message ? err.message : String(err)}`,
+							`Plugin ${jsFilePath} failed: ${errorMessage}`,
 							3,
 						),
 					);
 			}
 		} catch (err) {
 			logger.error(err);
+			const errorMessage = getErrorMessage(err);
 			return res
 				.status(500)
 				.send(
 					createNagiosReturnMessage(
-						`Error loading plugin: ${jsFilePath}. Error: ${err}`,
+						`Error loading plugin: ${jsFilePath}. Error: ${errorMessage}`,
 						3,
 					),
 				);

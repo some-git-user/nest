@@ -23,7 +23,7 @@ describe('dynamic-routes helpers', () => {
 	});
 
 	test('getPluginFunction returns first function export and undefined otherwise', () => {
-		const fn = async () => ({message: 'ok', code: 0});
+		const fn = () => Promise.resolve({message: 'ok', code: 0});
 		expect(getPluginFunction({checkA: 'x', checkB: fn})).toBe(fn);
 		expect(getPluginFunction({checkA: 'x'})).toBeUndefined();
 	});
@@ -58,6 +58,21 @@ describe('dynamic-routes helpers', () => {
 			expect.stringContaining(
 				'Could not resolve plugin path for cache clearing',
 			),
+		);
+	});
+
+	test('clearPluginRequireCache stringifies non-Error resolve failures', () => {
+		const requireFn = {
+			resolve: jest.fn().mockImplementation(() => {
+				throw 'resolve failed' as unknown as Error;
+			}),
+		} as unknown as NodeJS.Require;
+		const warn = jest.fn();
+
+		clearPluginRequireCache(requireFn, '/tmp/check.js', warn);
+
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining('Error: resolve failed'),
 		);
 	});
 

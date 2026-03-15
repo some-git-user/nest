@@ -9,6 +9,12 @@ type RouterLoadOptions = {
 	resolveError?: Error;
 };
 
+type NagiosBody = {
+	message: string;
+	code: number;
+	performanceData?: string;
+};
+
 const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	jest.resetModules();
 
@@ -20,7 +26,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	};
 
 	const pluginModule = options.pluginModule ?? {
-		checkFake: async () => ({message: 'ok', code: 0}),
+		checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 	};
 
 	const requireFn = ((modulePath: string) => {
@@ -87,7 +93,10 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	let router: express.Router;
 	jest.isolateModules(() => {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		router = require('./dynamic-routes').default as express.Router;
+		const routesModule = require('./dynamic-routes') as {
+			default: express.Router;
+		};
+		router = routesModule.default;
 	});
 
 	const app = express();
@@ -106,60 +115,63 @@ describe('dynamic routes (branch coverage)', () => {
 	test('returns 500 when plugin returns a non-object result', async () => {
 		const {app} = buildAppForPlugin({
 			pluginModule: {
-				checkFake: async () => 'not-an-object',
+				checkFake: () => Promise.resolve('not-an-object'),
 			},
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
-		expect(res.body).toHaveProperty('code', 3);
-		expect(String(res.body.message)).toContain('did not return a valid object');
+		expect(body).toHaveProperty('code', 3);
+		expect(String(body.message)).toContain('did not return a valid object');
 	});
 
 	test('returns 500 when plugin execution throws', async () => {
 		const {app} = buildAppForPlugin({
 			pluginModule: {
-				checkFake: async () => {
-					throw new Error('boom');
-				},
+				checkFake: () => Promise.reject(new Error('boom')),
 			},
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
-		expect(res.body).toHaveProperty('code', 3);
-		expect(String(res.body.message)).toContain('failed: boom');
+		expect(body).toHaveProperty('code', 3);
+		expect(String(body.message)).toContain('failed: boom');
 	});
 
 	test('uses fallback message when plugin does not return message', async () => {
 		const {app} = buildAppForPlugin({
 			pluginModule: {
-				checkFake: async () => ({code: 0}),
+				checkFake: () => Promise.resolve({code: 0}),
 			},
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
-		expect(res.body).toHaveProperty('code', 0);
-		expect(String(res.body.message)).toContain('did not return a message');
+		expect(body).toHaveProperty('code', 0);
+		expect(String(body.message)).toContain('did not return a message');
 	});
 
 	test('ignores invalid performanceData and logs warning', async () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginModule: {
-				checkFake: async () => ({
-					message: 'ok',
-					code: 0,
-					performanceData: {bad: true},
-				}),
+				checkFake: () =>
+					Promise.resolve({
+						message: 'ok',
+						code: 0,
+						performanceData: {bad: true},
+					}),
 			},
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
-		expect(res.body).toHaveProperty('message', 'ok');
-		expect(res.body).toHaveProperty('code', 0);
-		expect(res.body).not.toHaveProperty('performanceData');
+		expect(body).toHaveProperty('message', 'ok');
+		expect(body).toHaveProperty('code', 0);
+		expect(body).not.toHaveProperty('performanceData');
 		expect(logger.warn).toHaveBeenCalled();
 	});
 
@@ -169,23 +181,25 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
-		expect(res.body).toHaveProperty('code', 3);
-		expect(String(res.body.message)).toContain('Error loading plugin');
+		expect(body).toHaveProperty('code', 3);
+		expect(String(body.message)).toContain('Error loading plugin');
 	});
 
 	test('continues when cache resolve fails and logs warning', async () => {
 		const {app, logger} = buildAppForPlugin({
 			resolveError: new Error('resolve failure'),
 			pluginModule: {
-				checkFake: async () => ({message: 'ok', code: 0}),
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
 		});
 
 		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
-		expect(res.body).toHaveProperty('message', 'ok');
-		expect(res.body).toHaveProperty('code', 0);
+		expect(body).toHaveProperty('message', 'ok');
+		expect(body).toHaveProperty('code', 0);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining(
 				'Could not resolve plugin path for cache clearing',
