@@ -84,6 +84,96 @@ describe('checkDebianEol plugin', () => {
 		expect(result.message).toContain('invalid response format');
 	});
 
+	test('returns error when endoflife api payload is null', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		mockFetchResponse(true, null);
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('invalid response format');
+	});
+
+	test('returns error when releases value is not an array', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		mockFetchResponse(true, {
+			result: {
+				releases: 'invalid',
+			},
+		});
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('invalid response format');
+	});
+
+	test('returns UNKNOWN placeholder when releases array is empty', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		mockFetchResponse(true, {
+			result: {
+				label: 'Debian',
+				name: 'debian',
+				releases: [],
+			},
+		});
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toBe('Should not be here');
+	});
+
+	test('uses default warning and critical thresholds when parameters are omitted', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		const warningFuture = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000)
+			.toISOString()
+			.slice(0, 10);
+		mockFetchResponse(
+			true,
+			buildApiResponse({name: '12', eolFrom: warningFuture, isEol: false}),
+		);
+
+		const result = await checkDebianEol(
+			{} as unknown as {
+				warningEolRemainingDays: number;
+				criticalEolRemainingDays: number;
+			},
+		);
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('is EOL in');
+	});
+
+	test('returns UNKNOWN placeholder when eol date is invalid', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		mockFetchResponse(
+			true,
+			buildApiResponse({
+				name: '12',
+				eolFrom: 'not-a-date',
+				isEol: false,
+			}),
+		);
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toBe('Should not be here');
+	});
+
 	test('returns not-found message when Debian version is not in releases', async () => {
 		mockReadFile('VERSION_ID="12"\n');
 		mockFetchResponse(

@@ -5,9 +5,16 @@ type PluginModule = unknown;
 
 type RouterLoadOptions = {
 	pluginModule?: PluginModule;
-	requireError?: Error;
+	requireError?: unknown;
 	resolveError?: Error;
 	pluginFiles?: string[];
+	pluginFileIsFile?: boolean;
+	sourceMtimeMs?: number;
+	cacheMtimeMs?: number;
+	transpileError?: unknown;
+	sourceStatSecondCallError?: unknown;
+	sourceMtimeMsRaw?: unknown;
+	cacheMtimeMsRaw?: unknown;
 };
 
 type NagiosBody = {
@@ -29,11 +36,42 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	const pluginModule = options.pluginModule ?? {
 		checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 	};
+	const pluginFileIsFile = options.pluginFileIsFile ?? true;
+	const sourceMtimeMs = options.sourceMtimeMs ?? 0;
+	const cacheMtimeMs = options.cacheMtimeMs ?? -1;
+	const sourceMtimeMsRaw = options.sourceMtimeMsRaw ?? sourceMtimeMs;
+	const cacheMtimeMsRaw = options.cacheMtimeMsRaw ?? cacheMtimeMs;
+	let pluginFileStatCalls = 0;
+	const transpileSpy = jest.fn().mockImplementation(() => {
+		if (options.transpileError) {
+			throw options.transpileError as Error;
+		}
+
+		return {outputText: 'module.exports = {}'};
+	});
 	const pluginFiles = options.pluginFiles ?? ['check_fake.ts'];
+	const statSyncMock = (fsPath: string) => {
+		if (fsPath.includes('check_fake.ts')) {
+			pluginFileStatCalls += 1;
+			if (options.sourceStatSecondCallError && pluginFileStatCalls >= 2) {
+				throw options.sourceStatSecondCallError as Error;
+			}
+		}
+
+		if (fsPath.includes('plugin-cache')) {
+			if (cacheMtimeMs < 0) {
+				throw new Error('cache not found');
+			}
+
+			return {isFile: () => true, mtimeMs: cacheMtimeMsRaw};
+		}
+
+		return {isFile: () => pluginFileIsFile, mtimeMs: sourceMtimeMsRaw};
+	};
 
 	const requireFn = ((modulePath: string) => {
 		if (options.requireError) {
-			throw options.requireError;
+			throw options.requireError as Error;
 		}
 		if (!modulePath.endsWith('.js')) {
 			throw new Error(`Unexpected module path: ${modulePath}`);
@@ -57,23 +95,23 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			readFileSync: () => 'export const checkFake = async () => ({})',
 			writeFileSync: () => undefined,
 			mkdirSync: () => undefined,
-			statSync: () => ({isFile: () => true}),
+			statSync: statSyncMock,
 		},
 		readdirSync: () => pluginFiles,
 		readFileSync: () => 'export const checkFake = async () => ({})',
 		writeFileSync: () => undefined,
 		mkdirSync: () => undefined,
-		statSync: () => ({isFile: () => true}),
+		statSync: statSyncMock,
 	}));
 
 	jest.doMock('typescript', () => ({
 		__esModule: true,
 		default: {
-			transpileModule: () => ({outputText: 'module.exports = {}'}),
+			transpileModule: transpileSpy,
 			ModuleKind: {CommonJS: 1},
 			ScriptTarget: {ESNext: 99},
 		},
-		transpileModule: () => ({outputText: 'module.exports = {}'}),
+		transpileModule: transpileSpy,
 		ModuleKind: {CommonJS: 1},
 		ScriptTarget: {ESNext: 99},
 	}));
@@ -295,6 +333,179 @@ describe('dynamic routes (branch coverage)', () => {
 			expect.stringContaining(
 				'Skipping JS plugin because matching TS plugin exists',
 			),
+		);
+	});
+
+	test('skips non-file plugin entries', async () => {
+		const {app} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			pluginFileIsFile: false,
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(404);
+	});
+
+	test('uses cached transpiled plugin when cache is newer', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			sourceMtimeMs: 10,
+			cacheMtimeMs: 20,
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.debug).toHaveBeenCalledWith(
+			expect.stringContaining('Using cached transpiled plugin'),
+		);
+	});
+
+	test('skips plugin registration when transpilation fails', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			transpileError: new Error('transpile failed'),
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Could not transpile plugin'),
+		);
+	});
+
+	test('skips plugin registration when source plugin stat fails in resolver', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			sourceStatSecondCallError: new Error('stat failed in resolver'),
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Could not stat plugin file'),
+		);
+	});
+
+	test('falls back to source mtime 0 when mtime is not numeric', async () => {
+		const {app} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			sourceMtimeMsRaw: 'invalid-mtime',
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+	});
+
+	test('falls back to cache mtime -1 when mtime is not numeric', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			sourceMtimeMs: 10,
+			cacheMtimeMs: 1,
+			cacheMtimeMsRaw: 'invalid-cache-mtime',
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Transpiled TS plugin to cache'),
+		);
+	});
+
+	test('stringifies non-Error transpile failures', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			transpileError: 'transpile-string-error',
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Error: transpile-string-error'),
+		);
+	});
+
+	test('stringifies non-Error metadata load failures', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.js'],
+			requireError: 'metadata-string-error',
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(500);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Error: metadata-string-error'),
+		);
+	});
+
+	test('logs only HTTP usage when shell usage is missing', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					usage: {
+						http: '/check-fake?x=1',
+					},
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(200);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('HTTP usage for plugin'),
+		);
+		expect(logger.info).not.toHaveBeenCalledWith(
+			expect.stringContaining('Shell usage for plugin'),
+		);
+	});
+
+	test('logs only shell usage when HTTP usage is missing', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					usage: {
+						shell: './check_nest.sh check-fake x=1',
+					},
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(200);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Shell usage for plugin'),
+		);
+		expect(logger.info).not.toHaveBeenCalledWith(
+			expect.stringContaining('HTTP usage for plugin'),
+		);
+	});
+
+	test('stringifies non-Error source stat failures in resolver', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			sourceStatSecondCallError: 'stat-string-error',
+		});
+
+		const res = await request(app).get('/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Error: stat-string-error'),
 		);
 	});
 });
