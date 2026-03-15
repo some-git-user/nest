@@ -5,7 +5,7 @@ export const checkTest = (params: {
 }) => {
 	const {nagiosReturnMessage, nagiosReturnValue, performanceData} = params;
 	console.log(
-		`Testplugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosRetunValue=${nagiosReturnValue}, performanceData=${performanceData}`,
+		`Testplugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosReturnValue=${nagiosReturnValue}, performanceData=${performanceData}`,
 	);
 
 	const returnObject: {
@@ -28,8 +28,12 @@ export const checkTest = (params: {
 		performanceData: [],
 	};
 
-	if (!nagiosReturnMessage || !nagiosReturnValue) {
-		returnObject.message = `Usage: /check-test?nagiosReturnMessage=<string>&nagiosRetunValue=<0 | 1 | 2 | 3>&performanceData=<true | false>`;
+	if (
+		!nagiosReturnMessage ||
+		nagiosReturnValue === undefined ||
+		nagiosReturnValue === null
+	) {
+		returnObject.message = `Usage: ${meta.usage.http}`;
 		returnObject.code = 3;
 	}
 

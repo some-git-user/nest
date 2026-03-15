@@ -91,10 +91,10 @@ run_check() {
     RUN_STATUS="$status"
 }
 
-run_check env MOCK_RESPONSE="VALID_JSON:test|0|load=1;;;;" "$TARGET_SCRIPT" check-test nagiosReturnMessage=test nagiosRetunValue=0 performanceData=true code=3
+run_check env MOCK_RESPONSE="VALID_JSON:test|0|load=1;;;;" "$TARGET_SCRIPT" check-test nagiosReturnMessage=test nagiosReturnValue=0 performanceData=true code=3
 assert_equals "test | code=0 load=1;;;;" "$RUN_OUTPUT" "formats Nagios output with perfdata"
 assert_equals "0" "$RUN_STATUS" "exits with the plugin code"
-assert_contains "nagiosReturnValue=0" "$TMP_DIR/curl_args" "normalizes nagiosRetunValue alias"
+assert_contains "nagiosReturnValue=0" "$TMP_DIR/curl_args" "passes canonical nagiosReturnValue"
 
 run_check env MOCK_RESPONSE="VALID_JSON:warning|2|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=warning nagiosReturnValue=2
 assert_equals "warning | code=2" "$RUN_OUTPUT" "omits perfdata when absent"

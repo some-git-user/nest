@@ -22,6 +22,19 @@ describe('dynamic-routes helpers', () => {
 		});
 	});
 
+	test('parseUrlParams keeps unknown keys unchanged', () => {
+		const params = parseUrlParams(
+			'/check-test?nagiosReturnMessage=hello&nagiosRetunValue=2&performanceData=true',
+		);
+
+		expect(params).toEqual({
+			'/check-test': undefined,
+			nagiosReturnMessage: 'hello',
+			nagiosRetunValue: '2',
+			performanceData: 'true',
+		});
+	});
+
 	test('getPluginFunction returns first function export and undefined otherwise', () => {
 		const fn = () => Promise.resolve({message: 'ok', code: 0});
 		expect(getPluginFunction({checkA: 'x', checkB: fn})).toBe(fn);

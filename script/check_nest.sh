@@ -17,14 +17,12 @@ fi
 # Builds parameters for curl from the given arguments
 # Example: ./check_nest.sh check-test nagiosReturnMessage=Test nagiosReturnValue=1 performanceData=true
 # Will generate curl query arguments for nagiosReturnMessage, nagiosReturnValue, and performanceData.
-# The legacy alias nagiosRetunValue is normalized to nagiosReturnValue.
 build_parameters() {
     local -A normalized_values=()
     local -a parameter_order=()
     local raw_param=""
     local key=""
     local value=""
-    local normalized_key=""
 
     parameters=()
 
@@ -36,20 +34,11 @@ build_parameters() {
             continue
         fi
 
-        case "$key" in
-            nagiosRetunValue)
-                normalized_key="nagiosReturnValue"
-                ;;
-            *)
-                normalized_key="$key"
-                ;;
-        esac
-
-        if [ -z "${normalized_values[$normalized_key]+x}" ]; then
-            parameter_order+=("$normalized_key")
+        if [ -z "${normalized_values[$key]+x}" ]; then
+            parameter_order+=("$key")
         fi
 
-        normalized_values[$normalized_key]="$value"
+        normalized_values[$key]="$value"
     done
 
     for key in "${parameter_order[@]}"; do

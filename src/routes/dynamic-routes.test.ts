@@ -35,7 +35,7 @@ describe('dynamic routes (plugins)', () => {
 		expect(res.status).toBe(200);
 		expect(res.body).toHaveProperty(
 			'message',
-			'Usage: /check-test?nagiosReturnMessage=<string>&nagiosRetunValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
+			'Usage: /check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
 		);
 		expect(res.body).toHaveProperty('code', 3);
 		expect(res.body).toHaveProperty(
