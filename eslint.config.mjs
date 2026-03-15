@@ -14,10 +14,21 @@ const compat = new FlatCompat({
 	baseDirectory: __dirname,
 });
 
+const tsRecommendedConfigs = compat
+	.extends(
+		'plugin:@typescript-eslint/recommended',
+		'plugin:@typescript-eslint/recommended-type-checked',
+	)
+	.map((config) => ({
+		...config,
+		files: ['**/*.ts', '**/*.tsx'],
+	}));
+
 export default [
 	{
 		ignores: [
 			'dist/**',
+			'coverage/**',
 			'node_modules/**',
 			'.github/**',
 			'plugins/*.js',
@@ -25,11 +36,15 @@ export default [
 		],
 	},
 	js.configs.recommended, // ESLint recommended config for JavaScript
-	...compat.extends(
-		'plugin:@typescript-eslint/recommended',
-		'prettier', // Extending the Prettier config for ESLint
-	),
+	...tsRecommendedConfigs,
+	...compat.extends('prettier'), // Extending the Prettier config for ESLint
 	pluginPromise.configs['flat/recommended'],
+	{
+		files: ['**/*.{js,mjs,cjs,ts,tsx}'],
+		rules: {
+			'promise/prefer-await-to-then': 'error', // Enforce async/await in JS and TS
+		},
+	},
 	{
 		files: ['**/*.ts', '**/*.tsx'], // Apply to TypeScript files
 		languageOptions: {
@@ -64,7 +79,6 @@ export default [
 					objectLiteralTypeAssertions: 'never',
 				},
 			],
-			'promise/prefer-await-to-then': 'error', // Enforce async/await
 		},
 	},
 ];
