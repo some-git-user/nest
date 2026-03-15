@@ -1,12 +1,13 @@
 import express from 'express';
 import request from 'supertest';
 
-type PluginModule = Record<string, unknown>;
+type PluginModule = unknown;
 
 type RouterLoadOptions = {
 	pluginModule?: PluginModule;
 	requireError?: Error;
 	resolveError?: Error;
+	pluginFiles?: string[];
 };
 
 type NagiosBody = {
@@ -28,6 +29,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	const pluginModule = options.pluginModule ?? {
 		checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 	};
+	const pluginFiles = options.pluginFiles ?? ['check_fake.ts'];
 
 	const requireFn = ((modulePath: string) => {
 		if (options.requireError) {
@@ -51,14 +53,16 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	jest.doMock('fs', () => ({
 		__esModule: true,
 		default: {
-			readdirSync: () => ['check_fake.ts'],
+			readdirSync: () => pluginFiles,
 			readFileSync: () => 'export const checkFake = async () => ({})',
 			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
 			statSync: () => ({isFile: () => true}),
 		},
-		readdirSync: () => ['check_fake.ts'],
+		readdirSync: () => pluginFiles,
 		readFileSync: () => 'export const checkFake = async () => ({})',
 		writeFileSync: () => undefined,
+		mkdirSync: () => undefined,
 		statSync: () => ({isFile: () => true}),
 	}));
 
@@ -83,6 +87,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			HOST: 'localhost',
 			PORT: 5000,
 			PLUGINS_DIR: 'plugins',
+			LOG_FILE_PATH: 'logs/nest.log',
 		},
 	}));
 
@@ -203,6 +208,92 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining(
 				'Could not resolve plugin path for cache clearing',
+			),
+		);
+	});
+
+	test('logs plugin usage when metadata usage is a string', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					usage: '/check-fake?foo=<value>',
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Usage for plugin'),
+		);
+	});
+
+	test('ignores metadata when usage shape is invalid', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					usage: 42,
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.info).not.toHaveBeenCalledWith(
+			expect.stringContaining('Usage for plugin'),
+		);
+	});
+
+	test('handles non-object plugin module values', async () => {
+		const {app} = buildAppForPlugin({
+			pluginModule: 123,
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(500);
+		expect(body).toHaveProperty('code', 3);
+		expect(String(body.message)).toContain('must export a function');
+	});
+
+	test('loads JS plugins without transpilation', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.js'],
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Loaded JS plugin without transpilation'),
+		);
+	});
+
+	test('skips JS plugin when matching TS plugin exists', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts', 'check_fake.js'],
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.debug).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'Skipping JS plugin because matching TS plugin exists',
 			),
 		);
 	});

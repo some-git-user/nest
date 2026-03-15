@@ -1,5 +1,6 @@
 export default {
-	roots: ['<rootDir>/src'],
+	roots: ['<rootDir>/src', '<rootDir>/plugins'],
+	coveragePathIgnorePatterns: ['<rootDir>/logs/plugin-cache/'],
 	testMatch: [
 		'**/__tests__/**/*.+(ts|tsx|js)',
 		'**/?(*.)+(spec|test).+(ts|tsx|js)',
