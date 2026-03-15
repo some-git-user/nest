@@ -1,0 +1,55 @@
+import express from 'express';
+import request from 'supertest';
+
+describe('app-info route (branch coverage)', () => {
+	afterEach(() => {
+		jest.restoreAllMocks();
+		jest.resetModules();
+	});
+
+	test('falls back to zero cpu and memory percentages when cpu list and total memory are empty', async () => {
+		jest.resetModules();
+
+		jest.doMock('os', () => ({
+			__esModule: true,
+			default: {
+				cpus: () => [],
+				loadavg: () => [99, 0, 0],
+				totalmem: () => 0,
+				freemem: () => 0,
+			},
+			cpus: () => [],
+			loadavg: () => [99, 0, 0],
+			totalmem: () => 0,
+			freemem: () => 0,
+		}));
+
+		jest.spyOn(process, 'uptime').mockReturnValue(12.34);
+		jest.spyOn(process, 'memoryUsage').mockReturnValue({
+			rss: 123456,
+			heapTotal: 0,
+			heapUsed: 0,
+			external: 0,
+			arrayBuffers: 0,
+		});
+
+		let appInfoRouter: express.Router;
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			appInfoRouter = require('./app-info').default as express.Router;
+		});
+
+		const app = express();
+		app.use('/nagios', appInfoRouter!);
+
+		const res = await request(app).get('/nagios');
+		expect(res.status).toBe(200);
+		expect(res.body).toHaveProperty('code', 0);
+		expect(String(res.body.message)).toContain('cpu%=0.00');
+		expect(String(res.body.message)).toContain('mem%=0.00');
+		expect(String(res.body.performanceData)).toContain("'cpu_load_1min':");
+		expect(String(res.body.performanceData)).toContain(
+			"'process_rss_bytes':123456B",
+		);
+	});
+});

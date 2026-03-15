@@ -1,5 +1,10 @@
-import {createNagiosReturnMessage} from '../lib/nagios';
+import {
+	createNagiosReturnMessage,
+	isPerformanceData,
+	isPerformanceDataArray,
+} from '../lib/nagios';
 import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
+import {logger} from './logger';
 
 jest.mock('../lib/logger');
 
@@ -89,6 +94,164 @@ describe('createNagiosReturnMessage', () => {
 			expect(result.message).toBe('Test message');
 			expect(result.code).toBe(0);
 			expect(result.performanceData).toBe('');
+		});
+
+		it('accepts a single performance object and omits optional fields when absent', () => {
+			const result = createNagiosReturnMessage(
+				'Test message',
+				NagiosReturnValuesEnum.WARNING,
+				{label: 'disk', value: 0, uom: '%'},
+			);
+
+			expect(result.code).toBe(1);
+			expect(result.performanceData).toBe("'disk':");
+		});
+
+		it('logs an error when performance data array contains invalid entries', () => {
+			const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+
+			const result = createNagiosReturnMessage(
+				'Bad perf',
+				NagiosReturnValuesEnum.UNKNOWN,
+				[null as unknown as PerformanceData],
+			);
+
+			expect(result).not.toHaveProperty('performanceData');
+			expect(errorSpy).toHaveBeenCalledTimes(1);
+		});
+	});
+
+	describe('performance data type guards', () => {
+		it('rejects non-object values and objects missing required fields', () => {
+			expect(isPerformanceData('not-an-object')).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					uom: '%',
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: 1,
+				}),
+			).toBe(false);
+		});
+
+		it('accepts a valid PerformanceData object', () => {
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: '42.5',
+					uom: '%',
+					warn: '80',
+					crit: '90',
+					min: 'U',
+					max: 100,
+				}),
+			).toBe(true);
+		});
+
+		it('rejects invalid labels and invalid uom values', () => {
+			expect(
+				isPerformanceData({
+					label: "bad'label",
+					value: 1,
+					uom: '%',
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'good',
+					value: 1,
+					uom: 'ms1',
+				}),
+			).toBe(false);
+		});
+
+		it('rejects invalid value, min and max formats', () => {
+			expect(
+				isPerformanceData({
+					label: 'mem',
+					value: 'not-a-number',
+					uom: '%',
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'mem',
+					value: '10',
+					uom: '%',
+					min: 'abc',
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'mem',
+					value: '10',
+					uom: '%',
+					max: 'xyz',
+				}),
+			).toBe(false);
+		});
+
+		it('rejects invalid warn/crit types and non scalar min/max values', () => {
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: 2,
+					uom: '%',
+					warn: 80 as unknown as string,
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: 2,
+					uom: '%',
+					crit: true as unknown as string,
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: 2,
+					uom: '%',
+					min: {bad: true} as unknown as string,
+				}),
+			).toBe(false);
+
+			expect(
+				isPerformanceData({
+					label: 'cpu',
+					value: 2,
+					uom: '%',
+					max: [] as unknown as string,
+				}),
+			).toBe(false);
+		});
+
+		it('validates arrays of PerformanceData', () => {
+			expect(
+				isPerformanceDataArray([
+					{label: 'cpu', value: 1, uom: '%'},
+					{label: 'mem', value: '2', uom: '%'},
+				]),
+			).toBe(true);
+
+			expect(
+				isPerformanceDataArray([
+					{label: 'cpu', value: 1, uom: '%'},
+					{label: 'bad=label', value: 2, uom: '%'},
+				]),
+			).toBe(false);
 		});
 	});
 });
