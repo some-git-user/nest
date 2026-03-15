@@ -90,6 +90,9 @@ describe('dynamic-routes helpers', () => {
 		expect(isKnownNagiosCode(NagiosReturnValuesEnum.OK)).toBe(true);
 		expect(isKnownNagiosCode(NagiosReturnValuesEnum.WARNING)).toBe(true);
 		expect(isKnownNagiosCode(9 as NagiosReturnValuesEnum)).toBe(false);
+		expect(
+			isKnownNagiosCode(undefined as unknown as NagiosReturnValuesEnum),
+		).toBe(false);
 	});
 
 	test('buildInvalidCodeResponse creates UNKNOWN nagios payload', () => {

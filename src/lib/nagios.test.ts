@@ -107,6 +107,22 @@ describe('createNagiosReturnMessage', () => {
 			expect(result.performanceData).toBe("'disk':");
 		});
 
+		it('formats value without label or uom when those fields are empty', () => {
+			const performanceDataWithoutLabelOrUom: PerformanceData = {
+				label: '',
+				value: 5,
+				uom: '',
+			};
+
+			const result = createNagiosReturnMessage(
+				'Test message',
+				NagiosReturnValuesEnum.OK,
+				[performanceDataWithoutLabelOrUom],
+			);
+
+			expect(result.performanceData).toBe('5');
+		});
+
 		it('logs an error when performance data array contains invalid entries', () => {
 			const errorSpy = jest.spyOn(logger, 'error').mockImplementation(() => {});
 

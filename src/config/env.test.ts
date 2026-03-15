@@ -65,13 +65,14 @@ describe('env config loading', () => {
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
 			fileContent:
-				"# comment\nHOST='example.local'\nPORT=7001\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n",
+				'# comment\nHOST=\'example.local\'\nPORT=7001\nLOG_FILE_PATH="/tmp/nest.log"\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n',
 		});
 
 		expect(existsSyncMock).toHaveBeenCalledWith(configPath);
 		expect(readFileSyncMock).toHaveBeenCalledWith(configPath, 'utf8');
 		expect(process.env.HOST).toBe('example.local');
 		expect(process.env.PORT).toBe('7001');
+		expect(process.env.LOG_FILE_PATH).toBe('/tmp/nest.log');
 		expect(process.env.PLUGINS_DIR).toBe('custom-plugins');
 	});
 
@@ -120,5 +121,22 @@ describe('env config loading', () => {
 
 		expect(existsSyncMock).toHaveBeenCalledWith(expectedDotEnvPath);
 		expect(process.env.LOG_FILE_PATH).toBe('logs/dev.log');
+	});
+
+	it('falls back to NEST_CONFIG_FILE when --configPath has no value', () => {
+		const fallbackConfigPath = '/etc/nest/fallback.conf';
+		const {existsSyncMock, readFileSyncMock} = loadEnvModule({
+			argv: ['node', 'server.js', '--configPath'],
+			env: {
+				NODE_ENV: undefined,
+				NEST_CONFIG_FILE: fallbackConfigPath,
+			},
+			existsSyncImpl: (filePath) => filePath === fallbackConfigPath,
+			fileContent: 'HOST=fallback-host\n',
+		});
+
+		expect(existsSyncMock).toHaveBeenCalledWith(fallbackConfigPath);
+		expect(readFileSyncMock).toHaveBeenCalledWith(fallbackConfigPath, 'utf8');
+		expect(process.env.HOST).toBe('fallback-host');
 	});
 });

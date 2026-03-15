@@ -52,4 +52,45 @@ describe('app-info route (branch coverage)', () => {
 			"'process_rss_bytes':123456B",
 		);
 	});
+
+	test('handles null cpu list and missing load average value', async () => {
+		jest.resetModules();
+
+		jest.doMock('os', () => ({
+			__esModule: true,
+			default: {
+				cpus: () => null,
+				loadavg: () => [],
+				totalmem: () => 1024,
+				freemem: () => 1024,
+			},
+			cpus: () => null,
+			loadavg: () => [],
+			totalmem: () => 1024,
+			freemem: () => 1024,
+		}));
+
+		jest.spyOn(process, 'uptime').mockReturnValue(1);
+		jest.spyOn(process, 'memoryUsage').mockReturnValue({
+			rss: 1,
+			heapTotal: 0,
+			heapUsed: 0,
+			external: 0,
+			arrayBuffers: 0,
+		});
+
+		let appInfoRouter: express.Router;
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			appInfoRouter = require('./app-info').default as express.Router;
+		});
+
+		const app = express();
+		app.use('/nagios', appInfoRouter!);
+
+		const res = await request(app).get('/nagios');
+		expect(res.status).toBe(200);
+		expect(String(res.body.message)).toContain('cpu%=0.00');
+		expect(String(res.body.message)).toContain('mem%=0.00');
+	});
 });
