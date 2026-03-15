@@ -24,6 +24,14 @@ type endoflifeResponseType = {
 	};
 };
 
+export const meta = {
+	usage: {
+		http: '/check-debian-eol?warningEolRemainingDays=<number>&criticalEolRemainingDays=<number>',
+		shell:
+			'./check_nest.sh check-debian-eol warningEolRemainingDays=<number> criticalEolRemainingDays=<number>',
+	},
+};
+
 const isEndoflifeResponse = (
 	value: unknown,
 ): value is endoflifeResponseType => {

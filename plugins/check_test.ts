@@ -1,3 +1,11 @@
+export const meta = {
+	usage: {
+		http: '/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
+		shell:
+			'./check_nest.sh check-test nagiosReturnMessage=<string> nagiosReturnValue=<0 | 1 | 2 | 3> performanceData=<true | false>',
+	},
+};
+
 export const checkTest = (params: {
 	nagiosReturnMessage: string;
 	nagiosReturnValue: 0 | 1 | 2 | 3;
