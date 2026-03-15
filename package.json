@@ -14,6 +14,7 @@
 		"format:fix": "prettier --write --list-different .",
 		"lint:check": "eslint . --report-unused-disable-directives --max-warnings 0",
 		"lint:fix": "eslint . --report-unused-disable-directives --max-warnings 0 --fix",
+		"test:shell": "bash script/check_nest.test.sh",
 		"check:vulnerabilities": "npm audit --omit=dev",
 		"fix:vulnerabilities": "npm audit fix --omit=dev",
 		"test": "jest --watch",
