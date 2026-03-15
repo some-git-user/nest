@@ -9,10 +9,7 @@ import {logger} from '../lib/logger';
 
 const router = express.Router();
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
-const pluginCacheDir = path.join(
-	path.dirname(path.resolve(process.cwd(), env.LOG_FILE_PATH)),
-	'plugin-cache',
-);
+const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
 const requireFn = createRequire(__filename);
 
 type PluginMetaUsage =

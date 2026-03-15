@@ -29,7 +29,7 @@ export default [
 		ignores: [
 			'dist/**',
 			'coverage/**',
-			'logs/plugin-cache/**',
+			'plugins/plugin-cache/**',
 			'node_modules/**',
 			'.github/**',
 			'plugins/*.js',
