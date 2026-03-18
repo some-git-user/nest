@@ -34,7 +34,10 @@ npm run build
 npm start
 ```
 
-Default listen address is `localhost:5000` unless overridden in config.
+Default listen address is `https://localhost:5000` unless overridden in config.
+
+The server is HTTPS-only. If TLS files do not exist at startup, a self-signed
+certificate and key are generated automatically.
 
 ## Build Targets
 
@@ -69,6 +72,10 @@ Main variables:
 - `NODE_ENV` (default: `development`)
 - `HOST` (default: `localhost`)
 - `PORT` (default: `5000`)
+- `TLS_CERT_PATH` (default: `certs/nest-cert.pem`)
+- `TLS_KEY_PATH` (default: `certs/nest-key.pem`)
+- `TLS_CERT_COMMON_NAME` (default: `localhost`)
+- `TLS_CERT_DAYS` (default: `365`)
 - `PLUGINS_DIR` (default: `plugins`)
 - `LOG_FILE_PATH` (default: `logs/nest.log`)
 - `MAX_LOG_FILE_SIZE_BYTES` (default: `1048576`)
@@ -165,7 +172,7 @@ export const checkCustom = async (params: {value?: string}) => {
 Restart the service, then call:
 
 ```bash
-curl "http://localhost:5000/check-custom?value=42"
+curl -k "https://localhost:5000/check-custom?value=42"
 ```
 
 ## Nagios Shell Check Script
@@ -175,6 +182,17 @@ Use `script/check_nest.sh` to execute checks from Nagios-compatible shell workfl
 ```bash
 ./script/check_nest.sh check-test nagiosReturnMessage=test nagiosReturnValue=0 performanceData=true
 ```
+
+TLS-related environment variables for `check_nest.sh`:
+
+- `NEST_SCHEME` (default: `https`)
+- `NEST_HOST` (default: `localhost`)
+- `NEST_PORT` (default: `5000`)
+- `NEST_TLS_INSECURE` (default: `true`)
+- `NEST_CA_CERT` (optional path to CA cert; when set, `--cacert` is used)
+
+If your goal is encryption only and issuer trust is not required, keep
+`NEST_TLS_INSECURE=true` (default).
 
 Notes:
 
@@ -194,8 +212,10 @@ Notes:
 npm run lint:check
 npx tsc --noEmit
 npm run test:coverage
-npm run test:shell
 ```
+
+`npm run test:coverage` runs the Jest suite with coverage and then executes the
+shell tests.
 
 ## Troubleshooting
 

@@ -65,7 +65,7 @@ describe('env config loading', () => {
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
 			fileContent:
-				'# comment\nHOST=\'example.local\'\nPORT=7001\nLOG_FILE_PATH="/tmp/nest.log"\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n',
+				'# comment\nHOST=\'example.local\'\nPORT=7001\nLOG_FILE_PATH="/tmp/nest.log"\nTLS_CERT_PATH=certs/test-cert.pem\nTLS_KEY_PATH=certs/test-key.pem\nTLS_CERT_COMMON_NAME=nest.local\nTLS_CERT_DAYS=730\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n',
 		});
 
 		expect(existsSyncMock).toHaveBeenCalledWith(configPath);
@@ -73,6 +73,10 @@ describe('env config loading', () => {
 		expect(process.env.HOST).toBe('example.local');
 		expect(process.env.PORT).toBe('7001');
 		expect(process.env.LOG_FILE_PATH).toBe('/tmp/nest.log');
+		expect(process.env.TLS_CERT_PATH).toBe('certs/test-cert.pem');
+		expect(process.env.TLS_KEY_PATH).toBe('certs/test-key.pem');
+		expect(process.env.TLS_CERT_COMMON_NAME).toBe('nest.local');
+		expect(process.env.TLS_CERT_DAYS).toBe('730');
 		expect(process.env.PLUGINS_DIR).toBe('custom-plugins');
 	});
 

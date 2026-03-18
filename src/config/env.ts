@@ -52,6 +52,10 @@ export const env = cleanEnv(process.env, {
 	NODE_ENV: str({default: 'development'}),
 	HOST: host({default: 'localhost'}),
 	PORT: port({default: 5000}),
+	TLS_CERT_PATH: str({default: 'certs/nest-cert.pem'}),
+	TLS_KEY_PATH: str({default: 'certs/nest-key.pem'}),
+	TLS_CERT_COMMON_NAME: str({default: 'localhost'}),
+	TLS_CERT_DAYS: num({default: 365}),
 	PLUGINS_DIR: str({default: 'plugins'}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
 	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes

@@ -81,6 +81,19 @@ assert_contains() {
     fi
 }
 
+assert_not_contains() {
+    local needle="$1"
+    local haystack_file="$2"
+    local message="$3"
+
+    if grep -Fqx -- "$needle" "$haystack_file"; then
+        printf 'FAIL: %s\nUnexpected: %s\n' "$message" "$needle" >&2
+        printf 'Captured lines:\n' >&2
+        cat "$haystack_file" >&2
+        exit 1
+    fi
+}
+
 run_check() {
     local output
     set +e
@@ -95,10 +108,18 @@ run_check env MOCK_RESPONSE="VALID_JSON:test|0|load=1;;;;" "$TARGET_SCRIPT" chec
 assert_equals "test | code=0 load=1;;;;" "$RUN_OUTPUT" "formats Nagios output with perfdata"
 assert_equals "0" "$RUN_STATUS" "exits with the plugin code"
 assert_contains "nagiosReturnValue=0" "$TMP_DIR/curl_args" "passes canonical nagiosReturnValue"
+assert_contains "--insecure" "$TMP_DIR/curl_args" "uses insecure TLS mode by default"
+assert_contains "https://localhost:5000/check-test" "$TMP_DIR/curl_args" "uses HTTPS endpoint by default"
 
 run_check env MOCK_RESPONSE="VALID_JSON:warning|2|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=warning nagiosReturnValue=2
 assert_equals "warning | code=2" "$RUN_OUTPUT" "omits perfdata when absent"
 assert_equals "2" "$RUN_STATUS" "returns non-zero Nagios status"
+
+run_check env NEST_SCHEME=http MOCK_RESPONSE="VALID_JSON:ok|0|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=ok nagiosReturnValue=0
+assert_equals "ok | code=0" "$RUN_OUTPUT" "supports plain HTTP when explicitly configured"
+assert_equals "0" "$RUN_STATUS" "returns success status for http override"
+assert_not_contains "--insecure" "$TMP_DIR/curl_args" "does not set insecure flag for HTTP"
+assert_contains "http://localhost:5000/check-test" "$TMP_DIR/curl_args" "uses HTTP endpoint when overridden"
 
 run_check env MOCK_RESPONSE="not-json" "$TARGET_SCRIPT" check-test nagiosReturnMessage=test nagiosReturnValue=0
 assert_equals "Error: Received invalid JSON response." "$RUN_OUTPUT" "reports invalid JSON"

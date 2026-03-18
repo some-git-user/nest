@@ -17,3 +17,6 @@ logs
 
 # coverage reports
 coverage
+
+# certificates
+certs

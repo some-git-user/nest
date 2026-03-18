@@ -1,8 +1,11 @@
 import express, {Application, Request, Response} from 'express';
+import fs from 'fs';
+import https from 'https';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
 import {logger} from './lib/logger';
 import {createNagiosReturnMessage} from './lib/nagios';
+import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes from './routes/dynamic-routes';
 
@@ -23,13 +26,20 @@ app.use((req: Request, res: Response) => {
 	res.status(404).send(nagiosReturn);
 });
 
-const server = app.listen(
-	env.PORT,
-	env.HOST,
-	logger.info(
-		`Server running in ${env.NODE_ENV} mode on host ${env.HOST} and port ${env.PORT} with PID ${process.pid}`,
-	) as never,
+const tlsPaths = ensureTlsCertificate();
+const server = https.createServer(
+	{
+		cert: fs.readFileSync(tlsPaths.certPath),
+		key: fs.readFileSync(tlsPaths.keyPath),
+	},
+	app,
 );
+
+server.listen(env.PORT, env.HOST, () => {
+	logger.info(
+		`HTTPS server running in ${env.NODE_ENV} mode on host ${env.HOST} and port ${env.PORT} with PID ${process.pid}. URL: https://${env.HOST}:${env.PORT}`,
+	);
+});
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err: {message: string}) => {

@@ -7,6 +7,12 @@
 # Usage: ./check_nest.sh <command> [parameters]
 # Example: ./check_nest.sh check-test nagiosReturnMessage=Test nagiosReturnValue=1 performanceData=true
 
+NEST_SCHEME="${NEST_SCHEME:-https}"
+NEST_HOST="${NEST_HOST:-localhost}"
+NEST_PORT="${NEST_PORT:-5000}"
+NEST_TLS_INSECURE="${NEST_TLS_INSECURE:-true}"
+NEST_CA_CERT="${NEST_CA_CERT:-}"
+
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
     echo "jq is required but not installed. Please install it and try again."
@@ -52,7 +58,7 @@ build_parameters() {
 # Example: build_url "check-test"
 # Will generate: http://localhost:5000/check-test
 build_url() {
-    echo "http://localhost:5000/$1"
+    echo "${NEST_SCHEME}://${NEST_HOST}:${NEST_PORT}/$1"
 }
 
 # Function to parse JSON response
@@ -101,7 +107,17 @@ url=$(build_url "$@")
 build_parameters "$@"
 
 # Make GET request and store response in variable
-response=$(curl -s -G "${parameters[@]}" "$url")
+curl_args=(-s -G)
+
+if [[ "$NEST_SCHEME" == "https" ]]; then
+    if [[ -n "$NEST_CA_CERT" ]]; then
+        curl_args+=(--cacert "$NEST_CA_CERT")
+    elif [[ "$NEST_TLS_INSECURE" == "true" ]]; then
+        curl_args+=(--insecure)
+    fi
+fi
+
+response=$(curl "${curl_args[@]}" "${parameters[@]}" "$url")
 curl_status=$?
 
 # Stop early if curl failed
