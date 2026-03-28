@@ -18,7 +18,7 @@
 		"check:vulnerabilities": "npm audit --omit=dev",
 		"fix:vulnerabilities": "npm audit fix --omit=dev",
 		"test": "jest --watch",
-		"test:ci": "jest",
+		"test:ci": "jest --runInBand",
 		"test:coverage": "jest --coverage && npm run test:shell",
 		"validate": "npm run lint:check && npm run format:check && npx tsc --noEmit && npm run build && npm run test:ci",
 		"prepare": "husky"
