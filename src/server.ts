@@ -3,11 +3,13 @@ import fs from 'fs';
 import https from 'https';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
+import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
 import {logger} from './lib/logger';
 import {createNagiosReturnMessage} from './lib/nagios';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes from './routes/dynamic-routes';
+import honeyPot from './routes/honey-pot';
 
 const app: Application = express();
 
@@ -17,8 +19,10 @@ app.use(express.json());
 app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204));
 app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);
+app.use('/nagios/honey-pot', honeyPot);
 // 404 handler for unknown routes
 app.use((req: Request, res: Response) => {
+	recordHoneypotSignal(req, 'unknown-route');
 	const nagiosReturn = createNagiosReturnMessage(
 		`Route not found: ${req.url}`,
 		3,
@@ -34,6 +38,31 @@ const server = https.createServer(
 	},
 	app,
 );
+
+const getRemoteIp = (socket: unknown): string => {
+	if (typeof socket !== 'object' || socket === null) {
+		return 'unknown';
+	}
+
+	if (!('remoteAddress' in socket)) {
+		return 'unknown';
+	}
+
+	const remoteAddress = (socket as {remoteAddress?: unknown}).remoteAddress;
+	if (typeof remoteAddress === 'string' && remoteAddress.length > 0) {
+		return remoteAddress;
+	}
+
+	return 'unknown';
+};
+
+server.on('tlsClientError', (_err, socket) => {
+	recordNetworkProbeSignal(getRemoteIp(socket), 'tls-client-error');
+});
+
+server.on('clientError', (_err, socket) => {
+	recordNetworkProbeSignal(getRemoteIp(socket), 'http-client-error');
+});
 
 server.listen(env.PORT, env.HOST, () => {
 	logger.info(

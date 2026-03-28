@@ -214,6 +214,58 @@ npx tsc --noEmit
 npm run test:coverage
 ```
 
+### Nmap E2E Honeypot Test
+
+```bash
+npm run test:e2e:nmap
+```
+
+The script runs a matrix of 8 nmap scan types against the running app and reports which ones the application layer can and cannot detect:
+
+| Scan            | nmap flag | Detected | Reason                                                     |
+| --------------- | --------- | -------- | ---------------------------------------------------------- |
+| tcp-connect     | `-sT`     | ✅ Yes   | Full TCP handshake completes — TLS error fires             |
+| service-version | `-sV`     | ✅ Yes   | Many connections with banner probing — multiple TLS errors |
+| syn-scan        | `-sS`     | ❌ No    | SYN→RST at kernel level, handshake never completes         |
+| ack-scan        | `-sA`     | ❌ No    | ACK with no session → kernel RST, app not involved         |
+| fin-scan        | `-sF`     | ❌ No    | Malformed flags handled by kernel, app never woken         |
+| xmas-scan       | `-sX`     | ❌ No    | Same as FIN — kernel-level only                            |
+| null-scan       | `-sN`     | ❌ No    | No TCP flags → kernel drops/RSTs silently                  |
+| udp-scan        | `-sU`     | ❌ No    | UDP to a TCP port → ICMP reply from kernel, not app        |
+
+The undetected scans operate below the TCP accept layer. Node.js `clientError`/`tlsClientError` events only fire after the three-way handshake completes. Detecting raw-socket scans requires a kernel-level tool (eBPF, nftables logging, Snort/Suricata).
+
+What each test cycle does:
+
+1. Builds the app (`dist/server.js`).
+2. Starts the HTTPS server on a temporary port.
+3. Verifies baseline `/nagios/honey-pot` status is OK.
+4. Runs the nmap scan.
+5. Re-checks `/nagios/honey-pot` and classifies as DETECTED / UNDETECTED / SKIPPED.
+
+**Running with root privileges** (required for raw-socket scans: `-sS`, `-sA`, `-sF`, `-sX`, `-sN`, `-sU`):
+
+```bash
+sudo env PATH="$PATH" NEST_E2E_STRICT=false npm run test:e2e:nmap
+```
+
+`sudo` resets `PATH` by default, so `env PATH="$PATH"` is needed to keep `npm` and `node` accessible.
+
+Alternatively, grant `nmap` the raw-socket capability once:
+
+```bash
+sudo setcap cap_net_raw+ep $(which nmap)
+# then run normally without sudo:
+npm run test:e2e:nmap
+# to remove later:
+sudo setcap -r $(which nmap)
+```
+
+Environment variables:
+
+- `NEST_E2E_PORT` — override the test port (default `55443`).
+- `NEST_E2E_STRICT` — set to `false` for report-only mode (default `true`, fails if any scan is undetected).
+
 `npm run test:coverage` runs the Jest suite with coverage and then executes the
 shell tests.
 

@@ -35,7 +35,8 @@ describe('server bootstrap', () => {
 		const close = jest.fn((callback?: () => void) => {
 			callback?.();
 		});
-		const createServer = jest.fn(() => ({listen, close}));
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close, on}));
 		const readFileSync = jest
 			.fn()
 			.mockReturnValueOnce('CERT_CONTENT')
@@ -84,9 +85,19 @@ describe('server bootstrap', () => {
 			__esModule: true,
 			default: 'appInfoRouter',
 		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: 'honeyPotRouter',
+		}));
 		jest.doMock('./routes/dynamic-routes', () => ({
 			__esModule: true,
 			default: 'dynamicRoutesRouter',
+		}));
+		const recordHoneypotSignal = jest.fn();
+		const recordNetworkProbeSignal = jest.fn();
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal,
+			recordNetworkProbeSignal,
 		}));
 		jest.doMock('./lib/nagios', () => ({
 			createNagiosReturnMessage: jest.fn(() => ({
@@ -127,9 +138,14 @@ describe('server bootstrap', () => {
 		expect(use).toHaveBeenCalledWith('json-middleware');
 		expect(use).toHaveBeenCalledWith('/', 'dynamicRoutesRouter');
 		expect(use).toHaveBeenCalledWith('/nagios', 'appInfoRouter');
+		expect(use).toHaveBeenCalledWith('/nagios/honey-pot', 'honeyPotRouter');
 		expect(faviconStatus).toHaveBeenCalledWith(204);
 		expect(status).toHaveBeenCalledWith(404);
 		expect(send).toHaveBeenCalledWith({message: 'not-found', code: 3});
+		expect(recordHoneypotSignal).toHaveBeenCalledWith(
+			{url: '/missing'},
+			'unknown-route',
+		);
 		expect(createServer).toHaveBeenCalledWith(
 			{
 				cert: 'CERT_CONTENT',
@@ -137,6 +153,8 @@ describe('server bootstrap', () => {
 			},
 			app,
 		);
+		expect(on).toHaveBeenCalledWith('tlsClientError', expect.any(Function));
+		expect(on).toHaveBeenCalledWith('clientError', expect.any(Function));
 		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-cert.pem');
 		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-key.pem');
 		expect(listen).toHaveBeenCalledWith(

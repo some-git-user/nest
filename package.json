@@ -1,6 +1,6 @@
 {
 	"name": "nest",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"description": "Nagios Rest Server",
 	"main": "dist/server.js",
 	"module": "ESNext",
@@ -15,6 +15,7 @@
 		"lint:check": "eslint . --report-unused-disable-directives --max-warnings 0",
 		"lint:fix": "eslint . --report-unused-disable-directives --max-warnings 0 --fix",
 		"test:shell": "bash script/check_nest.test.sh",
+		"test:e2e:nmap": "bash script/check_honeypot_nmap.test.sh",
 		"check:vulnerabilities": "npm audit --omit=dev",
 		"fix:vulnerabilities": "npm audit fix --omit=dev",
 		"test": "jest --watch",
