@@ -43,12 +43,12 @@ export const getHoneypotStatus = (req: Request, res: Response) => {
 			: status === NagiosReturnValuesEnum.WARNING
 				? 'WARNING'
 				: 'CRITICAL';
-	const latestDetails = stats.latestPath
-		? ` latest=${stats.latestPath} ip=${stats.latestIp ?? 'unknown'} reason=${stats.latestReason ?? 'unknown'}`
+	const latestDetails = stats.latest
+		? ` latest=${stats.latest.path} ip=${stats.latest.ip} reason=${stats.latest.reason}`
 		: '';
 	const scanDetails =
 		stats.maxUniquePathsFromSingleIp > 0
-			? ` scan_ips=${stats.probableScanIps} max_paths_per_ip=${stats.maxUniquePathsFromSingleIp} most_active_ip=${stats.mostActiveIp ?? 'unknown'} port_scan_ips=${stats.probablePortScanIps} protocol_errors=${stats.protocolErrorHits}`
+			? ` scan_ips=${stats.probableScanIps} max_paths_per_ip=${stats.maxUniquePathsFromSingleIp} most_active_ip=${stats.mostActiveIp} port_scan_ips=${stats.probablePortScanIps} protocol_errors=${stats.protocolErrorHits}`
 			: ` scan_ips=0 max_paths_per_ip=0 port_scan_ips=${stats.probablePortScanIps} protocol_errors=${stats.protocolErrorHits}`;
 
 	const message = `${statusText} - probes=${stats.totalHits} suspicious=${stats.suspiciousHits} unique_ips=${stats.uniqueIps}${scanDetails}${latestDetails}`;

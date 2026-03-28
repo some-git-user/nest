@@ -1,5 +1,6 @@
-import express from 'express';
+import express, {Request, Response} from 'express';
 import request from 'supertest';
+import {triggerHoneypot} from '../controllers/honey-pot';
 import {
 	recordHoneypotSignal,
 	recordNetworkProbeSignal,
@@ -127,5 +128,29 @@ describe('/nagios/honey-pot route', () => {
 		expect(String(body.performanceData)).toContain(
 			"'honeypot_protocol_errors':3c",
 		);
+	});
+});
+
+describe('triggerHoneypot controller', () => {
+	beforeEach(() => resetHoneypotSignals());
+	afterEach(() => resetHoneypotSignals());
+
+	test('falls back to req.url in the response message when req.originalUrl is absent', () => {
+		const send = jest.fn();
+		const status = jest.fn(() => ({send}));
+		const mockReq = {
+			originalUrl: '',
+			url: '/fallback-url',
+			headers: {'user-agent': 'jest'},
+			ip: '1.1.1.1',
+			socket: {remoteAddress: '1.1.1.1'},
+		} as unknown as Request;
+		const mockRes = {status} as unknown as Response;
+
+		triggerHoneypot(mockReq, mockRes);
+
+		expect(status).toHaveBeenCalledWith(404);
+		const [callArg] = send.mock.calls[0] as [{message: string}];
+		expect(callArg.message).toContain('/fallback-url');
 	});
 });

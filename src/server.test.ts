@@ -155,6 +155,43 @@ describe('server bootstrap', () => {
 		);
 		expect(on).toHaveBeenCalledWith('tlsClientError', expect.any(Function));
 		expect(on).toHaveBeenCalledWith('clientError', expect.any(Function));
+
+		// Invoke the registered server event callbacks to cover getRemoteIp branches
+		type ServerOnCall = [string, (_err: unknown, socket: unknown) => void];
+		const serverOnCalls = on.mock.calls as ServerOnCall[];
+		const tlsHandler = serverOnCalls.find(([e]) => e === 'tlsClientError')?.[1];
+		const httpHandler = serverOnCalls.find(([e]) => e === 'clientError')?.[1];
+		expect(tlsHandler).toBeDefined();
+		expect(httpHandler).toBeDefined();
+
+		// Branch: non-object primitive
+		tlsHandler!(new Error('tls'), 'not-an-object');
+		// Branch: null
+		tlsHandler!(new Error('tls'), null);
+		// Branch: object without remoteAddress
+		tlsHandler!(new Error('tls'), {});
+		// Branch: object with non-string remoteAddress
+		tlsHandler!(new Error('tls'), {remoteAddress: 0});
+		// Branch: object with empty string remoteAddress
+		tlsHandler!(new Error('tls'), {remoteAddress: ''});
+		// Branch: object with valid remoteAddress (tls)
+		tlsHandler!(new Error('tls'), {remoteAddress: '10.0.0.1'});
+		// Branch: clientError handler with valid socket
+		httpHandler!(new Error('http'), {remoteAddress: '10.0.0.2'});
+
+		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
+			'unknown',
+			'tls-client-error',
+		);
+		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
+			'10.0.0.1',
+			'tls-client-error',
+		);
+		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
+			'10.0.0.2',
+			'http-client-error',
+		);
+
 		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-cert.pem');
 		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-key.pem');
 		expect(listen).toHaveBeenCalledWith(

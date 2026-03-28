@@ -24,10 +24,12 @@ type HoneypotStats = {
 	probableScanIps: number;
 	probablePortScanIps: number;
 	maxUniquePathsFromSingleIp: number;
-	mostActiveIp?: string;
-	latestPath?: string;
-	latestIp?: string;
-	latestReason?: HoneypotSignalReason;
+	mostActiveIp: string;
+	latest?: {
+		path: string;
+		ip: string;
+		reason: HoneypotSignalReason;
+	};
 };
 
 const SIGNAL_WINDOW_MS = 5 * 60 * 1000;
@@ -186,10 +188,14 @@ export const getHoneypotStats = (now: number = Date.now()): HoneypotStats => {
 		probableScanIps,
 		probablePortScanIps,
 		maxUniquePathsFromSingleIp,
-		mostActiveIp,
-		latestPath: latestSignal?.path,
-		latestIp: latestSignal?.ip,
-		latestReason: latestSignal?.reason,
+		mostActiveIp: mostActiveIp ?? 'unknown',
+		latest: latestSignal
+			? {
+					path: latestSignal.path,
+					ip: latestSignal.ip,
+					reason: latestSignal.reason,
+				}
+			: undefined,
 	};
 };
 

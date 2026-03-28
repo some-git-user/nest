@@ -53,6 +53,12 @@ cd "$ROOT_DIR"
 echo "Building app for E2E test..."
 npm run build >/dev/null
 
+# If running as root via sudo, return ownership of dist/ to the original user
+# so subsequent non-root runs can clean and rebuild without permission errors.
+if [[ "$(id -u)" == "0" && -n "${SUDO_USER:-}" ]]; then
+	chown -R "$SUDO_USER:" dist/
+fi
+
 start_server() {
 	: >"$SERVER_LOG"
 	echo "Starting server for scan run..."
