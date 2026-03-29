@@ -310,9 +310,10 @@ E2E environment variables:
 
 Release is triggered manually via GitHub Actions workflow dispatch.
 
-Input:
+Version source:
 
-- `tag` (required, semantic format like `v1.2.3`)
+- Release tag is derived from `package.json` version as `v<version>`.
+- Example: `"version": "1.2.3"` -> release tag `v1.2.3`.
 
 Workflow behavior:
 

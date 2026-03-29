@@ -2,13 +2,9 @@ name: Release .deb (build:deb)
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g. v1.2.3)'
-        required: true
 
 concurrency:
-  group: release-deb-${{ github.event.inputs.tag }}
+  group: release-deb-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -32,20 +28,22 @@ jobs:
       - name: Run build:deb
         run: npm run build:deb
 
-      - name: Determine release tag
+      - name: Determine release tag from package.json
         id: vars
         run: |
           set -euo pipefail
-          tag="${{ github.event.inputs.tag }}"
+          version="$(node -p "require('./package.json').version")"
 
-          if [[ -z "$tag" ]]; then
-            echo "Input 'tag' must be provided" >&2
+          if [[ -z "$version" ]]; then
+            echo "package.json version must be provided" >&2
             exit 1
           fi
 
-          # Enforce semantic version tags with a leading v, e.g. v1.2.3 or v1.2.3-rc.1
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid tag format '$tag'. Expected e.g. v1.2.3 or v1.2.3-rc.1" >&2
+          tag="v$version"
+
+          # Enforce semantic version in package.json, e.g. 1.2.3 or 1.2.3-rc.1
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid package.json version '$version'. Expected e.g. 1.2.3 or 1.2.3-rc.1" >&2
             exit 1
           fi
 
@@ -61,6 +59,7 @@ jobs:
             fi
           fi
 
+          echo "version=$version" >> $GITHUB_OUTPUT
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
