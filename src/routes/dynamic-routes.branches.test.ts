@@ -304,6 +304,9 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('Usage for plugin'),
 		);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('/plugins/check-fake?help'),
+		);
 	});
 
 	test('ignores metadata when usage shape is invalid', async () => {
@@ -569,6 +572,9 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('HTTP usage for plugin'),
 		);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('/plugins/check-fake?help'),
+		);
 		expect(logger.info).not.toHaveBeenCalledWith(
 			expect.stringContaining('Shell usage for plugin'),
 		);
@@ -606,6 +612,67 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: stat-string-error'),
+		);
+	});
+
+	test('serves plugin help page from ?help when meta.help is defined', async () => {
+		const {app} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					help: '<h1>Fake Plugin Help</h1><p>No real functionality.</p>',
+					usage: {
+						http: '/plugins/check-fake?x=1',
+						shell: './check_nest.sh check-fake x=1',
+					},
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/plugins/check-fake?help');
+		expect(res.status).toBe(200);
+		expect(res.headers['content-type']).toMatch(/text\/html/);
+		expect(res.text).toContain('<h1>Fake Plugin Help</h1>');
+		expect(res.text).toContain('No real functionality.');
+	});
+
+	test('serves auto-generated help page from ?help when no meta.help is defined', async () => {
+		const {app} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					usage: {
+						http: '/plugins/check-fake?x=<val>',
+					},
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/plugins/check-fake?help');
+		expect(res.status).toBe(200);
+		expect(res.headers['content-type']).toMatch(/text\/html/);
+		expect(res.text).toContain('check_fake');
+		expect(res.text).toContain('/plugins/check-fake?x=&lt;val&gt;');
+		expect(res.text).toContain(
+			'No extended help is available for this plugin.',
+		);
+	});
+
+	test('serves fallback help page when meta.help is a non-string value', async () => {
+		const {app} = buildAppForPlugin({
+			pluginModule: {
+				meta: {
+					help: 42,
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/plugins/check-fake?help');
+		expect(res.status).toBe(200);
+		expect(res.headers['content-type']).toMatch(/text\/html/);
+		expect(res.text).toContain(
+			'No extended help is available for this plugin.',
 		);
 	});
 });

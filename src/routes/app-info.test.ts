@@ -45,4 +45,19 @@ describe('/nagios route', () => {
 		expect(res.status).toBe(200);
 		expect(body.code).toBe(2);
 	});
+
+	test('returns HTML help page when ?help is provided', async () => {
+		const res = await request(app).get('/nagios').query({help: ''});
+		expect(res.status).toBe(200);
+		expect(res.headers['content-type']).toMatch(/text\/html/);
+		expect(res.headers['content-security-policy']).toContain(
+			"default-src 'none'",
+		);
+		expect(res.text).toContain('Built-in Help: /nagios');
+		expect(res.text).toContain('/nagios?help');
+		expect(res.text).toContain(
+			'/nagios?cpuWarn=60&cpuCrit=85&memWarn=70&memCrit=90',
+		);
+		expect(res.text).toContain('/help/external-link-guard.js');
+	});
 });

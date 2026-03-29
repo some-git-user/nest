@@ -1,13 +1,15 @@
 import {getRecommendedSecurityWarnings} from './security';
 
 describe('getRecommendedSecurityWarnings', () => {
-	test('returns no warnings outside production', () => {
+	test('warns when security middleware is disabled in development', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'development',
 				ENABLE_SECURITY_MIDDLEWARE: false,
 			}),
-		).toEqual([]);
+		).toEqual([
+			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
+		]);
 	});
 
 	test('warns when security middleware is disabled in production', () => {
@@ -17,7 +19,7 @@ describe('getRecommendedSecurityWarnings', () => {
 				ENABLE_SECURITY_MIDDLEWARE: false,
 			}),
 		).toEqual([
-			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled in production.',
+			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
 		]);
 	});
 
@@ -27,13 +29,13 @@ describe('getRecommendedSecurityWarnings', () => {
 				NODE_ENV: 'production',
 				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: '',
-				ALLOWED_IPS: '127.0.0.1',
+				ALLOWED_IPS: '127.0.0.1, ::1',
 				RATE_LIMIT_WINDOW_MS: 60_000,
 				RATE_LIMIT_MAX: 120,
 			}),
 		).toEqual([
-			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
-			'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
+			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		]);
 	});
 
@@ -48,7 +50,7 @@ describe('getRecommendedSecurityWarnings', () => {
 				RATE_LIMIT_MAX: 120,
 			}),
 		).toEqual([
-			'Security recommendation: ALLOWED_IPS is empty in production; requests are not restricted to trusted source IPs.',
+			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
 		]);
 	});
 
@@ -116,8 +118,8 @@ describe('getRecommendedSecurityWarnings', () => {
 				ENABLE_SECURITY_MIDDLEWARE: true,
 			}),
 		).toEqual([
-			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
-			'Security recommendation: ALLOWED_IPS is empty in production; requests are not restricted to trusted source IPs.',
+			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
+			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
 			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
 		]);
 	});

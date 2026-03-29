@@ -15,6 +15,7 @@ type MockResponse = {
 	res: Response;
 	statusMock: jest.Mock;
 	sendMock: jest.Mock;
+	setHeaderMock: jest.Mock;
 };
 
 jest.mock('module', () => ({
@@ -49,12 +50,14 @@ jest.mock('./dynamic-routes/helpers', () => ({
 const createMockRes = (): MockResponse => {
 	const statusMock = jest.fn().mockReturnThis();
 	const sendMock = jest.fn().mockReturnThis();
+	const setHeaderMock = jest.fn().mockReturnThis();
 	const res = {
 		headersSent: false,
 		status: statusMock,
 		send: sendMock,
+		setHeader: setHeaderMock,
 	};
-	return {res: res as unknown as Response, statusMock, sendMock};
+	return {res: res as unknown as Response, statusMock, sendMock, setHeaderMock};
 };
 
 describe('createPluginRouteHandler', () => {
@@ -222,5 +225,273 @@ describe('createPluginRouteHandler', () => {
 				code: 3,
 			}),
 		);
+	});
+
+	test('serves wrapped HTML help page when meta.help is a partial fragment', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml: '<h1>Setup Guide</h1><p>Install the plugin first.</p>',
+			pluginName: 'check_test',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock, setHeaderMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(setHeaderMock).toHaveBeenCalledWith(
+			'Content-Security-Policy',
+			expect.stringContaining("default-src 'none'"),
+		);
+		expect(setHeaderMock).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('<h1>Setup Guide</h1>'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('Install the plugin first.'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('<title>check_test</title>'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('/help/external-link-guard.js'),
+		);
+	});
+
+	test('serves full HTML document in a sandbox when meta.help starts with <!DOCTYPE', async () => {
+		const fullHtml =
+			'<!DOCTYPE html><html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>';
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml: fullHtml,
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('rendered in a sandbox for safety'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('sandbox="allow-popups"'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('&lt;p&gt;Hello&lt;/p&gt;'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('/help/external-link-guard.js'),
+		);
+	});
+
+	test('serves full HTML document in a sandbox when meta.help starts with <html', async () => {
+		const fullHtml =
+			'<html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>';
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml: fullHtml,
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('rendered in a sandbox for safety'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('sandbox="allow-popups"'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('&lt;p&gt;Hello&lt;/p&gt;'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('/help/external-link-guard.js'),
+		);
+	});
+
+	test('serves auto-generated help page with usage when no meta.help is defined', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			pluginName: 'check_test',
+			usageHttp: '/plugins/check-test?foo=<value>',
+			usageShell: './check_nest.sh check-test foo=<value>',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock, setHeaderMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(setHeaderMock).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('check_test'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('/plugins/check-test?foo=&lt;value&gt;'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('./check_nest.sh check-test foo=&lt;value&gt;'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('No extended help is available for this plugin.'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('/help/external-link-guard.js'),
+		);
+	});
+
+	test('serves auto-generated help page with no usage data when context is empty', async () => {
+		const handler = createPluginRouteHandler(
+			'/tmp/check.js',
+			'/check-test',
+			{},
+		);
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('Plugin Help'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('No extended help is available for this plugin.'),
+		);
+		expect(sendMock).not.toHaveBeenCalledWith(
+			expect.stringContaining('<dt>HTTP</dt>'),
+		);
+	});
+
+	// ──────────────── HTML injection via plugin metadata ────────────────
+
+	test('HTML-escapes pluginName containing angle brackets in the page title', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			pluginName: '<script>alert(1)</script>',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		expect(output).not.toContain('<script>');
+		expect(output).toContain('&lt;script&gt;');
+	});
+
+	test('HTML-escapes usageHttp containing a quote-breaking XSS payload', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			pluginName: 'check-test',
+			usageHttp: '"><script>alert(document.cookie)</script>',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		expect(output).not.toContain('<script>');
+		expect(output).toContain('&lt;script&gt;');
+		expect(output).toContain('&quot;');
+	});
+
+	test('HTML-escapes usageShell containing HTML special characters', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			pluginName: 'check-test',
+			usageShell: './check.sh && echo "<script>alert(1)</script>"',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		// Angle brackets must be entity-encoded, not rendered as tags
+		expect(output).toContain('&lt;script&gt;');
+		expect(output).not.toContain('<script>alert');
+	});
+
+	test('sanitizes script tags in partial-HTML meta.help payload', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml:
+				'<p>Setup guide</p><script>alert(document.cookie)</script><p>End</p>',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		expect(output).not.toContain('<script>');
+		expect(output).toContain('Setup guide');
+		expect(output).toContain('End');
+	});
+
+	test('sanitizes event-handler attributes in partial-HTML meta.help payload', async () => {
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml:
+				'<p onclick="stealCookies()">click me</p><img src="x" onerror="pwned()">',
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		expect(output).not.toContain('onclick');
+		expect(output).not.toContain('onerror');
+		expect(output).not.toContain('<img');
+		expect(output).toContain('click me');
+	});
+
+	test('sends full-doc meta.help through sandbox and strips inline scripts from srcdoc', async () => {
+		const fullDoc =
+			'<!DOCTYPE html><html><body><script>alert(1)</script><p>Docs</p></body></html>';
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
+			helpHtml: fullDoc,
+		});
+		const req: Partial<Request> = {
+			url: '/check-test?help',
+			query: {help: ''},
+		};
+		const {res, sendMock} = createMockRes();
+
+		await handler(req as Request, res);
+
+		const [output] = sendMock.mock.calls[0] as [string];
+		// Outer wrapper must not contain a live <script> tag
+		expect(output).not.toMatch(/<script[^>]*>alert/i);
+		// The srcdoc attribute should contain the escaped (therefore inert) version
+		expect(output).toContain('sandbox="allow-popups"');
 	});
 });

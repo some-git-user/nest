@@ -116,4 +116,20 @@ describe('/nagios/honey-pot route', () => {
 			"'honeypot_protocol_errors':3c",
 		);
 	});
+
+	test('returns HTML help page when ?help is provided', async () => {
+		const res = await request(app).get('/nagios/honey-pot').query({help: ''});
+
+		expect(res.status).toBe(200);
+		expect(res.headers['content-type']).toMatch(/text\/html/);
+		expect(res.headers['content-security-policy']).toContain(
+			"default-src 'none'",
+		);
+		expect(res.text).toContain('Built-in Help: /nagios/honey-pot');
+		expect(res.text).toContain('/nagios/honey-pot?help');
+		expect(res.text).toContain(
+			'/nagios/honey-pot?warnHits=2&critHits=8&warnSuspicious=2&critSuspicious=4',
+		);
+		expect(res.text).toContain('/help/external-link-guard.js');
+	});
 });

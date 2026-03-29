@@ -36,11 +36,14 @@ Use this project when your platform/services already run on Node.js and you want
 ## Features
 
 - HTTPS-only server with automatic self-signed certificate generation when missing.
+- Root overview page (`/`) with built-in routes, plugin routes, and help links.
 - Nagios-compatible payloads: `message`, `code`, optional `performanceData`.
 - Dynamic plugin loading from a filesystem directory.
 - Runtime TypeScript plugin transpilation and cache reuse.
 - Unified language stack for service logic and checks (TypeScript/JavaScript end to end).
 - Honeypot and probe detection endpoint with Nagios reporting.
+- Built-in and plugin help pages via `?help`.
+- External-link warning guard on help pages before leaving app origin.
 - Shell-friendly checks via `script/check_nest.sh`.
 
 ## Why TypeScript for Nagios Checks
@@ -119,7 +122,7 @@ Main variables:
 - `ENABLE_SECURITY_MIDDLEWARE` (default: `true`)
 - `API_KEY_HEADER` (default: `x-api-key`)
 - `API_KEY` (default: empty, disabled)
-- `ALLOWED_IPS` (default: `127.0.0.1`; comma-separated exact IPs)
+- `ALLOWED_IPS` (default: `127.0.0.1, ::1`; comma-separated exact IPs)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX` (default: `120`)
 
@@ -127,17 +130,32 @@ Main variables:
 
 ### Built-in routes
 
-| Method | Path                | Purpose                                |
-| ------ | ------------------- | -------------------------------------- |
-| `GET`  | `/nagios`           | Built-in app metrics check             |
-| `GET`  | `/nagios/honey-pot` | Honeypot/probe status in Nagios format |
-| `GET`  | `/favicon.ico`      | Returns HTTP 204                       |
+| Method | Path                           | Purpose                                                         |
+| ------ | ------------------------------ | --------------------------------------------------------------- |
+| `GET`  | `/`                            | Root overview page (routes + help links)                        |
+| `GET`  | `/nagios`                      | Built-in app metrics check                                      |
+| `GET`  | `/nagios/honey-pot`            | Honeypot/probe status in Nagios format                          |
+| `GET`  | `/favicon.ico`                 | Serves project favicon file                                     |
+| `GET`  | `/help/external-link-guard.js` | Script used by help pages to warn before opening external links |
 
 ### Dynamic routes
 
 | Method | Path                      | Purpose                            |
 | ------ | ------------------------- | ---------------------------------- |
 | `GET`  | `/plugins/<plugin-route>` | Executes a discovered plugin check |
+
+### Help pages and docs UX
+
+- Root overview page: `GET /`
+  - Lists built-in routes and plugin routes.
+  - Includes direct `help` links.
+- Built-in help pages:
+  - `GET /nagios?help`
+  - `GET /nagios/honey-pot?help`
+- Plugin help pages:
+  - `GET /plugins/<plugin-route>?help`
+
+All help pages include an external-link warning. When a user clicks a link to a different origin, the UI asks for confirmation before navigating away.
 
 ### Fallback behavior
 
@@ -158,6 +176,7 @@ Production safety checks:
 - In `NODE_ENV=production`, plugin files are loaded only when file owner uid matches the service process uid.
 - Plugin files must not be writable by group or others.
 - Insecure plugin files are skipped and logged.
+- In `NODE_ENV=production`, the config file is validated with the same ownership and permission rules at startup. A bad config file causes a hard start failure.
 
 Ignored plugin files:
 
@@ -211,6 +230,25 @@ export const meta = {
 };
 ```
 
+Plugins may also export `meta.help` with extended HTML documentation:
+
+```ts
+export const meta = {
+	usage: {
+		http: '/plugins/check-custom?value=<number>',
+		shell: './check_nest.sh check-custom value=<number>',
+	},
+	help: `<h1>check-custom</h1><p>Extended setup guide...</p>`,
+};
+```
+
+Notes on `meta.help`:
+
+- If `meta.help` is a full HTML document (`<!DOCTYPE ...>` / `<html ...>`), it is sandboxed inside an `<iframe srcdoc>` with `sandbox="allow-popups"` to isolate scripts and forms.
+- If it is an HTML fragment, it is sanitized with `sanitize-html` (event-handler attributes and unsafe URI schemes removed) and rendered in a minimal help-page shell.
+- If `meta.help` is missing, Nest generates a fallback help page from `meta.usage`.
+- All help pages set a strict Content Security Policy and include the external-link warning guard.
+
 ### Example plugin
 
 Create `plugins/check_custom.ts`:
@@ -253,6 +291,14 @@ npm run lint:check
 npx tsc --noEmit
 npm run test:coverage
 ```
+
+The test suite includes security-focused tests that cover:
+
+- XSS and event-handler injection in `meta.help` HTML fragments.
+- HTML injection via plugin metadata fields (`pluginName`, `usageHttp`, `usageShell`).
+- Access control bypass attempts (key prefix/substring, case, forwarded-for spoofing, IPv4-mapped IPv6).
+- File ownership and permission edge cases for plugin and config file validation.
+- Adversarial IP normalization inputs.
 
 ### Useful scripts
 
@@ -333,7 +379,7 @@ Workflow behavior:
 - Builds `.deb` artifact.
 - Generates release body from commit messages.
 - Also enables GitHub generated release notes.
-- Uploads `build_deb/nest-deb.deb` as release asset.
+- Uploads `build_deb/nest-deb.deb` and `script/check_nest.sh` as release assets.
 
 ## Troubleshooting
 
@@ -369,8 +415,13 @@ Built-in application controls:
 - Basic IP + API-key access control middleware.
 - Request rate limiting.
 - Production plugin file ownership/permission validation in the dynamic loader.
+- Production config file ownership/permission validation at startup.
+- Help-page Content Security Policy headers (`default-src 'none'`, locked `script-src`, `frame-ancestors 'none'`).
+- Help-page HTML sanitization via `sanitize-html` (blocks XSS, event-handler attributes, unsafe URI schemes).
+- Full-doc plugin help pages (`<!DOCTYPE>`/`<html>`) rendered in a sandboxed `<iframe>` with `allow-popups` only.
+- External-link warning guard on all help pages before leaving app origin.
 
-By default, `ALLOWED_IPS` is restricted to `127.0.0.1`. Add your monitoring source addresses explicitly when the service must accept remote checks.
+By default, `ALLOWED_IPS` is restricted to loopback addresses `127.0.0.1` and `::1`. Add your monitoring source addresses explicitly when the service must accept remote checks.
 
 At startup in production, the app logs warnings when recommended security settings are missing or weak, including:
 

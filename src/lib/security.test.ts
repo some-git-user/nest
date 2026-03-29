@@ -134,4 +134,137 @@ describe('security middleware', () => {
 		expect(status).toHaveBeenCalledWith(401);
 		expect(send).toHaveBeenCalled();
 	});
+
+	// ──────────────── Key prefix / substring should not bypass ────────────────
+
+	test('rejects a key that is a prefix of the expected key', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret-full',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app).get('/ok').set('x-api-key', 'secret');
+		expect(res.status).toBe(401);
+	});
+
+	test('rejects a key that is a suffix of the expected key', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret-full',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app).get('/ok').set('x-api-key', 'full');
+		expect(res.status).toBe(401);
+	});
+
+	test('rejects key that differs only by character case', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'Secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app).get('/ok').set('x-api-key', 'secret');
+		expect(res.status).toBe(401);
+	});
+
+	// ──────────────── Both IP allowlist + API key configured ────────────────
+
+	test('blocks request when IP is allowed but API key is wrong', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'correct-key',
+				apiKeyHeader: 'x-api-key',
+				allowedIps: '127.0.0.1',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '127.0.0.1')
+			.set('x-api-key', 'wrong-key');
+		expect(res.status).toBe(401);
+	});
+
+	test('blocks request when API key is correct but IP is not in allowlist', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'correct-key',
+				apiKeyHeader: 'x-api-key',
+				allowedIps: '10.0.0.1',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.1')
+			.set('x-api-key', 'correct-key');
+		expect(res.status).toBe(403);
+	});
+
+	test('allows request when both API key and IP check pass', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'correct-key',
+				apiKeyHeader: 'x-api-key',
+				allowedIps: '10.0.0.1',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '10.0.0.1')
+			.set('x-api-key', 'correct-key');
+		expect(res.status).toBe(200);
+	});
+
+	// ──────────────── IP allowlist with spoofed forwarded-for chain ────────────────
+
+	test('uses only the first x-forwarded-for IP, not a later trusted one', async () => {
+		// Client claims: attacker_ip, trusted_ip — only attacker_ip should count
+		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: '10.0.0.1'}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.99, 10.0.0.1');
+		expect(res.status).toBe(403);
+	});
+
+	test('rejects IPv4-mapped IPv6 address not in allowlist', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: '10.0.0.2'}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '::ffff:10.0.0.1');
+		expect(res.status).toBe(403);
+	});
+
+	test('allows IPv4-mapped IPv6 address that normalizes to an allowlisted IP', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: '10.0.0.1'}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '::ffff:10.0.0.1');
+		expect(res.status).toBe(200);
+	});
+
+	// ──────────────── Whitespace-only allowlist entries are dropped ────────────────
+
+	test('ignores whitespace-only entries in allowedIps and enforces real restriction', async () => {
+		// " , , 10.0.0.1" — only 10.0.0.1 should be the accepted IP
+		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: ' , , 10.0.0.1'}),
+		);
+		const blocked = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '127.0.0.1');
+		expect(blocked.status).toBe(403);
+
+		const allowed = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '10.0.0.1');
+		expect(allowed.status).toBe(200);
+	});
 });

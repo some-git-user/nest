@@ -119,7 +119,7 @@ run_check env NEST_SCHEME=http MOCK_RESPONSE="VALID_JSON:ok|0|" "$TARGET_SCRIPT"
 assert_equals "ok | code=0" "$RUN_OUTPUT" "supports plain HTTP when explicitly configured"
 assert_equals "0" "$RUN_STATUS" "returns success status for http override"
 assert_not_contains "--insecure" "$TMP_DIR/curl_args" "does not set insecure flag for HTTP"
-assert_contains "http://localhost:5000/plugins/check-test" "$TMP_DIR/curl_args" "uses HTTP endpoint when overridden"
+assert_contains "http://localhost:5000/plugins/check-test" "$TMP_DIR/curl_args" "uses configured scheme endpoint when overridden"
 
 run_check env NEST_API_KEY="secret-token" NEST_API_KEY_HEADER="x-custom-key" MOCK_RESPONSE="VALID_JSON:secured|0|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=secured nagiosReturnValue=0
 assert_equals "secured | code=0" "$RUN_OUTPUT" "supports API key secured checks"

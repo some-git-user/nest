@@ -1,13 +1,27 @@
 describe('server bootstrap', () => {
 	type FaviconHandler = (
 		_req: unknown,
-		res: {status: (code: number) => unknown},
+		res: {sendFile: (filePath: string) => unknown},
+	) => unknown;
+	type GuardScriptHandler = (
+		_req: unknown,
+		res: {
+			setHeader: (name: string, value: string) => unknown;
+			send: (body: unknown) => unknown;
+		},
+	) => unknown;
+	type RootHandler = (
+		_req: unknown,
+		res: {
+			setHeader: (name: string, value: string) => unknown;
+			send: (body: unknown) => unknown;
+		},
 	) => unknown;
 	type NotFoundHandler = (
 		req: {url: string},
 		res: {status: (code: number) => {send: (body: unknown) => unknown}},
 	) => unknown;
-	type GetRouteCall = [string, FaviconHandler];
+	type GetRouteCall = [string, FaviconHandler | RootHandler];
 	type UseCall = [string | NotFoundHandler, unknown?];
 
 	afterEach(() => {
@@ -44,6 +58,12 @@ describe('server bootstrap', () => {
 			.fn()
 			.mockReturnValueOnce('CERT_CONTENT')
 			.mockReturnValueOnce('KEY_CONTENT');
+		const readdirSync = jest.fn(() => [
+			'check_test.ts',
+			'check_test.js',
+			'check_debian_eol.ts',
+			'check_noise.test.ts',
+		]);
 		const info = jest.fn();
 		const warn = jest.fn();
 		const error = jest.fn();
@@ -74,8 +94,9 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
-			default: {readFileSync},
+			default: {readFileSync, readdirSync},
 			readFileSync,
+			readdirSync,
 		}));
 		jest.doMock('https', () => ({
 			__esModule: true,
@@ -93,6 +114,7 @@ describe('server bootstrap', () => {
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -105,8 +127,8 @@ describe('server bootstrap', () => {
 		jest.doMock('./lib/security', () => ({
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
 			getRecommendedSecurityWarnings: jest.fn(() => [
-				'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
-				'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+				'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
+				'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 			]),
 		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
@@ -141,20 +163,43 @@ describe('server bootstrap', () => {
 		const getCalls = get.mock.calls as GetRouteCall[];
 		const useCalls = use.mock.calls as UseCall[];
 		const faviconCall = getCalls.find(([route]) => route === '/favicon.ico');
+		const guardScriptCall = getCalls.find(
+			([route]) => route === '/help/external-link-guard.js',
+		);
+		const rootCall = getCalls.find(([route]) => route === '/');
 		const notFoundCall = useCalls.find(
 			(call): call is [NotFoundHandler] => typeof call[0] === 'function',
 		);
-		const faviconStatus = jest.fn();
+		const faviconSendFile = jest.fn();
+		const guardScriptSetHeader = jest.fn();
+		const guardScriptSend = jest.fn();
+		const rootSetHeader = jest.fn();
+		const rootSend = jest.fn();
 		const send = jest.fn();
 		const status = jest.fn(() => ({send}));
 
 		expect(faviconCall).toBeDefined();
+		expect(guardScriptCall).toBeDefined();
+		expect(rootCall).toBeDefined();
 		expect(notFoundCall).toBeDefined();
 
 		const [, faviconHandler] = faviconCall as GetRouteCall;
+		const [, guardScriptHandler] = guardScriptCall as [
+			string,
+			GuardScriptHandler,
+		];
+		const [, rootHandler] = rootCall as GetRouteCall;
 		const [notFoundHandler] = notFoundCall as [NotFoundHandler];
 
-		faviconHandler({}, {status: faviconStatus});
+		faviconHandler({}, {sendFile: faviconSendFile});
+		guardScriptHandler(
+			{},
+			{
+				setHeader: guardScriptSetHeader,
+				send: guardScriptSend,
+			},
+		);
+		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
 		notFoundHandler({url: '/missing'}, {status});
 
 		eventHandlers.get('unhandledRejection')?.({message: 'rejection'});
@@ -164,6 +209,11 @@ describe('server bootstrap', () => {
 		expect(expressFactory).toHaveBeenCalledTimes(1);
 		expect(json).toHaveBeenCalledTimes(1);
 		expect(get).toHaveBeenCalledWith('/favicon.ico', expect.any(Function));
+		expect(get).toHaveBeenCalledWith(
+			'/help/external-link-guard.js',
+			expect.any(Function),
+		);
+		expect(get).toHaveBeenCalledWith('/', expect.any(Function));
 		expect(use).toHaveBeenCalledWith('json-middleware');
 		expect(use).toHaveBeenCalledWith(helmetMiddleware);
 		expect(use).toHaveBeenCalledWith(rateLimitMiddleware);
@@ -172,12 +222,59 @@ describe('server bootstrap', () => {
 		expect(use).toHaveBeenCalledWith('/nagios', 'appInfoRouter');
 		expect(use).toHaveBeenCalledWith('/nagios/honey-pot', 'honeyPotRouter');
 		expect(warn).toHaveBeenCalledWith(
-			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
 		);
 		expect(warn).toHaveBeenCalledWith(
-			'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		);
-		expect(faviconStatus).toHaveBeenCalledWith(204);
+		expect(faviconSendFile).toHaveBeenCalledWith(
+			expect.stringContaining('/favicon.ico'),
+		);
+		expect(guardScriptSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'application/javascript; charset=utf-8',
+		);
+		expect(guardScriptSend).toHaveBeenCalledWith(
+			expect.stringContaining('window.confirm'),
+		);
+		expect(rootSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('Nest Route Overview'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('href="/favicon.ico"'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('<img src="/favicon.ico"'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/nagios?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/nagios/honey-pot?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('https://github.com/some-git-user/nest'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/plugins/check-test?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/plugins/check-debian-eol?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'Security recommendation: API_KEY is not configured',
+			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1)',
+			),
+		);
 		expect(status).toHaveBeenCalledWith(404);
 		expect(send).toHaveBeenCalledWith({message: 'not-found', code: 3});
 		expect(recordHoneypotSignal).toHaveBeenCalledWith(
@@ -288,6 +385,7 @@ describe('server bootstrap', () => {
 			.fn()
 			.mockReturnValueOnce('CERT_CONTENT')
 			.mockReturnValueOnce('KEY_CONTENT');
+		const readdirSync = jest.fn(() => []);
 		const info = jest.fn();
 		const warn = jest.fn();
 		const error = jest.fn();
@@ -307,8 +405,9 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
-			default: {readFileSync},
+			default: {readFileSync, readdirSync},
 			readFileSync,
+			readdirSync,
 		}));
 		jest.doMock('https', () => ({
 			__esModule: true,
@@ -326,6 +425,7 @@ describe('server bootstrap', () => {
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -359,12 +459,26 @@ describe('server bootstrap', () => {
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		require('./server');
+		const getCalls = get.mock.calls as GetRouteCall[];
+		const rootCall = getCalls.find(([route]) => route === '/');
+		const rootSetHeader = jest.fn();
+		const rootSend = jest.fn();
+		expect(rootCall).toBeDefined();
+		const [, rootHandler] = rootCall as GetRouteCall;
+		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
 
 		expect(expressFactory).toHaveBeenCalledTimes(1);
 		expect(use).toHaveBeenCalledWith('json-middleware');
 		expect(use).toHaveBeenCalledWith(helmetMiddleware);
 		expect(use).not.toHaveBeenCalledWith(rateLimitMiddleware);
 		expect(use).not.toHaveBeenCalledWith(accessControlMiddleware);
+		expect(rootSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('No plugins found'),
+		);
 		expect(scheduler).toHaveBeenCalledTimes(1);
 	});
 
@@ -436,6 +550,7 @@ describe('server bootstrap', () => {
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({

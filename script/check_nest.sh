@@ -58,7 +58,7 @@ build_parameters() {
 # Build the URL for the curl request
 # $1 is the command to call on the Nest API
 # Example: build_url "check-test"
-# Will generate: http://localhost:5000/plugins/check-test
+# Will generate: https://localhost:5000/plugins/check-test
 build_url() {
     local command="$1"
     command="${command#/}"

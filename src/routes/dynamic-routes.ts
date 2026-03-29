@@ -4,7 +4,10 @@ import {createRequire} from 'module';
 import path from 'path';
 import ts from 'typescript';
 import {env} from '../config/env';
-import {createPluginRouteHandler} from '../controllers/dynamic-routes';
+import {
+	PluginHelpContext,
+	createPluginRouteHandler,
+} from '../controllers/dynamic-routes';
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
@@ -24,6 +27,7 @@ type PluginMetaUsage =
 
 type PluginMeta = {
 	usage?: PluginMetaUsage;
+	help?: string;
 };
 
 const getPluginMetaUsage = (
@@ -50,14 +54,32 @@ const getPluginMetaUsage = (
 	return undefined;
 };
 
-const logPluginUsage = (pluginPath: string, usage: PluginMetaUsage): void => {
+const getPluginMetaHelp = (pluginModule: unknown): string | undefined => {
+	if (typeof pluginModule !== 'object' || pluginModule === null) {
+		return undefined;
+	}
+	const moduleRecord = pluginModule as Record<string, unknown>;
+	if (typeof moduleRecord.meta !== 'object' || moduleRecord.meta === null) {
+		return undefined;
+	}
+	const meta = moduleRecord.meta as PluginMeta;
+	return typeof meta.help === 'string' ? meta.help : undefined;
+};
+
+const logPluginUsage = (
+	pluginPath: string,
+	usage: PluginMetaUsage,
+	helpUrl: string,
+): void => {
 	if (typeof usage === 'string') {
-		logger.info(`Usage for plugin ${pluginPath}: ${usage}`);
+		logger.info(`Usage for plugin ${pluginPath}: ${usage} | Help: ${helpUrl}`);
 		return;
 	}
 
 	if (usage.http) {
-		logger.info(`HTTP usage for plugin ${pluginPath}: ${usage.http}`);
+		logger.info(
+			`HTTP usage for plugin ${pluginPath}: ${usage.http} | Help: ${helpUrl}`,
+		);
 	}
 
 	if (usage.shell) {
@@ -95,6 +117,10 @@ const buildPluginRoutePath = (file: string): string => {
 		.toLowerCase();
 
 	return `${pluginRoutePrefix}/${normalizedPathSegment}`;
+};
+
+const buildPluginHelpUrl = (kebabCasePath: string): string => {
+	return `https://${env.HOST}:${env.PORT}${kebabCasePath}?help`;
 };
 
 const isPluginFileSecurityAcceptable = (
@@ -229,6 +255,7 @@ pluginFiles.forEach((file) => {
 	}
 
 	const kebabCasePath = buildPluginRoutePath(file);
+	const helpUrl = buildPluginHelpUrl(kebabCasePath);
 	const existingFilePath = routePathToFilePath.get(kebabCasePath);
 	if (existingFilePath) {
 		logger.warn(
@@ -238,22 +265,37 @@ pluginFiles.forEach((file) => {
 	}
 	routePathToFilePath.set(kebabCasePath, filePath);
 	logger.info(
-		`GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`,
+		`GET route initialized for plugin: ${filePath}: https://${env.HOST}:${env.PORT}${kebabCasePath}`,
 	);
 
+	let helpContext: PluginHelpContext = {};
 	try {
 		const pluginModule: unknown = requireFn(runtimePluginPath);
 		const usage = getPluginMetaUsage(pluginModule);
+		let usageHttp: string | undefined;
+		let usageShell: string | undefined;
 		if (usage) {
-			logPluginUsage(filePath, usage);
+			logPluginUsage(filePath, usage, helpUrl);
+			if (typeof usage === 'string') {
+				usageHttp = usage;
+			} else {
+				usageHttp = usage.http;
+				usageShell = usage.shell;
+			}
 		}
+		helpContext = {
+			pluginName: path.basename(file, path.extname(file)),
+			helpHtml: getPluginMetaHelp(pluginModule),
+			usageHttp,
+			usageShell,
+		};
 	} catch (err) {
 		warnWithError(`Could not load plugin metadata for ${filePath}`, err);
 	}
 
 	router.get(
 		kebabCasePath,
-		createPluginRouteHandler(runtimePluginPath, kebabCasePath),
+		createPluginRouteHandler(runtimePluginPath, kebabCasePath, helpContext),
 	);
 });
 

@@ -30,36 +30,42 @@ const parseAllowedIps = (value: string | undefined): Set<string> => {
 	);
 };
 
+const isDefaultLoopbackAllowlist = (value: string | undefined): boolean => {
+	const allowedIps = parseAllowedIps(value);
+
+	return (
+		allowedIps.size === 2 &&
+		allowedIps.has('127.0.0.1') &&
+		allowedIps.has('::1')
+	);
+};
+
 export const getRecommendedSecurityWarnings = (
 	config: RecommendedSecurityConfig,
 ): string[] => {
-	if (config.NODE_ENV !== 'production') {
-		return [];
-	}
-
 	const warnings: string[] = [];
 
 	if (!config.ENABLE_SECURITY_MIDDLEWARE) {
 		warnings.push(
-			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled in production.',
+			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
 		);
 		return warnings;
 	}
 
 	if (String(config.API_KEY ?? '').trim().length === 0) {
 		warnings.push(
-			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
 		);
 	}
 
 	const allowedIpsValue = String(config.ALLOWED_IPS ?? '').trim();
 	if (allowedIpsValue.length === 0) {
 		warnings.push(
-			'Security recommendation: ALLOWED_IPS is empty in production; requests are not restricted to trusted source IPs.',
+			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
 		);
-	} else if (allowedIpsValue === '127.0.0.1') {
+	} else if (isDefaultLoopbackAllowlist(config.ALLOWED_IPS)) {
 		warnings.push(
-			'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		);
 	}
 

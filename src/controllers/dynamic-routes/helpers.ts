@@ -120,7 +120,7 @@ export const buildInvalidCodeResponse = (
 	host: string,
 	port: number,
 ) => {
-	const errorMessage = `Invalid return code "${code}" for plugin ${jsFilePath}: http://${host}:${port}${kebabCasePath}`;
+	const errorMessage = `Invalid return code "${code}" for plugin ${jsFilePath}: https://${host}:${port}${kebabCasePath}`;
 	return {
 		errorMessage,
 		nagiosReturn: createNagiosReturnMessage(

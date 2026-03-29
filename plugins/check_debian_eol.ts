@@ -30,6 +30,45 @@ export const meta = {
 		shell:
 			'./check_nest.sh check-debian-eol warningEolRemainingDays=<number> criticalEolRemainingDays=<number>',
 	},
+	help: `<h1>check-debian-eol</h1>
+<p>Checks the Debian release end-of-life (EOL) date using the
+<a href="https://endoflife.date/">endoflife.date</a> API and returns a
+Nagios-compatible status based on how many days remain until EOL.</p>
+
+<h2>Parameters</h2>
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>warningEolRemainingDays</code></td>
+      <td>number</td><td>60</td>
+      <td>Days before EOL to trigger a WARNING state</td>
+    </tr>
+    <tr>
+      <td><code>criticalEolRemainingDays</code></td>
+      <td>number</td><td>30</td>
+      <td>Days before EOL to trigger a CRITICAL state</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Return codes</h2>
+<ul>
+  <li><strong>OK</strong> – More than <code>warningEolRemainingDays</code> days remain until EOL</li>
+  <li><strong>WARNING</strong> – Between <code>criticalEolRemainingDays</code> and <code>warningEolRemainingDays</code> days remain</li>
+  <li><strong>CRITICAL</strong> – Fewer than <code>criticalEolRemainingDays</code> days remain, or the release is already EOL</li>
+  <li><strong>UNKNOWN</strong> – Could not determine the EOL date (e.g. unable to read <code>/etc/os-release</code> or reach the API)</li>
+</ul>
+
+<h2>Requirements</h2>
+<p>The server must be running on a Debian host. The check reads
+<code>/etc/os-release</code> to determine the current Debian version and queries
+<code>https://endoflife.date/api/v1/products/debian/</code> for release data.
+Outbound HTTPS to <code>endoflife.date</code> must be allowed.</p>
+
+<h2>Example</h2>
+<pre><code>GET /plugins/check-debian-eol?warningEolRemainingDays=90&amp;criticalEolRemainingDays=30</code></pre>
+<pre><code>./check_nest.sh check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30</code></pre>`,
 };
 
 const isEndoflifeResponse = (
