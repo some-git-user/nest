@@ -20,6 +20,7 @@ li{margin:.35rem 0}
 </style>
 </head>
 <body>
+<p><a href="/">Back to route overview</a></p>
 <h1>Built-in Help: /nagios</h1>
 <p>Returns process and host health as a Nagios JSON payload.</p>
 <h2>Endpoint</h2>

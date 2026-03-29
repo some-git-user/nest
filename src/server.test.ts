@@ -173,6 +173,9 @@ describe('server bootstrap', () => {
 		const guardScriptCall = getCalls.find(
 			([route]) => route === '/help/external-link-guard.js',
 		);
+		const warningHelpCall = getCalls.find(
+			([route]) => route === '/help/startup-warnings/:warningId',
+		);
 		const rootCall = getCalls.find(([route]) => route === '/');
 		const notFoundCall = useCalls.find(
 			(call): call is [NotFoundHandler] => typeof call[0] === 'function',
@@ -187,6 +190,7 @@ describe('server bootstrap', () => {
 
 		expect(faviconCall).toBeDefined();
 		expect(guardScriptCall).toBeDefined();
+		expect(warningHelpCall).toBeDefined();
 		expect(rootCall).toBeDefined();
 		expect(notFoundCall).toBeDefined();
 
@@ -218,6 +222,10 @@ describe('server bootstrap', () => {
 		expect(get).toHaveBeenCalledWith('/favicon.ico', expect.any(Function));
 		expect(get).toHaveBeenCalledWith(
 			'/help/external-link-guard.js',
+			expect.any(Function),
+		);
+		expect(get).toHaveBeenCalledWith(
+			'/help/startup-warnings/:warningId',
 			expect.any(Function),
 		);
 		expect(get).toHaveBeenCalledWith('/', expect.any(Function));
@@ -279,6 +287,9 @@ describe('server bootstrap', () => {
 			expect.stringContaining(
 				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted.',
 			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/help/startup-warnings/plugin-not-whitelisted'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(

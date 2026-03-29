@@ -9,6 +9,8 @@ import {runScheduler} from './lib/cron/scheduler';
 import {getErrorMessage} from './lib/error-message';
 import {
 	EXTERNAL_LINK_GUARD_SCRIPT_PATH,
+	appendExternalLinkGuard,
+	applyHelpPageSecurityHeaders,
 	getExternalLinkGuardScriptContent,
 } from './lib/help-page';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
@@ -18,6 +20,11 @@ import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
 } from './lib/security';
+import {
+	getStartupWarningHelpTopic,
+	renderStartupWarningHelpHtml,
+	renderStartupWarningListItems,
+} from './lib/startup-warning-help';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
@@ -58,7 +65,7 @@ const buildOverviewPageHtml = (
 		warnings.length > 0
 			? `<section class="warnings">
 <h2>Startup Warnings</h2>
-<ul>${warnings.map((w) => `<li>${w}</li>`).join('')}</ul>
+<ul>${renderStartupWarningListItems(warnings)}</ul>
 </section>`
 			: '';
 
@@ -131,6 +138,21 @@ app.get('/favicon.ico', (_req: Request, res: Response) => {
 app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
 	return res.send(getExternalLinkGuardScriptContent());
+});
+app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
+	const warningId = String(req.params.warningId ?? '');
+	const topic = getStartupWarningHelpTopic(warningId);
+	if (!topic) {
+		return sendNagiosUnknownError(
+			res,
+			404,
+			`Warning help topic not found: ${warningId}`,
+		);
+	}
+
+	applyHelpPageSecurityHeaders(res);
+	res.setHeader('Content-Type', 'text/html; charset=utf-8');
+	return res.send(appendExternalLinkGuard(renderStartupWarningHelpHtml(topic)));
 });
 app.get('/', (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'text/html; charset=utf-8');

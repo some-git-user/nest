@@ -138,6 +138,7 @@ Main variables:
 | `GET`  | `/nagios/honey-pot`            | Honeypot/probe status in Nagios format                          |
 | `GET`  | `/favicon.ico`                 | Serves project favicon file                                     |
 | `GET`  | `/help/external-link-guard.js` | Script used by help pages to warn before opening external links |
+| `GET`  | `/help/startup-warnings/<id>`  | Dedicated help page for a specific startup warning topic        |
 
 ### Dynamic routes
 
@@ -269,6 +270,7 @@ Startup behavior:
 - Existing plugins whose contents changed since the last approved hash are skipped.
 - The whitelist file itself is validated with the same Unix ownership/permission gate (`validateUnixFileSecurity`): it must be owned by the service uid and must not be group/other writable.
 - Each skipped plugin produces a startup warning in the logs and on the route overview page.
+- In the route overview page, each warning includes a direct link to a dedicated warning help page with handling instructions.
 - After review, add or update the plugin's hash in the whitelist file and restart the server.
 
 ### Example plugin

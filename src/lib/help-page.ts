@@ -5,6 +5,7 @@ export const EXTERNAL_LINK_WARNING_MESSAGE =
 	'You are about to leave this Nest app and open an external website. Continue?';
 
 export const EXTERNAL_LINK_GUARD_SCRIPT_PATH = '/help/external-link-guard.js';
+export const ROUTE_OVERVIEW_PATH = '/';
 
 const HELP_CONTENT_SECURITY_POLICY =
 	"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; frame-src 'self'";
@@ -112,6 +113,7 @@ iframe{width:100%;min-height:70vh;border:1px solid #dcdcdc;border-radius:6px;bac
 </style>
 </head>
 <body>
+<p><a href="${ROUTE_OVERVIEW_PATH}">Back to route overview</a></p>
 <h1>${safeTitle}</h1>
 <p>This plugin help document is rendered in a sandbox for safety.</p>
 <iframe sandbox="allow-popups" srcdoc="${safeSrcdoc}"></iframe>

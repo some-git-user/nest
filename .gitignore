@@ -20,3 +20,6 @@ coverage
 
 # certificates
 certs
+
+# plugins whitelist
+plugins/plugin-whitelist.txt

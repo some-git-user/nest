@@ -55,6 +55,7 @@ const buildPluginHelpHtml = (ctx: PluginHelpContext): string => {
 <head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}pre{background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto}code{background:#f4f4f4;padding:.2em .4em;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.5rem;text-align:left}th{background:#f4f4f4}</style>
 </head><body>
+<p><a href="/">Back to route overview</a></p>
 ${sanitizedFragment}
 </body></html>`);
 	}
@@ -74,6 +75,7 @@ ${sanitizedFragment}
 <head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}dt{font-weight:bold;margin-top:1rem}code{background:#f4f4f4;padding:.2em .4em;border-radius:3px}</style>
 </head><body>
+<p><a href="/">Back to route overview</a></p>
 <h1>${escapeHtml(title)}</h1>
 ${usageSection}<p>No extended help is available for this plugin.</p></body>
 </html>`);

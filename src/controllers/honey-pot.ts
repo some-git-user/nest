@@ -20,6 +20,7 @@ li{margin:.35rem 0}
 </style>
 </head>
 <body>
+<p><a href="/">Back to route overview</a></p>
 <h1>Built-in Help: /nagios/honey-pot</h1>
 <p>Returns honeypot probe metrics and detection severity as Nagios JSON.</p>
 <h2>Endpoint</h2>
