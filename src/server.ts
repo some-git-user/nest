@@ -5,9 +5,10 @@ import helmet from 'helmet';
 import https from 'https';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
+import {getErrorMessage} from './lib/error-message';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
+import {sendNagiosUnknownError} from './lib/http-nagios';
 import {logger} from './lib/logger';
-import {createNagiosReturnMessage} from './lib/nagios';
 import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
@@ -56,11 +57,7 @@ app.use('/nagios/honey-pot', honeyPot);
 // 404 handler for unknown routes
 app.use((req: Request, res: Response) => {
 	recordHoneypotSignal(req, 'unknown-route');
-	const nagiosReturn = createNagiosReturnMessage(
-		`Route not found: ${req.url}`,
-		3,
-	);
-	res.status(404).send(nagiosReturn);
+	return sendNagiosUnknownError(res, 404, `Route not found: ${req.url}`);
 });
 
 const tlsPaths = ensureTlsCertificate();
@@ -103,24 +100,19 @@ server.listen(env.PORT, env.HOST, () => {
 	);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err: {message: string}) => {
-	logger.error(`Error: ${err.message}`);
-	// close server & exit process
-	server.close(() => process.exit(1));
-});
+const bindFatalHandler = (
+	eventName: 'unhandledRejection' | 'uncaughtException' | 'SIGTERM',
+) => {
+	process.on(eventName, (err: unknown) => {
+		logger.error(`Error: ${getErrorMessage(err)}`);
+		// close server & exit process
+		server.close(() => process.exit(1));
+	});
+};
 
-process.on('uncaughtException', (err: {message: string}) => {
-	logger.error(`Error: ${err.message}`);
-	// close server & exit process
-	server.close(() => process.exit(1));
-});
-
-process.on('SIGTERM', (err: {message: string}) => {
-	logger.error(`Error: ${err.message}`);
-	// close server & exit process
-	server.close(() => process.exit(1));
-});
+bindFatalHandler('unhandledRejection');
+bindFatalHandler('uncaughtException');
+bindFatalHandler('SIGTERM');
 
 // start cron scheduler
 runScheduler();

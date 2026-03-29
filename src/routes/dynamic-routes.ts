@@ -5,6 +5,7 @@ import path from 'path';
 import ts from 'typescript';
 import {env} from '../config/env';
 import {createPluginRouteHandler} from '../controllers/dynamic-routes';
+import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
 
@@ -62,6 +63,11 @@ const logPluginUsage = (pluginPath: string, usage: PluginMetaUsage): void => {
 	if (usage.shell) {
 		logger.info(`Shell usage for plugin ${pluginPath}: ${usage.shell}`);
 	}
+};
+
+const warnWithError = (messagePrefix: string, err: unknown): void => {
+	const errorMessage = getErrorMessage(err);
+	logger.warn(`${messagePrefix}. Error: ${errorMessage}`);
 };
 
 const isIgnoredPluginFile = (file: string): boolean => {
@@ -144,10 +150,7 @@ const resolveRuntimePluginPath = (
 		sourceMtimeMs =
 			typeof sourceStat.mtimeMs === 'number' ? sourceStat.mtimeMs : 0;
 	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : String(err);
-		logger.warn(
-			`Could not stat plugin file ${filePath}. Error: ${errorMessage}`,
-		);
+		warnWithError(`Could not stat plugin file ${filePath}`, err);
 		return undefined;
 	}
 
@@ -181,10 +184,7 @@ const resolveRuntimePluginPath = (
 		logger.info(`Transpiled TS plugin to cache: ${filePath} -> ${jsCachePath}`);
 		return jsCachePath;
 	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : String(err);
-		logger.warn(
-			`Could not transpile plugin ${filePath}. Error: ${errorMessage}`,
-		);
+		warnWithError(`Could not transpile plugin ${filePath}`, err);
 		return undefined;
 	}
 };
@@ -248,10 +248,7 @@ pluginFiles.forEach((file) => {
 			logPluginUsage(filePath, usage);
 		}
 	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : String(err);
-		logger.warn(
-			`Could not load plugin metadata for ${filePath}. Error: ${errorMessage}`,
-		);
+		warnWithError(`Could not load plugin metadata for ${filePath}`, err);
 	}
 
 	router.get(

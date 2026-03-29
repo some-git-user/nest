@@ -64,6 +64,22 @@ export const createNagiosReturnMessage = (
 	return nagiosReturnMessage;
 };
 
+export const getNagiosStatusText = (code: NagiosReturnValuesEnum): string => {
+	if (code === NagiosReturnValuesEnum.OK) {
+		return 'OK';
+	}
+
+	if (code === NagiosReturnValuesEnum.WARNING) {
+		return 'WARNING';
+	}
+
+	if (code === NagiosReturnValuesEnum.CRITICAL) {
+		return 'CRITICAL';
+	}
+
+	return 'UNKNOWN';
+};
+
 /**
  * Type guard to check if a value is a valid PerformanceData object.
  *

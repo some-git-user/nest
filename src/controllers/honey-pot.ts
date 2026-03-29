@@ -1,6 +1,6 @@
 import {Request, Response} from 'express';
 import {getHoneypotStats} from '../lib/honey-pot';
-import {createNagiosReturnMessage} from '../lib/nagios';
+import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
 import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
 
 const parseThreshold = (value: unknown, fallback: number): number => {
@@ -37,12 +37,7 @@ export const getHoneypotStatus = (req: Request, res: Response) => {
 		status = NagiosReturnValuesEnum.WARNING;
 	}
 
-	const statusText =
-		status === NagiosReturnValuesEnum.OK
-			? 'OK'
-			: status === NagiosReturnValuesEnum.WARNING
-				? 'WARNING'
-				: 'CRITICAL';
+	const statusText = getNagiosStatusText(status);
 	const latestDetails = stats.latest
 		? ` latest=${stats.latest.path} ip=${stats.latest.ip} reason=${stats.latest.reason}`
 		: '';

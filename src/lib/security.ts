@@ -1,6 +1,6 @@
 import {NextFunction, Request, Response} from 'express';
-import {NagiosReturnValuesEnum} from '../types/nagios';
-import {createNagiosReturnMessage} from './nagios';
+import {sendNagiosUnknownError} from './http-nagios';
+import {getClientIpFromRequest, normalizeIp} from './request-ip';
 
 export type AccessControlConfig = {
 	apiKey?: string;
@@ -17,14 +17,6 @@ export type RecommendedSecurityConfig = {
 	RATE_LIMIT_MAX?: number;
 };
 
-const normalizeIp = (value: string): string => {
-	const trimmed = value.trim();
-	if (trimmed.startsWith('::ffff:')) {
-		return trimmed.slice('::ffff:'.length);
-	}
-	return trimmed;
-};
-
 const parseAllowedIps = (value: string | undefined): Set<string> => {
 	if (!value) {
 		return new Set<string>();
@@ -36,26 +28,6 @@ const parseAllowedIps = (value: string | undefined): Set<string> => {
 			.map((part) => normalizeIp(part))
 			.filter((part) => part.length > 0),
 	);
-};
-
-const getRequesterIp = (req: Request): string => {
-	const forwardedFor = req.headers['x-forwarded-for'];
-	if (typeof forwardedFor === 'string') {
-		const [first] = forwardedFor.split(',');
-		if (first && first.trim()) {
-			return normalizeIp(first);
-		}
-	}
-
-	if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
-		const first = forwardedFor[0];
-		if (first && first.trim()) {
-			return normalizeIp(first);
-		}
-	}
-
-	const requestIp = req.ip || req.socket.remoteAddress || 'unknown';
-	return normalizeIp(requestIp);
 };
 
 export const getRecommendedSecurityWarnings = (
@@ -116,28 +88,22 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 				: String(rawHeader ?? '');
 
 			if (providedApiKey !== expectedApiKey) {
-				return res
-					.status(401)
-					.send(
-						createNagiosReturnMessage(
-							'Unauthorized: invalid API key',
-							NagiosReturnValuesEnum.UNKNOWN,
-						),
-					);
+				return sendNagiosUnknownError(
+					res,
+					401,
+					'Unauthorized: invalid API key',
+				);
 			}
 		}
 
 		if (allowedIps.size > 0) {
-			const requesterIp = getRequesterIp(req);
+			const requesterIp = getClientIpFromRequest(req);
 			if (!allowedIps.has(requesterIp)) {
-				return res
-					.status(403)
-					.send(
-						createNagiosReturnMessage(
-							`Forbidden: IP ${requesterIp} is not allowed`,
-							NagiosReturnValuesEnum.UNKNOWN,
-						),
-					);
+				return sendNagiosUnknownError(
+					res,
+					403,
+					`Forbidden: IP ${requesterIp} is not allowed`,
+				);
 			}
 		}
 

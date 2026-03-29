@@ -1,6 +1,8 @@
 import {Request, Response} from 'express';
 import {createRequire} from 'module';
 import {env} from '../config/env';
+import {getErrorMessage} from '../lib/error-message';
+import {sendNagiosUnknownError} from '../lib/http-nagios';
 import {logger} from '../lib/logger';
 import {createNagiosReturnMessage} from '../lib/nagios';
 import {
@@ -11,14 +13,6 @@ import {
 	normalizePluginResult,
 	parseUrlParams,
 } from './dynamic-routes/helpers';
-
-const getErrorMessage = (err: unknown): string => {
-	if (err instanceof Error) {
-		return err.message;
-	}
-
-	return String(err);
-};
 
 export const createPluginRouteHandler = (
 	jsFilePath: string,
@@ -38,14 +32,11 @@ export const createPluginRouteHandler = (
 
 			if (!pluginFunc) {
 				logger.error('Plugin must export a function');
-				return res
-					.status(500)
-					.send(
-						createNagiosReturnMessage(
-							`Plugin ${jsFilePath} must export a function`,
-							3,
-						),
-					);
+				return sendNagiosUnknownError(
+					res,
+					500,
+					`Plugin ${jsFilePath} must export a function`,
+				);
 			}
 
 			logger.debug(req.url);
@@ -99,26 +90,20 @@ export const createPluginRouteHandler = (
 			} catch (err) {
 				logger.error(err);
 				const errorMessage = getErrorMessage(err);
-				return res
-					.status(500)
-					.send(
-						createNagiosReturnMessage(
-							`Plugin ${jsFilePath} failed: ${errorMessage}`,
-							3,
-						),
-					);
+				return sendNagiosUnknownError(
+					res,
+					500,
+					`Plugin ${jsFilePath} failed: ${errorMessage}`,
+				);
 			}
 		} catch (err) {
 			logger.error(err);
 			const errorMessage = getErrorMessage(err);
-			return res
-				.status(500)
-				.send(
-					createNagiosReturnMessage(
-						`Error loading plugin: ${jsFilePath}. Error: ${errorMessage}`,
-						3,
-					),
-				);
+			return sendNagiosUnknownError(
+				res,
+				500,
+				`Error loading plugin: ${jsFilePath}. Error: ${errorMessage}`,
+			);
 		}
 	};
 };

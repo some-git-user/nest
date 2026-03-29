@@ -1,6 +1,6 @@
 import {Request, Response} from 'express';
 import os from 'os';
-import {createNagiosReturnMessage} from '../lib/nagios';
+import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
 import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
 
 export const getAppInfo = (req: Request, res: Response) => {
@@ -43,7 +43,7 @@ export const getAppInfo = (req: Request, res: Response) => {
 		{label: 'process_rss_bytes', value: procMem.rss, uom: 'B'},
 	];
 
-	const message = `${status === NagiosReturnValuesEnum.OK ? 'OK' : status === NagiosReturnValuesEnum.WARNING ? 'WARNING' : 'CRITICAL'} - uptime(s)=${Math.floor(procUptime)} cpu%=${cpuPercent.toFixed(2)} mem%=${usedMemPercent.toFixed(2)}`;
+	const message = `${getNagiosStatusText(status)} - uptime(s)=${Math.floor(procUptime)} cpu%=${cpuPercent.toFixed(2)} mem%=${usedMemPercent.toFixed(2)}`;
 
 	const nagios = createNagiosReturnMessage(message, status, perf);
 	return res.send(nagios);

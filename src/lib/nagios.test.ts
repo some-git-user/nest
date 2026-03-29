@@ -1,5 +1,6 @@
 import {
 	createNagiosReturnMessage,
+	getNagiosStatusText,
 	isPerformanceData,
 	isPerformanceDataArray,
 } from '../lib/nagios';
@@ -269,5 +270,16 @@ describe('createNagiosReturnMessage', () => {
 				]),
 			).toBe(false);
 		});
+	});
+});
+
+describe('getNagiosStatusText', () => {
+	it('returns status labels for known Nagios codes', () => {
+		expect(getNagiosStatusText(NagiosReturnValuesEnum.OK)).toBe('OK');
+		expect(getNagiosStatusText(NagiosReturnValuesEnum.WARNING)).toBe('WARNING');
+		expect(getNagiosStatusText(NagiosReturnValuesEnum.CRITICAL)).toBe(
+			'CRITICAL',
+		);
+		expect(getNagiosStatusText(NagiosReturnValuesEnum.UNKNOWN)).toBe('UNKNOWN');
 	});
 });

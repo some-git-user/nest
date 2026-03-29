@@ -1,4 +1,5 @@
 import {Request} from 'express';
+import {getClientIpFromRequest} from './request-ip';
 
 export type HoneypotSignalReason =
 	| 'unknown-route'
@@ -57,22 +58,6 @@ const normalizePath = (url: string): string => {
 	return pathOnly || '/';
 };
 
-const getClientIp = (req: Request): string => {
-	const forwardedFor = req.headers['x-forwarded-for'];
-	if (typeof forwardedFor === 'string') {
-		const [first] = forwardedFor.split(',');
-		if (first && first.trim()) {
-			return first.trim();
-		}
-	}
-
-	if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
-		return forwardedFor[0];
-	}
-
-	return req.ip || req.socket.remoteAddress || 'unknown';
-};
-
 const pruneSignals = (now: number): void => {
 	while (signals.length > 0 && now - signals[0].timestamp > SIGNAL_WINDOW_MS) {
 		signals.shift();
@@ -92,7 +77,7 @@ export const recordHoneypotSignal = (
 	const timestamp = Date.now();
 	const path = normalizePath(req.originalUrl || req.url || '/');
 	const userAgent = String(req.headers['user-agent'] ?? 'unknown');
-	const ip = getClientIp(req);
+	const ip = getClientIpFromRequest(req);
 
 	signals.push({
 		timestamp,

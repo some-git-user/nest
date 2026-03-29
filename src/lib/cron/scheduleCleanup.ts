@@ -4,6 +4,7 @@ import path from 'path';
 import zlib from 'zlib';
 import {env} from '../../config/env';
 import {cronTimeZone} from '../../lib/cron/scheduler';
+import {getErrorMessage} from '../error-message';
 import {logger} from '../logger';
 
 export const scheduleCleanupLogs = () => {
@@ -67,7 +68,7 @@ const cleanupLogs = async () => {
 
 		logger.info(`Rotated and zipped log file: ${zippedLogFilePath}`);
 	} catch (err) {
-		const errorMessage = err instanceof Error ? err.message : String(err);
+		const errorMessage = getErrorMessage(err);
 		logger.error(`Error rotating/zipping log file: ${errorMessage}`);
 	}
 

@@ -1,3 +1,4 @@
+import {getErrorMessage} from '../../lib/error-message';
 import {
 	createNagiosReturnMessage,
 	isPerformanceData,
@@ -47,7 +48,7 @@ export const clearPluginRequireCache = (
 		const resolved = requireFn.resolve(jsFilePath);
 		delete require.cache[resolved];
 	} catch (e) {
-		const errorMessage = e instanceof Error ? e.message : String(e);
+		const errorMessage = getErrorMessage(e);
 		onWarn(
 			`Could not resolve plugin path for cache clearing: ${jsFilePath}. Error: ${errorMessage}`,
 		);
