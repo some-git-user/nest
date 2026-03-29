@@ -116,17 +116,22 @@ Main variables:
 - `PLUGINS_DIR` (default: `plugins`)
 - `LOG_FILE_PATH` (default: `logs/nest.log`)
 - `MAX_LOG_FILE_SIZE_BYTES` (default: `1048576`)
+- `ENABLE_SECURITY_MIDDLEWARE` (default: `true`)
+- `API_KEY_HEADER` (default: `x-api-key`)
+- `API_KEY` (default: empty, disabled)
+- `ALLOWED_IPS` (default: empty, disabled; comma-separated exact IPs)
+- `RATE_LIMIT_WINDOW_MS` (default: `60000`)
+- `RATE_LIMIT_MAX` (default: `120`)
 
 ## HTTP API
 
 ### Built-in routes
 
-| Method | Path                     | Purpose                                                  |
-| ------ | ------------------------ | -------------------------------------------------------- |
-| `GET`  | `/nagios`                | Built-in app metrics check                               |
-| `GET`  | `/nagios/honey-pot`      | Honeypot/probe status in Nagios format                   |
-| `ALL`  | `/nagios/honey-pot/trip` | Intentional honeypot trip endpoint (returns 404 UNKNOWN) |
-| `GET`  | `/favicon.ico`           | Returns HTTP 204                                         |
+| Method | Path                | Purpose                                |
+| ------ | ------------------- | -------------------------------------- |
+| `GET`  | `/nagios`           | Built-in app metrics check             |
+| `GET`  | `/nagios/honey-pot` | Honeypot/probe status in Nagios format |
+| `GET`  | `/favicon.ico`      | Returns HTTP 204                       |
 
 ### Dynamic routes
 
@@ -265,6 +270,8 @@ Environment variables for `check_nest.sh`:
 - `NEST_PORT` (default: `5000`)
 - `NEST_TLS_INSECURE` (default: `true`)
 - `NEST_CA_CERT` (optional path to CA cert)
+- `NEST_API_KEY` (optional API key sent as request header)
+- `NEST_API_KEY_HEADER` (default: `x-api-key`)
 
 Notes:
 
@@ -349,6 +356,12 @@ Workflow behavior:
 - Do not expose this service publicly without a reverse proxy, access control, and TLS trust strategy.
 - Honeypot and protocol-error detection is application-layer telemetry. It does not replace host/network IDS.
 - Report security issues privately to repository maintainers before opening a public issue.
+
+Built-in application controls:
+
+- Helmet security headers.
+- Basic IP + API-key access control middleware.
+- Request rate limiting.
 
 ## Contributing
 

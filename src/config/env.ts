@@ -1,4 +1,4 @@
-import {cleanEnv, host, num, port, str} from 'envalid';
+import {bool, cleanEnv, host, num, port, str} from 'envalid';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -46,7 +46,41 @@ function getConfigPath(): string {
 	return path.resolve(process.cwd(), '.env');
 }
 
-loadEnvFile(getConfigPath());
+function validateConfigFileSecurity(filepath: string) {
+	if (process.env.NODE_ENV !== 'production') {
+		return;
+	}
+
+	if (!fs.existsSync(filepath)) {
+		return;
+	}
+
+	// This check targets Unix-like production deployments where uid/mode semantics are available.
+	if (typeof process.getuid !== 'function') {
+		return;
+	}
+
+	const fileStat = fs.statSync(filepath);
+	const currentUid = process.getuid();
+
+	if (fileStat.uid !== currentUid) {
+		throw new Error(
+			`Insecure config file ownership for ${filepath}: owner uid ${fileStat.uid} does not match process uid ${currentUid}`,
+		);
+	}
+
+	const isGroupWritable = (fileStat.mode & 0o020) !== 0;
+	const isOtherWritable = (fileStat.mode & 0o002) !== 0;
+	if (isGroupWritable || isOtherWritable) {
+		throw new Error(
+			`Insecure config file permissions for ${filepath}: file must not be writable by group or others`,
+		);
+	}
+}
+
+const resolvedConfigPath = getConfigPath();
+validateConfigFileSecurity(resolvedConfigPath);
+loadEnvFile(resolvedConfigPath);
 
 export const env = cleanEnv(process.env, {
 	NODE_ENV: str({default: 'development'}),
@@ -59,4 +93,10 @@ export const env = cleanEnv(process.env, {
 	PLUGINS_DIR: str({default: 'plugins'}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
 	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes
+	ENABLE_SECURITY_MIDDLEWARE: bool({default: true}),
+	API_KEY_HEADER: str({default: 'x-api-key'}),
+	API_KEY: str({default: ''}),
+	ALLOWED_IPS: str({default: ''}),
+	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
+	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
 });

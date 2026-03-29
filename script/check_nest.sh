@@ -12,6 +12,8 @@ NEST_HOST="${NEST_HOST:-localhost}"
 NEST_PORT="${NEST_PORT:-5000}"
 NEST_TLS_INSECURE="${NEST_TLS_INSECURE:-true}"
 NEST_CA_CERT="${NEST_CA_CERT:-}"
+NEST_API_KEY="${NEST_API_KEY:-}"
+NEST_API_KEY_HEADER="${NEST_API_KEY_HEADER:-x-api-key}"
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
@@ -117,6 +119,10 @@ if [[ "$NEST_SCHEME" == "https" ]]; then
     elif [[ "$NEST_TLS_INSECURE" == "true" ]]; then
         curl_args+=(--insecure)
     fi
+fi
+
+if [[ -n "$NEST_API_KEY" ]]; then
+    curl_args+=(-H "$NEST_API_KEY_HEADER: $NEST_API_KEY")
 fi
 
 response=$(curl "${curl_args[@]}" "${parameters[@]}" "$url")

@@ -1,5 +1,5 @@
 import {Request, Response} from 'express';
-import {getHoneypotStats, recordHoneypotSignal} from '../lib/honey-pot';
+import {getHoneypotStats} from '../lib/honey-pot';
 import {createNagiosReturnMessage} from '../lib/nagios';
 import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
 
@@ -81,15 +81,4 @@ export const getHoneypotStatus = (req: Request, res: Response) => {
 	];
 
 	return res.send(createNagiosReturnMessage(message, status, performanceData));
-};
-
-export const triggerHoneypot = (req: Request, res: Response) => {
-	recordHoneypotSignal(req, 'honeypot-route');
-
-	const response = createNagiosReturnMessage(
-		`Unknown route ${req.originalUrl || req.url}`,
-		NagiosReturnValuesEnum.UNKNOWN,
-	);
-
-	return res.status(404).send(response);
 };

@@ -121,6 +121,15 @@ assert_equals "0" "$RUN_STATUS" "returns success status for http override"
 assert_not_contains "--insecure" "$TMP_DIR/curl_args" "does not set insecure flag for HTTP"
 assert_contains "http://localhost:5000/plugins/check-test" "$TMP_DIR/curl_args" "uses HTTP endpoint when overridden"
 
+run_check env NEST_API_KEY="secret-token" NEST_API_KEY_HEADER="x-custom-key" MOCK_RESPONSE="VALID_JSON:secured|0|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=secured nagiosReturnValue=0
+assert_equals "secured | code=0" "$RUN_OUTPUT" "supports API key secured checks"
+assert_equals "0" "$RUN_STATUS" "returns success for API key secured checks"
+assert_contains "-H" "$TMP_DIR/curl_args" "adds curl header flag when API key is configured"
+assert_contains "x-custom-key: secret-token" "$TMP_DIR/curl_args" "uses configured API key header and value"
+
+run_check env MOCK_RESPONSE="VALID_JSON:no-key|0|" "$TARGET_SCRIPT" check-test nagiosReturnMessage=no-key nagiosReturnValue=0
+assert_not_contains "x-api-key:" "$TMP_DIR/curl_args" "does not send API key header by default"
+
 run_check env MOCK_RESPONSE="not-json" "$TARGET_SCRIPT" check-test nagiosReturnMessage=test nagiosReturnValue=0
 assert_equals "Error: Received invalid JSON response." "$RUN_OUTPUT" "reports invalid JSON"
 assert_equals "3" "$RUN_STATUS" "maps invalid JSON to UNKNOWN"

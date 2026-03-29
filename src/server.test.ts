@@ -21,6 +21,9 @@ describe('server bootstrap', () => {
 		const use = jest.fn();
 		const get = jest.fn();
 		const app = {use, get};
+		const helmetMiddleware = 'helmet-middleware';
+		const rateLimitMiddleware = 'rate-limit-middleware';
+		const accessControlMiddleware = 'access-control-middleware';
 		const json = jest.fn(() => 'json-middleware');
 		const expressFactory = Object.assign(
 			jest.fn(() => app),
@@ -60,6 +63,14 @@ describe('server bootstrap', () => {
 			__esModule: true,
 			default: expressFactory,
 		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => helmetMiddleware),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => rateLimitMiddleware),
+		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			default: {readFileSync},
@@ -71,7 +82,17 @@ describe('server bootstrap', () => {
 			createServer,
 		}));
 		jest.doMock('./config/env', () => ({
-			env: {HOST: '127.0.0.1', PORT: 5443, NODE_ENV: 'test'},
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'test',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+				API_KEY: 'test-key',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '',
+			},
 		}));
 		jest.doMock('./lib/tls', () => ({
 			ensureTlsCertificate: jest.fn(() => ({
@@ -80,6 +101,9 @@ describe('server bootstrap', () => {
 			})),
 		}));
 		jest.doMock('./lib/logger', () => ({logger: {info, error}}));
+		jest.doMock('./lib/security', () => ({
+			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
+		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
 		jest.doMock('./routes/app-info', () => ({
 			__esModule: true,
@@ -136,6 +160,9 @@ describe('server bootstrap', () => {
 		expect(json).toHaveBeenCalledTimes(1);
 		expect(get).toHaveBeenCalledWith('/favicon.ico', expect.any(Function));
 		expect(use).toHaveBeenCalledWith('json-middleware');
+		expect(use).toHaveBeenCalledWith(helmetMiddleware);
+		expect(use).toHaveBeenCalledWith(rateLimitMiddleware);
+		expect(use).toHaveBeenCalledWith(accessControlMiddleware);
 		expect(use).toHaveBeenCalledWith('/', 'dynamicRoutesRouter');
 		expect(use).toHaveBeenCalledWith('/nagios', 'appInfoRouter');
 		expect(use).toHaveBeenCalledWith('/nagios/honey-pot', 'honeyPotRouter');

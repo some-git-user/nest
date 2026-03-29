@@ -1,11 +1,14 @@
 import express, {Application, Request, Response} from 'express';
+import rateLimit from 'express-rate-limit';
 import fs from 'fs';
+import helmet from 'helmet';
 import https from 'https';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
 import {logger} from './lib/logger';
 import {createNagiosReturnMessage} from './lib/nagios';
+import {createAccessControlMiddleware} from './lib/security';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes from './routes/dynamic-routes';
@@ -13,7 +16,30 @@ import honeyPot from './routes/honey-pot';
 
 const app: Application = express();
 
-app.use(express.json());
+app.use(
+	express.json({
+		limit: '16kb',
+	}),
+);
+app.use(helmet());
+
+if (env.ENABLE_SECURITY_MIDDLEWARE) {
+	app.use(
+		rateLimit({
+			windowMs: env.RATE_LIMIT_WINDOW_MS || 60_000,
+			max: env.RATE_LIMIT_MAX || 120,
+			standardHeaders: true,
+			legacyHeaders: false,
+		}),
+	);
+	app.use(
+		createAccessControlMiddleware({
+			apiKey: env.API_KEY,
+			apiKeyHeader: env.API_KEY_HEADER,
+			allowedIps: env.ALLOWED_IPS,
+		}),
+	);
+}
 
 // route files
 app.get('/favicon.ico', (_req: Request, res: Response) => res.status(204));

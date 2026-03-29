@@ -15,6 +15,7 @@ describe('env config loading', () => {
 		argv: string[];
 		env: Record<string, string | undefined>;
 		existsSyncImpl: (filePath: string) => boolean;
+		statSyncImpl?: (filePath: string) => {uid: number; mode: number};
 		fileContent?: string;
 	}) => {
 		jest.resetModules();
@@ -29,14 +30,22 @@ describe('env config loading', () => {
 		const readFileSyncMock = jest
 			.fn()
 			.mockReturnValue(options.fileContent ?? '');
+		const statSyncMock = jest.fn(
+			options.statSyncImpl ?? (() => ({uid: 1000, mode: 0o100600})),
+		);
+		const processGetUidSpy = jest
+			.spyOn(process, 'getuid' as never)
+			.mockReturnValue(1000 as never);
 
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			existsSync: existsSyncMock,
 			readFileSync: readFileSyncMock,
+			statSync: statSyncMock,
 		}));
 
 		jest.doMock('envalid', () => ({
+			bool: () => ({}),
 			cleanEnv: (environment: NodeJS.ProcessEnv) => environment,
 			host: () => ({}),
 			num: () => ({}),
@@ -51,12 +60,14 @@ describe('env config loading', () => {
 			env: loaded.env,
 			existsSyncMock,
 			readFileSyncMock,
+			statSyncMock,
+			processGetUidSpy,
 		};
 	};
 
 	it('prefers --configPath and parses quoted values', () => {
 		const configPath = '/tmp/custom-nest.conf';
-		const {existsSyncMock, readFileSyncMock} = loadEnvModule({
+		const {existsSyncMock, readFileSyncMock, statSyncMock} = loadEnvModule({
 			argv: ['node', 'server.js', '--configPath', configPath],
 			env: {
 				NODE_ENV: 'production',
@@ -64,11 +75,13 @@ describe('env config loading', () => {
 				PORT: undefined,
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600}),
 			fileContent:
 				'# comment\nHOST=\'example.local\'\nPORT=7001\nLOG_FILE_PATH="/tmp/nest.log"\nTLS_CERT_PATH=certs/test-cert.pem\nTLS_KEY_PATH=certs/test-key.pem\nTLS_CERT_COMMON_NAME=nest.local\nTLS_CERT_DAYS=730\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n',
 		});
 
 		expect(existsSyncMock).toHaveBeenCalledWith(configPath);
+		expect(statSyncMock).toHaveBeenCalledWith(configPath);
 		expect(readFileSyncMock).toHaveBeenCalledWith(configPath, 'utf8');
 		expect(process.env.HOST).toBe('example.local');
 		expect(process.env.PORT).toBe('7001');
@@ -142,5 +155,35 @@ describe('env config loading', () => {
 		expect(existsSyncMock).toHaveBeenCalledWith(fallbackConfigPath);
 		expect(readFileSyncMock).toHaveBeenCalledWith(fallbackConfigPath, 'utf8');
 		expect(process.env.HOST).toBe('fallback-host');
+	});
+
+	it('throws in production when config file owner does not match process uid', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js'],
+				env: {
+					NODE_ENV: 'production',
+					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 0, mode: 0o100600}),
+				fileContent: 'HOST=prod-host\n',
+			}),
+		).toThrow(/ownership/i);
+	});
+
+	it('throws in production when config file is group writable', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js'],
+				env: {
+					NODE_ENV: 'production',
+					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 1000, mode: 0o100660}),
+				fileContent: 'HOST=prod-host\n',
+			}),
+		).toThrow(/permissions/i);
 	});
 });
