@@ -143,6 +143,13 @@ describe('server bootstrap', () => {
 		jest.doMock('./routes/dynamic-routes', () => ({
 			__esModule: true,
 			default: 'dynamicRoutesRouter',
+			pluginStartupWarnings: [
+				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted.',
+			],
+			registeredPluginRoutes: [
+				'/plugins/check-test',
+				'/plugins/check-debian-eol',
+			],
 		}));
 		const recordHoneypotSignal = jest.fn();
 		const recordNetworkProbeSignal = jest.fn();
@@ -264,6 +271,14 @@ describe('server bootstrap', () => {
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('/plugins/check-debian-eol?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('Startup Warnings'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted.',
+			),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -451,6 +466,8 @@ describe('server bootstrap', () => {
 		jest.doMock('./routes/dynamic-routes', () => ({
 			__esModule: true,
 			default: 'dynamicRoutesRouter',
+			pluginStartupWarnings: [],
+			registeredPluginRoutes: [],
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
@@ -578,6 +595,8 @@ describe('server bootstrap', () => {
 		jest.doMock('./routes/dynamic-routes', () => ({
 			__esModule: true,
 			default: 'dynamicRoutesRouter',
+			pluginStartupWarnings: [],
+			registeredPluginRoutes: [],
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),

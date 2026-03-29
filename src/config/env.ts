@@ -97,6 +97,7 @@ export const env = cleanEnv(process.env, {
 	API_KEY_HEADER: str({default: 'x-api-key'}),
 	API_KEY: str({default: ''}),
 	ALLOWED_IPS: str({default: '127.0.0.1, ::1'}), // Loopback addresses by default for IPv4 and IPv6
+	PLUGIN_WHITELIST_PATH: str({default: ''}),
 	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
 	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
 });

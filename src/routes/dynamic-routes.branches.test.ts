@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express from 'express';
 import request from 'supertest';
 
@@ -13,6 +14,8 @@ type RouterLoadOptions = {
 	pluginFileMode?: number;
 	processUid?: number;
 	omitProcessGetuid?: boolean;
+	whitelistContent?: string;
+	whitelistExists?: boolean;
 	sourceMtimeMs?: number;
 	cacheMtimeMs?: number;
 	transpileError?: unknown;
@@ -57,7 +60,29 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		return {outputText: 'module.exports = {}'};
 	});
 	const pluginFiles = options.pluginFiles ?? ['check_fake.ts'];
+	const pluginSource = 'export const checkFake = async () => ({})';
+	const approvedHash = crypto
+		.createHash('sha256')
+		.update(pluginSource)
+		.digest('hex');
+	const whitelistPath = `${process.cwd()}/plugins/plugin-whitelist.txt`;
+	const whitelistExists = options.whitelistExists ?? true;
+	const whitelistContent =
+		options.whitelistContent ??
+		pluginFiles
+			.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
+			.map((file) => `${file} ${approvedHash}`)
+			.join('\n');
 	const statSyncMock = (fsPath: string) => {
+		if (fsPath === whitelistPath) {
+			return {
+				isFile: () => true,
+				mtimeMs: sourceMtimeMsRaw,
+				uid: processUid,
+				mode: 0o100600,
+			};
+		}
+
 		if (fsPath.includes('check_fake.ts')) {
 			pluginFileStatCalls += 1;
 			if (options.sourceStatSecondCallError && pluginFileStatCalls >= 2) {
@@ -119,14 +144,19 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	jest.doMock('fs', () => ({
 		__esModule: true,
 		default: {
+			existsSync: (fsPath: string) =>
+				fsPath === whitelistPath && whitelistExists,
 			readdirSync: () => pluginFiles,
-			readFileSync: () => 'export const checkFake = async () => ({})',
+			readFileSync: (fsPath: string) =>
+				fsPath === whitelistPath ? whitelistContent : pluginSource,
 			writeFileSync: () => undefined,
 			mkdirSync: () => undefined,
 			statSync: statSyncMock,
 		},
+		existsSync: (fsPath: string) => fsPath === whitelistPath && whitelistExists,
 		readdirSync: () => pluginFiles,
-		readFileSync: () => 'export const checkFake = async () => ({})',
+		readFileSync: (fsPath: string) =>
+			fsPath === whitelistPath ? whitelistContent : pluginSource,
 		writeFileSync: () => undefined,
 		mkdirSync: () => undefined,
 		statSync: statSyncMock,
@@ -154,6 +184,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			HOST: 'localhost',
 			PORT: 5000,
 			PLUGINS_DIR: 'plugins',
+			PLUGIN_WHITELIST_PATH: '',
 			LOG_FILE_PATH: 'logs/nest.log',
 		},
 	}));
@@ -416,6 +447,36 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('insecure ownership'),
+		);
+	});
+
+	test('skips plugin when it is not present in the whitelist file', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			whitelistContent: '',
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('is new or not whitelisted'),
+		);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('plugin-whitelist.txt'),
+		);
+	});
+
+	test('skips plugin when its whitelist hash changed', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			whitelistContent:
+				'check_fake.ts deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('hash changed'),
 		);
 	});
 

@@ -123,6 +123,7 @@ Main variables:
 - `API_KEY_HEADER` (default: `x-api-key`)
 - `API_KEY` (default: empty, disabled)
 - `ALLOWED_IPS` (default: `127.0.0.1, ::1`; comma-separated exact IPs)
+- `PLUGIN_WHITELIST_PATH` (default: empty; when unset, Nest uses `<PLUGINS_DIR>/plugin-whitelist.txt`)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX` (default: `120`)
 
@@ -177,6 +178,7 @@ Production safety checks:
 - Plugin files must not be writable by group or others.
 - Insecure plugin files are skipped and logged.
 - In `NODE_ENV=production`, the config file is validated with the same ownership and permission rules at startup. A bad config file causes a hard start failure.
+- On every startup, Nest hashes each effective plugin file and compares it with the trusted hash recorded in the plugin whitelist file. New or changed plugins are not registered until they are explicitly whitelisted.
 
 Ignored plugin files:
 
@@ -249,6 +251,26 @@ Notes on `meta.help`:
 - If `meta.help` is missing, Nest generates a fallback help page from `meta.usage`.
 - All help pages set a strict Content Security Policy and include the external-link warning guard.
 
+### Plugin whitelist file
+
+By default, Nest reads the plugin trust allowlist from `<PLUGINS_DIR>/plugin-whitelist.txt`.
+
+Each non-comment line must contain a filename and a SHA-256 hash, in either of these forms:
+
+```text
+check_test.ts 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef check_test.ts
+```
+
+Startup behavior:
+
+- If the whitelist file is missing, Nest creates it automatically with restrictive permissions (`0600`).
+- New plugins that are missing from the whitelist are skipped.
+- Existing plugins whose contents changed since the last approved hash are skipped.
+- The whitelist file itself is validated with the same Unix ownership/permission gate (`validateUnixFileSecurity`): it must be owned by the service uid and must not be group/other writable.
+- Each skipped plugin produces a startup warning in the logs and on the route overview page.
+- After review, add or update the plugin's hash in the whitelist file and restart the server.
+
 ### Example plugin
 
 Create `plugins/check_custom.ts`:
@@ -298,6 +320,7 @@ The test suite includes security-focused tests that cover:
 - HTML injection via plugin metadata fields (`pluginName`, `usageHttp`, `usageShell`).
 - Access control bypass attempts (key prefix/substring, case, forwarded-for spoofing, IPv4-mapped IPv6).
 - File ownership and permission edge cases for plugin and config file validation.
+- Startup plugin whitelist enforcement for new and changed plugin hashes.
 - Adversarial IP normalization inputs.
 
 ### Useful scripts

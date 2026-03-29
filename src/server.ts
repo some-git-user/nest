@@ -20,73 +20,26 @@ import {
 } from './lib/security';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
-import dynamicRoutes from './routes/dynamic-routes';
+import dynamicRoutes, {
+	pluginStartupWarnings,
+	registeredPluginRoutes,
+} from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
 
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
 
-const isIgnoredPluginFile = (file: string): boolean => {
-	return (
-		file.endsWith('.test.ts') ||
-		file.endsWith('.spec.ts') ||
-		file.endsWith('.test.js') ||
-		file.endsWith('.spec.js') ||
-		file.endsWith('.d.ts')
-	);
-};
-
-const isSupportedPluginFile = (file: string): boolean => {
-	if (isIgnoredPluginFile(file)) {
-		return false;
-	}
-
-	return file.endsWith('.ts') || file.endsWith('.js');
-};
-
-const buildPluginRoutePath = (file: string): string => {
-	const normalizedPathSegment = path
-		.basename(file, path.extname(file))
-		.replace(/[^a-zA-Z0-9]/g, '-')
-		.toLowerCase();
-
-	return `/plugins/${normalizedPathSegment}`;
-};
-
-const getPluginOverviewRoutes = (): string[] => {
-	const pluginFiles = fs.readdirSync(path.join(process.cwd(), env.PLUGINS_DIR));
-	const supported = pluginFiles.filter(isSupportedPluginFile);
-	const tsPluginBaseNames = new Set(
-		supported
-			.filter((file) => file.endsWith('.ts'))
-			.map((file) => path.basename(file, '.ts')),
-	);
-
-	const routes = new Set<string>();
-	for (const file of supported) {
-		if (
-			file.endsWith('.js') &&
-			tsPluginBaseNames.has(path.basename(file, '.js'))
-		) {
-			continue;
-		}
-		routes.add(buildPluginRoutePath(file));
-	}
-
-	return [...routes].sort((a, b) => a.localeCompare(b));
-};
-
 const buildOverviewPageHtml = (
 	host: string,
 	port: number,
 	warnings: string[],
+	pluginRoutes: string[],
 ): string => {
 	const baseUrl = `https://${host}:${port}`;
 	const staticRoutes = [
 		{path: '/nagios', helpPath: '/nagios?help'},
 		{path: '/nagios/honey-pot', helpPath: '/nagios/honey-pot?help'},
 	];
-	const pluginRoutes = getPluginOverviewRoutes();
 
 	const staticRouteItems = staticRoutes
 		.map(
@@ -104,7 +57,7 @@ const buildOverviewPageHtml = (
 	const warningsHtml =
 		warnings.length > 0
 			? `<section class="warnings">
-<h2>Configuration Warnings</h2>
+<h2>Startup Warnings</h2>
 <ul>${warnings.map((w) => `<li>${w}</li>`).join('')}</ul>
 </section>`
 			: '';
@@ -166,6 +119,7 @@ if (env.ENABLE_SECURITY_MIDDLEWARE) {
 }
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
+const startupWarnings = [...pluginStartupWarnings, ...securityWarnings];
 for (const warning of securityWarnings) {
 	logger.warn(warning);
 }
@@ -180,7 +134,14 @@ app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 });
 app.get('/', (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'text/html; charset=utf-8');
-	return res.send(buildOverviewPageHtml(env.HOST, env.PORT, securityWarnings));
+	return res.send(
+		buildOverviewPageHtml(
+			env.HOST,
+			env.PORT,
+			startupWarnings,
+			registeredPluginRoutes,
+		),
+	);
 });
 app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);

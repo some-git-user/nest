@@ -11,12 +11,21 @@ import {
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
+import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
 
 const router = express.Router();
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
 const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
 const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
+const pluginWhitelistPath = path.resolve(
+	process.cwd(),
+	String(env.PLUGIN_WHITELIST_PATH || '').trim() ||
+		path.join(env.PLUGINS_DIR, 'plugin-whitelist.txt'),
+);
+
+export const pluginStartupWarnings: string[] = [];
+export const registeredPluginRoutes: string[] = [];
 
 type PluginMetaUsage =
 	| string
@@ -223,9 +232,8 @@ const tsPluginBaseNames = new Set(
 		.filter((file) => file.endsWith('.ts'))
 		.map((file) => path.basename(file, '.ts')),
 );
-const routePathToFilePath = new Map<string, string>();
 
-pluginFiles.forEach((file) => {
+const effectivePluginFiles = pluginFiles.filter((file) => {
 	if (
 		file.endsWith('.js') &&
 		tsPluginBaseNames.has(path.basename(file, '.js'))
@@ -236,6 +244,26 @@ pluginFiles.forEach((file) => {
 				file,
 			)}`,
 		);
+		return false;
+	}
+
+	return true;
+});
+
+const pluginWhitelistVerification = verifyPluginWhitelist({
+	pluginsDir,
+	pluginFiles: effectivePluginFiles,
+	whitelistPath: pluginWhitelistPath,
+});
+pluginStartupWarnings.push(...pluginWhitelistVerification.warnings);
+for (const warning of pluginStartupWarnings) {
+	logger.warn(warning);
+}
+
+const routePathToFilePath = new Map<string, string>();
+
+effectivePluginFiles.forEach((file) => {
+	if (!pluginWhitelistVerification.approvedFiles.has(file)) {
 		return;
 	}
 
@@ -297,6 +325,9 @@ pluginFiles.forEach((file) => {
 		kebabCasePath,
 		createPluginRouteHandler(runtimePluginPath, kebabCasePath, helpContext),
 	);
+	registeredPluginRoutes.push(kebabCasePath);
 });
+
+registeredPluginRoutes.sort((a, b) => a.localeCompare(b));
 
 export default router;
