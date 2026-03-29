@@ -36,7 +36,7 @@ cp nest.conf "$BUILD_DIR/etc/nest/nest.conf"
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 chmod 755 "$BUILD_DIR/usr/bin/nest"
 chmod 640 "$BUILD_DIR/lib/systemd/system/nest.service"
-chmod 755 "$BUILD_DIR/etc/nest/nest.conf"
+chmod 600 "$BUILD_DIR/etc/nest/nest.conf"
 
 # Create control file
 cat > "$BUILD_DIR/DEBIAN/control" <<EOF

@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+# Ensure config directory and config file permissions are secure for root-run service
+mkdir -p /etc/nest
+if [ -f /etc/nest/nest.conf ]; then
+    chown root:root /etc/nest/nest.conf
+    chmod 600 /etc/nest/nest.conf
+fi
+
 # Load variables from /etc/nest/nest.conf
 if [ -f /etc/nest/nest.conf ]; then
     set -a
