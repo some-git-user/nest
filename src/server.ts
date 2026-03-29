@@ -140,7 +140,7 @@ app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	return res.send(getExternalLinkGuardScriptContent());
 });
 app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
-	const warningId = String(req.params.warningId ?? '');
+	const warningId = String(req.params?.warningId ?? '');
 	const topic = getStartupWarningHelpTopic(warningId);
 	if (!topic) {
 		return sendNagiosUnknownError(

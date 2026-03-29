@@ -185,6 +185,12 @@ describe('server bootstrap', () => {
 		const guardScriptSend = jest.fn();
 		const rootSetHeader = jest.fn();
 		const rootSend = jest.fn();
+		const warningHelpSetHeader = jest.fn();
+		const warningHelpSend = jest.fn();
+		const warningHelpUnknownSend = jest.fn();
+		const warningHelpUnknownStatus = jest.fn(() => ({
+			send: warningHelpUnknownSend,
+		}));
 		const send = jest.fn();
 		const status = jest.fn(() => ({send}));
 
@@ -194,12 +200,23 @@ describe('server bootstrap', () => {
 		expect(rootCall).toBeDefined();
 		expect(notFoundCall).toBeDefined();
 
-		const [, faviconHandler] = faviconCall as GetRouteCall;
+		const [, faviconHandler] = faviconCall as [string, FaviconHandler];
 		const [, guardScriptHandler] = guardScriptCall as [
 			string,
 			GuardScriptHandler,
 		];
-		const [, rootHandler] = rootCall as GetRouteCall;
+		const [, warningHelpHandler] = warningHelpCall as [
+			string,
+			(
+				req: {params?: {warningId?: string}},
+				res: {
+					setHeader: (name: string, value: string) => unknown;
+					send: (body: unknown) => unknown;
+					status: (code: number) => {send: (body: unknown) => unknown};
+				},
+			) => unknown,
+		];
+		const [, rootHandler] = rootCall as [string, RootHandler];
 		const [notFoundHandler] = notFoundCall as [NotFoundHandler];
 
 		faviconHandler({}, {sendFile: faviconSendFile});
@@ -208,6 +225,30 @@ describe('server bootstrap', () => {
 			{
 				setHeader: guardScriptSetHeader,
 				send: guardScriptSend,
+			},
+		);
+		warningHelpHandler(
+			{params: {warningId: 'plugin-not-whitelisted'}},
+			{
+				setHeader: warningHelpSetHeader,
+				send: warningHelpSend,
+				status,
+			},
+		);
+		warningHelpHandler(
+			{params: {warningId: 'does-not-exist'}},
+			{
+				setHeader: jest.fn(),
+				send: jest.fn(),
+				status: warningHelpUnknownStatus,
+			},
+		);
+		warningHelpHandler(
+			{},
+			{
+				setHeader: jest.fn(),
+				send: jest.fn(),
+				status: warningHelpUnknownStatus,
 			},
 		);
 		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
@@ -252,6 +293,21 @@ describe('server bootstrap', () => {
 		expect(guardScriptSend).toHaveBeenCalledWith(
 			expect.stringContaining('window.confirm'),
 		);
+		expect(warningHelpSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(warningHelpSend).toHaveBeenCalledWith(
+			expect.stringContaining('Back to route overview'),
+		);
+		expect(warningHelpSend).toHaveBeenCalledWith(
+			expect.stringContaining('How To Handle'),
+		);
+		expect(warningHelpUnknownStatus).toHaveBeenCalledWith(404);
+		expect(warningHelpUnknownSend).toHaveBeenCalledWith({
+			message: 'not-found',
+			code: 3,
+		});
 		expect(rootSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'text/html; charset=utf-8',
@@ -492,7 +548,7 @@ describe('server bootstrap', () => {
 		const rootSetHeader = jest.fn();
 		const rootSend = jest.fn();
 		expect(rootCall).toBeDefined();
-		const [, rootHandler] = rootCall as GetRouteCall;
+		const [, rootHandler] = rootCall as [string, RootHandler];
 		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
 
 		expect(expressFactory).toHaveBeenCalledTimes(1);
