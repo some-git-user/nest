@@ -67,6 +67,35 @@ describe('getRecommendedSecurityWarnings', () => {
 		]);
 	});
 
+	test('warns when rate limit max is non-positive while window is valid', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+				API_KEY: 'secret',
+				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 0,
+			}),
+		).toEqual([
+			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
+		]);
+	});
+
+	test('warns when rate limit max is undefined while window is valid', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+				API_KEY: 'secret',
+				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+			}),
+		).toEqual([
+			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
+		]);
+	});
+
 	test('returns no warnings when recommended production settings are configured', () => {
 		expect(
 			getRecommendedSecurityWarnings({
@@ -78,5 +107,18 @@ describe('getRecommendedSecurityWarnings', () => {
 				RATE_LIMIT_MAX: 120,
 			}),
 		).toEqual([]);
+	});
+
+	test('warns when optional security values are undefined in production', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+			}),
+		).toEqual([
+			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+			'Security recommendation: ALLOWED_IPS is empty in production; requests are not restricted to trusted source IPs.',
+			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
+		]);
 	});
 });

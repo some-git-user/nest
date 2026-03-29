@@ -17,6 +17,7 @@ describe('env config loading', () => {
 		existsSyncImpl: (filePath: string) => boolean;
 		statSyncImpl?: (filePath: string) => {uid: number; mode: number};
 		fileContent?: string;
+		omitProcessGetuid?: boolean;
 	}) => {
 		jest.resetModules();
 
@@ -33,9 +34,19 @@ describe('env config loading', () => {
 		const statSyncMock = jest.fn(
 			options.statSyncImpl ?? (() => ({uid: 1000, mode: 0o100600})),
 		);
-		const processGetUidSpy = jest
-			.spyOn(process, 'getuid' as never)
-			.mockReturnValue(1000 as never);
+		const originalGetUid = process.getuid;
+		let processGetUidSpy: jest.SpyInstance | undefined;
+		if (options.omitProcessGetuid) {
+			Object.defineProperty(process, 'getuid', {
+				value: undefined,
+				writable: true,
+				configurable: true,
+			});
+		} else {
+			processGetUidSpy = jest
+				.spyOn(process, 'getuid' as never)
+				.mockReturnValue(1000 as never);
+		}
 
 		jest.doMock('fs', () => ({
 			__esModule: true,
@@ -55,6 +66,14 @@ describe('env config loading', () => {
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const loaded = require('./env') as {env: NodeJS.ProcessEnv};
+
+		if (options.omitProcessGetuid) {
+			Object.defineProperty(process, 'getuid', {
+				value: originalGetUid,
+				writable: true,
+				configurable: true,
+			});
+		}
 
 		return {
 			env: loaded.env,
@@ -185,5 +204,23 @@ describe('env config loading', () => {
 				fileContent: 'HOST=prod-host\n',
 			}),
 		).toThrow(/permissions/i);
+	});
+
+	it('skips production ownership validation when process.getuid is unavailable', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js'],
+				env: {
+					NODE_ENV: 'production',
+					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 0, mode: 0o100666}),
+				fileContent: 'HOST=prod-host\n',
+				omitProcessGetuid: true,
+			}),
+		).not.toThrow();
+
+		expect(process.env.HOST).toBe('prod-host');
 	});
 });

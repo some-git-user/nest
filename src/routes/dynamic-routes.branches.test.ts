@@ -12,6 +12,7 @@ type RouterLoadOptions = {
 	pluginFileUid?: number;
 	pluginFileMode?: number;
 	processUid?: number;
+	omitProcessGetuid?: boolean;
 	sourceMtimeMs?: number;
 	cacheMtimeMs?: number;
 	transpileError?: unknown;
@@ -85,7 +86,14 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		};
 	};
 
-	if (typeof process.getuid === 'function') {
+	const originalGetUid = process.getuid;
+	if (options.omitProcessGetuid) {
+		Object.defineProperty(process, 'getuid', {
+			value: undefined,
+			writable: true,
+			configurable: true,
+		});
+	} else if (typeof process.getuid === 'function') {
 		jest.spyOn(process, 'getuid').mockReturnValue(processUid);
 	}
 
@@ -162,6 +170,14 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		};
 		router = routesModule.default;
 	});
+
+	if (options.omitProcessGetuid) {
+		Object.defineProperty(process, 'getuid', {
+			value: originalGetUid,
+			writable: true,
+			configurable: true,
+		});
+	}
 
 	const app = express();
 	app.use(express.json());
@@ -413,6 +429,21 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('insecure permissions'),
 		);
+	});
+
+	test('loads plugin when process.getuid is unavailable in production', async () => {
+		const {app} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			pluginFileUid: 0,
+			omitProcessGetuid: true,
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(200);
+		expect(res.body).toHaveProperty('code', 0);
 	});
 
 	test('uses cached transpiled plugin when cache is newer', async () => {

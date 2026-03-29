@@ -261,4 +261,222 @@ describe('server bootstrap', () => {
 		expect(close).toHaveBeenCalledTimes(3);
 		expect(processExitSpy).toHaveBeenCalledWith(1);
 	});
+
+	it('does not register rate limit or access-control middleware when disabled', () => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get};
+		const helmetMiddleware = 'helmet-middleware';
+		const rateLimitMiddleware = 'rate-limit-middleware';
+		const accessControlMiddleware = 'access-control-middleware';
+		const json = jest.fn(() => 'json-middleware');
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{json},
+		);
+		const listen = jest.fn(
+			(port: number, host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close: jest.fn(), on}));
+		const readFileSync = jest
+			.fn()
+			.mockReturnValueOnce('CERT_CONTENT')
+			.mockReturnValueOnce('KEY_CONTENT');
+		const info = jest.fn();
+		const warn = jest.fn();
+		const error = jest.fn();
+		const scheduler = jest.fn();
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: expressFactory,
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => helmetMiddleware),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => rateLimitMiddleware),
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {readFileSync},
+			readFileSync,
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: false,
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
+		jest.doMock('./lib/security', () => ({
+			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
+		jest.doMock('./routes/app-info', () => ({
+			__esModule: true,
+			default: 'appInfoRouter',
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: 'honeyPotRouter',
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			__esModule: true,
+			default: 'dynamicRoutesRouter',
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		expect(expressFactory).toHaveBeenCalledTimes(1);
+		expect(use).toHaveBeenCalledWith('json-middleware');
+		expect(use).toHaveBeenCalledWith(helmetMiddleware);
+		expect(use).not.toHaveBeenCalledWith(rateLimitMiddleware);
+		expect(use).not.toHaveBeenCalledWith(accessControlMiddleware);
+		expect(scheduler).toHaveBeenCalledTimes(1);
+	});
+
+	it('uses default rate-limit values when env values are non-positive', () => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get};
+		const helmetMiddleware = 'helmet-middleware';
+		const rateLimitMiddleware = 'rate-limit-middleware';
+		const accessControlMiddleware = 'access-control-middleware';
+		const json = jest.fn(() => 'json-middleware');
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{json},
+		);
+		const rateLimit = jest.fn(() => rateLimitMiddleware);
+		const listen = jest.fn(
+			(port: number, host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const createServer = jest.fn(() => ({
+			listen,
+			close: jest.fn(),
+			on: jest.fn(),
+		}));
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: expressFactory,
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => helmetMiddleware),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: rateLimit,
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				readFileSync: jest
+					.fn()
+					.mockReturnValueOnce('CERT_CONTENT')
+					.mockReturnValueOnce('KEY_CONTENT'),
+			},
+			readFileSync: jest
+				.fn()
+				.mockReturnValueOnce('CERT_CONTENT')
+				.mockReturnValueOnce('KEY_CONTENT'),
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+				RATE_LIMIT_WINDOW_MS: 0,
+				RATE_LIMIT_MAX: 0,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({
+			logger: {info: jest.fn(), warn: jest.fn(), error: jest.fn()},
+		}));
+		jest.doMock('./lib/security', () => ({
+			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: jest.fn()}));
+		jest.doMock('./routes/app-info', () => ({
+			__esModule: true,
+			default: 'appInfoRouter',
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: 'honeyPotRouter',
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			__esModule: true,
+			default: 'dynamicRoutesRouter',
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		expect(rateLimit).toHaveBeenCalledWith(
+			expect.objectContaining({
+				windowMs: 60_000,
+				max: 120,
+			}),
+		);
+	});
 });
