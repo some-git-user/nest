@@ -101,6 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s ./build_deb/nest-deb.deb
+          test -s ./script/check_nest.sh
 
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
@@ -111,7 +112,9 @@ jobs:
           body_path: ${{ steps.changelog.outputs.changelog_path }}
           generate_release_notes: true
           previous_tag: ${{ steps.changelog.outputs.previous_tag }}
-          files: ./build_deb/nest-deb.deb
+          files: |
+            ./build_deb/nest-deb.deb
+            ./script/check_nest.sh
           fail_on_unmatched_files: true
           draft: false
           prerelease: false
