@@ -54,7 +54,7 @@ describe('checkDebianEol plugin', () => {
 	});
 
 	test('exports startup metadata usage for http and shell clients', () => {
-		expect(meta.usage.http).toContain('/check-debian-eol');
+		expect(meta.usage.http).toContain('/plugins/check-debian-eol');
 		expect(meta.usage.shell).toContain('./check_nest.sh check-debian-eol');
 	});
 

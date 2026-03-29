@@ -26,7 +26,7 @@ type endoflifeResponseType = {
 
 export const meta = {
 	usage: {
-		http: '/check-debian-eol?warningEolRemainingDays=<number>&criticalEolRemainingDays=<number>',
+		http: '/plugins/check-debian-eol?warningEolRemainingDays=<number>&criticalEolRemainingDays=<number>',
 		shell:
 			'./check_nest.sh check-debian-eol warningEolRemainingDays=<number> criticalEolRemainingDays=<number>',
 	},

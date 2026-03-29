@@ -10,6 +10,7 @@ import {logger} from '../lib/logger';
 const router = express.Router();
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
 const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
+const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
 
 type PluginMetaUsage =
@@ -78,6 +79,15 @@ const isSupportedPluginFile = (file: string): boolean => {
 	}
 
 	return file.endsWith('.ts') || file.endsWith('.js');
+};
+
+const buildPluginRoutePath = (file: string): string => {
+	const normalizedPathSegment = path
+		.basename(file, path.extname(file))
+		.replace(/[^a-zA-Z0-9]/g, '-')
+		.toLowerCase();
+
+	return `${pluginRoutePrefix}/${normalizedPathSegment}`;
 };
 
 const resolveRuntimePluginPath = (
@@ -155,6 +165,7 @@ const tsPluginBaseNames = new Set(
 		.filter((file) => file.endsWith('.ts'))
 		.map((file) => path.basename(file, '.ts')),
 );
+const routePathToFilePath = new Map<string, string>();
 
 pluginFiles.forEach((file) => {
 	if (
@@ -181,10 +192,15 @@ pluginFiles.forEach((file) => {
 		return;
 	}
 
-	const kebabCasePath = `/${path
-		.basename(file, path.extname(file))
-		.replace(/[^a-zA-Z0-9]/g, '-')
-		.toLowerCase()}`;
+	const kebabCasePath = buildPluginRoutePath(file);
+	const existingFilePath = routePathToFilePath.get(kebabCasePath);
+	if (existingFilePath) {
+		logger.warn(
+			`Skipping plugin ${filePath} because route ${kebabCasePath} already belongs to ${existingFilePath}. Keep plugin filenames unique after kebab-case normalization.`,
+		);
+		return;
+	}
+	routePathToFilePath.set(kebabCasePath, filePath);
 	logger.info(
 		`GET route initialized for plugin: ${filePath}: http://${env.HOST}:${env.PORT}${kebabCasePath}`,
 	);

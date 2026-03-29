@@ -162,7 +162,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
 		expect(body).toHaveProperty('code', 3);
@@ -176,7 +176,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
 		expect(body).toHaveProperty('code', 3);
@@ -190,7 +190,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -209,7 +209,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('message', 'ok');
@@ -223,7 +223,7 @@ describe('dynamic routes (branch coverage)', () => {
 			requireError: new Error('load failure'),
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
 		expect(body).toHaveProperty('code', 3);
@@ -238,7 +238,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('message', 'ok');
@@ -254,13 +254,13 @@ describe('dynamic routes (branch coverage)', () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginModule: {
 				meta: {
-					usage: '/check-fake?foo=<value>',
+					usage: '/plugins/check-fake?foo=<value>',
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -279,7 +279,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -293,7 +293,7 @@ describe('dynamic routes (branch coverage)', () => {
 			pluginModule: 123,
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(500);
 		expect(body).toHaveProperty('code', 3);
@@ -308,7 +308,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -325,7 +325,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -336,13 +336,32 @@ describe('dynamic routes (branch coverage)', () => {
 		);
 	});
 
+	test('skips plugin when filename normalization collides with an existing route', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts', 'check-fake.ts'],
+			pluginModule: {
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(200);
+		expect(body).toHaveProperty('code', 0);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'Keep plugin filenames unique after kebab-case normalization',
+			),
+		);
+	});
+
 	test('skips non-file plugin entries', async () => {
 		const {app} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
 			pluginFileIsFile: false,
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
 	});
 
@@ -356,7 +375,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -371,7 +390,7 @@ describe('dynamic routes (branch coverage)', () => {
 			transpileError: new Error('transpile failed'),
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Could not transpile plugin'),
@@ -384,7 +403,7 @@ describe('dynamic routes (branch coverage)', () => {
 			sourceStatSecondCallError: new Error('stat failed in resolver'),
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Could not stat plugin file'),
@@ -400,7 +419,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -417,7 +436,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
@@ -432,7 +451,7 @@ describe('dynamic routes (branch coverage)', () => {
 			transpileError: 'transpile-string-error',
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: transpile-string-error'),
@@ -445,7 +464,7 @@ describe('dynamic routes (branch coverage)', () => {
 			requireError: 'metadata-string-error',
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(500);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: metadata-string-error'),
@@ -457,14 +476,14 @@ describe('dynamic routes (branch coverage)', () => {
 			pluginModule: {
 				meta: {
 					usage: {
-						http: '/check-fake?x=1',
+						http: '/plugins/check-fake?x=1',
 					},
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(200);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('HTTP usage for plugin'),
@@ -486,7 +505,7 @@ describe('dynamic routes (branch coverage)', () => {
 			},
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(200);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('Shell usage for plugin'),
@@ -502,7 +521,7 @@ describe('dynamic routes (branch coverage)', () => {
 			sourceStatSecondCallError: 'stat-string-error',
 		});
 
-		const res = await request(app).get('/check-fake');
+		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: stat-string-error'),

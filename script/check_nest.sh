@@ -56,9 +56,11 @@ build_parameters() {
 # Build the URL for the curl request
 # $1 is the command to call on the Nest API
 # Example: build_url "check-test"
-# Will generate: http://localhost:5000/check-test
+# Will generate: http://localhost:5000/plugins/check-test
 build_url() {
-    echo "${NEST_SCHEME}://${NEST_HOST}:${NEST_PORT}/$1"
+    local command="$1"
+    command="${command#/}"
+    echo "${NEST_SCHEME}://${NEST_HOST}:${NEST_PORT}/plugins/${command}"
 }
 
 # Function to parse JSON response
