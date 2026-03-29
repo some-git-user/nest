@@ -45,6 +45,7 @@ describe('server bootstrap', () => {
 			.mockReturnValueOnce('CERT_CONTENT')
 			.mockReturnValueOnce('KEY_CONTENT');
 		const info = jest.fn();
+		const warn = jest.fn();
 		const error = jest.fn();
 		const scheduler = jest.fn();
 		const eventHandlers = new Map<string, (err: {message: string}) => void>();
@@ -85,13 +86,13 @@ describe('server bootstrap', () => {
 			env: {
 				HOST: '127.0.0.1',
 				PORT: 5443,
-				NODE_ENV: 'test',
+				NODE_ENV: 'production',
 				ENABLE_SECURITY_MIDDLEWARE: true,
 				RATE_LIMIT_WINDOW_MS: 60_000,
 				RATE_LIMIT_MAX: 120,
-				API_KEY: 'test-key',
+				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
-				ALLOWED_IPS: '',
+				ALLOWED_IPS: '127.0.0.1',
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -100,9 +101,13 @@ describe('server bootstrap', () => {
 				keyPath: '/tmp/nest-key.pem',
 			})),
 		}));
-		jest.doMock('./lib/logger', () => ({logger: {info, error}}));
+		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
 		jest.doMock('./lib/security', () => ({
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
+			getRecommendedSecurityWarnings: jest.fn(() => [
+				'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+				'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+			]),
 		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
 		jest.doMock('./routes/app-info', () => ({
@@ -166,6 +171,12 @@ describe('server bootstrap', () => {
 		expect(use).toHaveBeenCalledWith('/', 'dynamicRoutesRouter');
 		expect(use).toHaveBeenCalledWith('/nagios', 'appInfoRouter');
 		expect(use).toHaveBeenCalledWith('/nagios/honey-pot', 'honeyPotRouter');
+		expect(warn).toHaveBeenCalledWith(
+			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+		);
+		expect(warn).toHaveBeenCalledWith(
+			'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+		);
 		expect(faviconStatus).toHaveBeenCalledWith(204);
 		expect(status).toHaveBeenCalledWith(404);
 		expect(send).toHaveBeenCalledWith({message: 'not-found', code: 3});
@@ -229,10 +240,12 @@ describe('server bootstrap', () => {
 		expect(scheduler).toHaveBeenCalledTimes(1);
 		expect(info).toHaveBeenCalledWith(
 			expect.stringContaining(
-				'HTTPS server running in test mode on host 127.0.0.1 and port 5443',
+				'HTTPS server running in production mode on host 127.0.0.1 and port 5443',
 			),
 		);
-		expect(info).toHaveBeenCalledWith('Started application in test mode...');
+		expect(info).toHaveBeenCalledWith(
+			'Started application in production mode...',
+		);
 		expect(processOnSpy).toHaveBeenCalledWith(
 			'unhandledRejection',
 			expect.any(Function),

@@ -119,7 +119,7 @@ Main variables:
 - `ENABLE_SECURITY_MIDDLEWARE` (default: `true`)
 - `API_KEY_HEADER` (default: `x-api-key`)
 - `API_KEY` (default: empty, disabled)
-- `ALLOWED_IPS` (default: empty, disabled; comma-separated exact IPs)
+- `ALLOWED_IPS` (default: `127.0.0.1`; comma-separated exact IPs)
 - `RATE_LIMIT_WINDOW_MS` (default: `60000`)
 - `RATE_LIMIT_MAX` (default: `120`)
 
@@ -152,6 +152,12 @@ Supported plugin files:
 
 - `.ts`
 - `.js`
+
+Production safety checks:
+
+- In `NODE_ENV=production`, plugin files are loaded only when file owner uid matches the service process uid.
+- Plugin files must not be writable by group or others.
+- Insecure plugin files are skipped and logged.
 
 Ignored plugin files:
 
@@ -353,7 +359,7 @@ Workflow behavior:
 
 ## Security
 
-- Do not expose this service publicly without a reverse proxy, access control, and TLS trust strategy.
+- This service includes baseline application-layer protections, but public exposure still requires a reverse proxy, strong access control, trusted TLS, and network-level restrictions.
 - Honeypot and protocol-error detection is application-layer telemetry. It does not replace host/network IDS.
 - Report security issues privately to repository maintainers before opening a public issue.
 
@@ -362,6 +368,16 @@ Built-in application controls:
 - Helmet security headers.
 - Basic IP + API-key access control middleware.
 - Request rate limiting.
+- Production plugin file ownership/permission validation in the dynamic loader.
+
+By default, `ALLOWED_IPS` is restricted to `127.0.0.1`. Add your monitoring source addresses explicitly when the service must accept remote checks.
+
+At startup in production, the app logs warnings when recommended security settings are missing or weak, including:
+
+- `ENABLE_SECURITY_MIDDLEWARE=false`
+- missing `API_KEY`
+- empty `ALLOWED_IPS`
+- non-positive rate-limit settings
 
 ## Contributing
 

@@ -9,6 +9,9 @@ type RouterLoadOptions = {
 	resolveError?: Error;
 	pluginFiles?: string[];
 	pluginFileIsFile?: boolean;
+	pluginFileUid?: number;
+	pluginFileMode?: number;
+	processUid?: number;
 	sourceMtimeMs?: number;
 	cacheMtimeMs?: number;
 	transpileError?: unknown;
@@ -37,6 +40,9 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 	};
 	const pluginFileIsFile = options.pluginFileIsFile ?? true;
+	const pluginFileUid = options.pluginFileUid ?? 1000;
+	const pluginFileMode = options.pluginFileMode ?? 0o100600;
+	const processUid = options.processUid ?? 1000;
 	const sourceMtimeMs = options.sourceMtimeMs ?? 0;
 	const cacheMtimeMs = options.cacheMtimeMs ?? -1;
 	const sourceMtimeMsRaw = options.sourceMtimeMsRaw ?? sourceMtimeMs;
@@ -63,11 +69,25 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 				throw new Error('cache not found');
 			}
 
-			return {isFile: () => true, mtimeMs: cacheMtimeMsRaw};
+			return {
+				isFile: () => true,
+				mtimeMs: cacheMtimeMsRaw,
+				uid: pluginFileUid,
+				mode: pluginFileMode,
+			};
 		}
 
-		return {isFile: () => pluginFileIsFile, mtimeMs: sourceMtimeMsRaw};
+		return {
+			isFile: () => pluginFileIsFile,
+			mtimeMs: sourceMtimeMsRaw,
+			uid: pluginFileUid,
+			mode: pluginFileMode,
+		};
 	};
+
+	if (typeof process.getuid === 'function') {
+		jest.spyOn(process, 'getuid').mockReturnValue(processUid);
+	}
 
 	const requireFn = ((modulePath: string) => {
 		if (options.requireError) {
@@ -122,6 +142,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 
 	jest.doMock('../config/env', () => ({
 		env: {
+			NODE_ENV: 'production',
 			HOST: 'localhost',
 			PORT: 5000,
 			PLUGINS_DIR: 'plugins',
@@ -363,6 +384,35 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(404);
+	});
+
+	test('skips plugin when ownership does not match process uid', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			processUid: 0,
+			pluginFileUid: 1000,
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('insecure ownership'),
+		);
+	});
+
+	test('skips plugin when file is group or world writable', async () => {
+		const {app, logger} = buildAppForPlugin({
+			pluginFiles: ['check_fake.ts'],
+			processUid: 0,
+			pluginFileUid: 0,
+			pluginFileMode: 0o100666,
+		});
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(404);
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('insecure permissions'),
+		);
 	});
 
 	test('uses cached transpiled plugin when cache is newer', async () => {

@@ -1,6 +1,7 @@
 import {bool, cleanEnv, host, num, port, str} from 'envalid';
 import * as fs from 'fs';
 import * as path from 'path';
+import {validateUnixFileSecurity} from '../lib/file-security';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'production';
 
@@ -62,16 +63,15 @@ function validateConfigFileSecurity(filepath: string) {
 
 	const fileStat = fs.statSync(filepath);
 	const currentUid = process.getuid();
+	const validation = validateUnixFileSecurity(fileStat, currentUid);
 
-	if (fileStat.uid !== currentUid) {
+	if (!validation.ok && validation.reason === 'owner-mismatch') {
 		throw new Error(
-			`Insecure config file ownership for ${filepath}: owner uid ${fileStat.uid} does not match process uid ${currentUid}`,
+			`Insecure config file ownership for ${filepath}: owner uid ${validation.actualUid} does not match process uid ${validation.expectedUid}`,
 		);
 	}
 
-	const isGroupWritable = (fileStat.mode & 0o020) !== 0;
-	const isOtherWritable = (fileStat.mode & 0o002) !== 0;
-	if (isGroupWritable || isOtherWritable) {
+	if (!validation.ok && validation.reason === 'group-or-other-writable') {
 		throw new Error(
 			`Insecure config file permissions for ${filepath}: file must not be writable by group or others`,
 		);
@@ -96,7 +96,7 @@ export const env = cleanEnv(process.env, {
 	ENABLE_SECURITY_MIDDLEWARE: bool({default: true}),
 	API_KEY_HEADER: str({default: 'x-api-key'}),
 	API_KEY: str({default: ''}),
-	ALLOWED_IPS: str({default: ''}),
+	ALLOWED_IPS: str({default: '127.0.0.1'}),
 	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
 	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
 });

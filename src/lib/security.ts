@@ -8,6 +8,15 @@ export type AccessControlConfig = {
 	allowedIps?: string;
 };
 
+export type RecommendedSecurityConfig = {
+	NODE_ENV?: string;
+	ENABLE_SECURITY_MIDDLEWARE?: boolean;
+	API_KEY?: string;
+	ALLOWED_IPS?: string;
+	RATE_LIMIT_WINDOW_MS?: number;
+	RATE_LIMIT_MAX?: number;
+};
+
 const normalizeIp = (value: string): string => {
 	const trimmed = value.trim();
 	if (trimmed.startsWith('::ffff:')) {
@@ -47,6 +56,51 @@ const getRequesterIp = (req: Request): string => {
 
 	const requestIp = req.ip || req.socket.remoteAddress || 'unknown';
 	return normalizeIp(requestIp);
+};
+
+export const getRecommendedSecurityWarnings = (
+	config: RecommendedSecurityConfig,
+): string[] => {
+	if (config.NODE_ENV !== 'production') {
+		return [];
+	}
+
+	const warnings: string[] = [];
+
+	if (!config.ENABLE_SECURITY_MIDDLEWARE) {
+		warnings.push(
+			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled in production.',
+		);
+		return warnings;
+	}
+
+	if (String(config.API_KEY ?? '').trim().length === 0) {
+		warnings.push(
+			'Security recommendation: API_KEY is not configured in production; requests are not protected by shared-secret authentication.',
+		);
+	}
+
+	const allowedIpsValue = String(config.ALLOWED_IPS ?? '').trim();
+	if (allowedIpsValue.length === 0) {
+		warnings.push(
+			'Security recommendation: ALLOWED_IPS is empty in production; requests are not restricted to trusted source IPs.',
+		);
+	} else if (allowedIpsValue === '127.0.0.1') {
+		warnings.push(
+			'Security recommendation: ALLOWED_IPS is limited to 127.0.0.1 in production; configure trusted monitoring source IPs if remote access is required.',
+		);
+	}
+
+	if (
+		(config.RATE_LIMIT_WINDOW_MS ?? 0) <= 0 ||
+		(config.RATE_LIMIT_MAX ?? 0) <= 0
+	) {
+		warnings.push(
+			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
+		);
+	}
+
+	return warnings;
 };
 
 export const createAccessControlMiddleware = (config: AccessControlConfig) => {

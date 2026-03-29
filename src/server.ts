@@ -8,7 +8,10 @@ import {runScheduler} from './lib/cron/scheduler';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
 import {logger} from './lib/logger';
 import {createNagiosReturnMessage} from './lib/nagios';
-import {createAccessControlMiddleware} from './lib/security';
+import {
+	createAccessControlMiddleware,
+	getRecommendedSecurityWarnings,
+} from './lib/security';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes from './routes/dynamic-routes';
@@ -39,6 +42,10 @@ if (env.ENABLE_SECURITY_MIDDLEWARE) {
 			allowedIps: env.ALLOWED_IPS,
 		}),
 	);
+}
+
+for (const warning of getRecommendedSecurityWarnings(env)) {
+	logger.warn(warning);
 }
 
 // route files

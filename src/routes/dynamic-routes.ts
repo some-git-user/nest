@@ -5,6 +5,7 @@ import path from 'path';
 import ts from 'typescript';
 import {env} from '../config/env';
 import {createPluginRouteHandler} from '../controllers/dynamic-routes';
+import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
 
 const router = express.Router();
@@ -88,6 +89,37 @@ const buildPluginRoutePath = (file: string): string => {
 		.toLowerCase();
 
 	return `${pluginRoutePrefix}/${normalizedPathSegment}`;
+};
+
+const isPluginFileSecurityAcceptable = (
+	filePath: string,
+	fileStat: fs.Stats,
+): boolean => {
+	if (env.NODE_ENV !== 'production') {
+		return true;
+	}
+
+	if (typeof process.getuid !== 'function') {
+		return true;
+	}
+
+	const processUid = process.getuid();
+	const validation = validateUnixFileSecurity(fileStat, processUid);
+	if (!validation.ok && validation.reason === 'owner-mismatch') {
+		logger.warn(
+			`Skipping plugin ${filePath} due to insecure ownership: file uid ${validation.actualUid} does not match process uid ${validation.expectedUid}.`,
+		);
+		return false;
+	}
+
+	if (!validation.ok && validation.reason === 'group-or-other-writable') {
+		logger.warn(
+			`Skipping plugin ${filePath} due to insecure permissions: plugin files must not be writable by group or others.`,
+		);
+		return false;
+	}
+
+	return true;
 };
 
 const resolveRuntimePluginPath = (
@@ -184,6 +216,10 @@ pluginFiles.forEach((file) => {
 	const filePath = path.join(pluginsDir, file);
 	const fileStat = fs.statSync(filePath);
 	if (!fileStat.isFile()) {
+		return;
+	}
+
+	if (!isPluginFileSecurityAcceptable(filePath, fileStat)) {
 		return;
 	}
 
