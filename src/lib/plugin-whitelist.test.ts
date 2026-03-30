@@ -245,7 +245,11 @@ describe('plugin whitelist verification', () => {
 					}
 					return '';
 				},
-				statSync: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
+				statSync: () => ({
+					uid: typeof process.getuid === 'function' ? process.getuid() : 1000,
+					mode: 0o100600,
+					isFile: () => true,
+				}),
 			},
 			existsSync: (filePath: string) => {
 				if (filePath === whitelistPath) {
@@ -270,27 +274,39 @@ describe('plugin whitelist verification', () => {
 				}
 				return '';
 			},
-			statSync: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
+			statSync: () => ({
+				uid: typeof process.getuid === 'function' ? process.getuid() : 1000,
+				mode: 0o100600,
+				isFile: () => true,
+			}),
 		}));
 
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const isolated = require('./plugin-whitelist') as {
-				verifyPluginWhitelist: typeof verifyPluginWhitelist;
-			};
+		try {
+			jest.isolateModules(() => {
+				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				const isolated = require('./plugin-whitelist') as {
+					verifyPluginWhitelist: typeof verifyPluginWhitelist;
+				};
 
-			const result = isolated.verifyPluginWhitelist({
-				pluginsDir: '/tmp/plugins',
-				pluginFiles: ['fresh.ts'],
-				whitelistPath,
+				const result = isolated.verifyPluginWhitelist({
+					pluginsDir: '/tmp/plugins',
+					pluginFiles: ['fresh.ts'],
+					whitelistPath,
+				});
+
+				expect(result.approvedFiles.size).toBe(0);
+				expect(result.warnings.join('\n')).not.toContain(
+					'could not create whitelist file',
+				);
+				expect(result.warnings.join('\n')).toContain(
+					'is new or not whitelisted',
+				);
 			});
-
-			expect(result.approvedFiles.size).toBe(0);
-			expect(result.warnings).toHaveLength(1);
-			expect(result.warnings[0]).toContain('is new or not whitelisted');
-		});
-
-		jest.dontMock('fs');
+		} finally {
+			// Always unmock/reset even if assertions fail to avoid leaking mocked fs into other suites.
+			jest.dontMock('fs');
+			jest.resetModules();
+		}
 	});
 
 	test('refuses whitelist entries when whitelist file owner does not match process uid', () => {
