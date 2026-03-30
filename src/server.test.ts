@@ -1,7 +1,9 @@
 describe('server bootstrap', () => {
 	type FaviconHandler = (
 		_req: unknown,
-		res: {sendFile: (filePath: string) => unknown},
+		res: {
+			status: (code: number) => {end: () => unknown};
+		},
 	) => unknown;
 	type GuardScriptHandler = (
 		_req: unknown,
@@ -180,7 +182,8 @@ describe('server bootstrap', () => {
 		const notFoundCall = useCalls.find(
 			(call): call is [NotFoundHandler] => typeof call[0] === 'function',
 		);
-		const faviconSendFile = jest.fn();
+		const faviconEnd = jest.fn();
+		const faviconStatus = jest.fn(() => ({end: faviconEnd}));
 		const guardScriptSetHeader = jest.fn();
 		const guardScriptSend = jest.fn();
 		const rootSetHeader = jest.fn();
@@ -219,7 +222,7 @@ describe('server bootstrap', () => {
 		const [, rootHandler] = rootCall as [string, RootHandler];
 		const [notFoundHandler] = notFoundCall as [NotFoundHandler];
 
-		faviconHandler({}, {sendFile: faviconSendFile});
+		faviconHandler({}, {status: faviconStatus});
 		guardScriptHandler(
 			{},
 			{
@@ -283,9 +286,8 @@ describe('server bootstrap', () => {
 		expect(warn).toHaveBeenCalledWith(
 			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		);
-		expect(faviconSendFile).toHaveBeenCalledWith(
-			expect.stringContaining('/favicon.ico'),
-		);
+		expect(faviconStatus).toHaveBeenCalledWith(204);
+		expect(faviconEnd).toHaveBeenCalledTimes(1);
 		expect(guardScriptSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'application/javascript; charset=utf-8',
@@ -314,12 +316,6 @@ describe('server bootstrap', () => {
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('Nest Route Overview'),
-		);
-		expect(rootSend).toHaveBeenCalledWith(
-			expect.stringContaining('href="/favicon.ico"'),
-		);
-		expect(rootSend).toHaveBeenCalledWith(
-			expect.stringContaining('<img src="/favicon.ico"'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('/nagios?help'),

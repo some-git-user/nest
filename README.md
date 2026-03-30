@@ -131,14 +131,14 @@ Main variables:
 
 ### Built-in routes
 
-| Method | Path                           | Purpose                                                         |
-| ------ | ------------------------------ | --------------------------------------------------------------- |
-| `GET`  | `/`                            | Root overview page (routes + help links)                        |
-| `GET`  | `/nagios`                      | Built-in app metrics check                                      |
-| `GET`  | `/nagios/honey-pot`            | Honeypot/probe status in Nagios format                          |
-| `GET`  | `/favicon.ico`                 | Serves project favicon file                                     |
-| `GET`  | `/help/external-link-guard.js` | Script used by help pages to warn before opening external links |
-| `GET`  | `/help/startup-warnings/<id>`  | Dedicated help page for a specific startup warning topic        |
+| Method | Path                           | Purpose                                                            |
+| ------ | ------------------------------ | ------------------------------------------------------------------ |
+| `GET`  | `/`                            | Root overview page (routes + help links)                           |
+| `GET`  | `/nagios`                      | Built-in app metrics check                                         |
+| `GET`  | `/nagios/honey-pot`            | Honeypot/probe status in Nagios format                             |
+| `GET`  | `/favicon.ico`                 | Returns `204 No Content` to suppress default browser favicon noise |
+| `GET`  | `/help/external-link-guard.js` | Script used by help pages to warn before opening external links    |
+| `GET`  | `/help/startup-warnings/<id>`  | Dedicated help page for a specific startup warning topic           |
 
 ### Dynamic routes
 

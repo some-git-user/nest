@@ -3,7 +3,6 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import helmet from 'helmet';
 import https from 'https';
-import path from 'path';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
 import {getErrorMessage} from './lib/error-message';
@@ -74,12 +73,10 @@ const buildOverviewPageHtml = (
 <head>
 <meta charset="utf-8">
 <title>Nest Route Overview</title>
-<link rel="icon" type="image/x-icon" href="/favicon.ico">
 <style>
 body{font-family:sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;line-height:1.5}
 h1,h2{margin-bottom:.5rem}
 .title-row{display:flex;align-items:center;gap:.6rem}
-.title-icon{width:28px;height:28px;display:block}
 code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
 li{margin:.35rem 0}
 .warnings{background:#fff8e1;border-left:4px solid #f9a825;padding:.75rem 1rem;margin:1rem 0}
@@ -88,7 +85,7 @@ li{margin:.35rem 0}
 </style>
 </head>
 <body>
-<h1 class="title-row"><img src="/favicon.ico" alt="Nest favicon" class="title-icon">Nest Route Overview</h1>
+<h1 class="title-row">Nest Route Overview</h1>
 <p>Project Origin: <a href="${PROJECT_ORIGIN_URL}">${PROJECT_ORIGIN_URL}</a></p>
 <p>Base URL: <code>${baseUrl}</code></p>
 ${warningsHtml}
@@ -133,7 +130,7 @@ for (const warning of securityWarnings) {
 
 // route files
 app.get('/favicon.ico', (_req: Request, res: Response) => {
-	return res.sendFile(path.join(process.cwd(), 'favicon.ico'));
+	return res.status(204).end();
 });
 app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
