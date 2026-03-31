@@ -57,7 +57,7 @@ jobs:
         run: |
           echo "npm config list"
           npm config list
-          npm ci --omit=dev
+          npm ci --omit=dev --ignore-scripts
         continue-on-error: false
 
       - name: Check vulnerabilities (debug)

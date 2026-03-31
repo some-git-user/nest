@@ -22,7 +22,7 @@
 		"test:ci": "jest --runInBand",
 		"test:coverage": "jest --coverage && npm run test:shell",
 		"validate": "npm run lint:check && npm run format:check && npx tsc --noEmit && npm run build && npm run test:ci",
-		"prepare": "husky"
+		"prepare": "node .husky/install.mjs"
 	},
 	"repository": {
 		"type": "git",
