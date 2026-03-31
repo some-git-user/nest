@@ -9,6 +9,8 @@ env:
 jobs:
   audit-debug:
     runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
     steps:
       - name: Print runner and environment info
         run: |
@@ -55,7 +57,7 @@ jobs:
         run: |
           echo "npm config list"
           npm config list
-          npm install --omit=dev
+          npm ci --omit=dev
         continue-on-error: false
 
       - name: Check vulnerabilities (debug)
