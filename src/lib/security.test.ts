@@ -267,4 +267,48 @@ describe('security middleware', () => {
 			.set('x-forwarded-for', '10.0.0.1');
 		expect(allowed.status).toBe(200);
 	});
+
+	// ──────────────── HTTP Basic Auth ────────────────
+
+	test('accepts API key supplied as the password in an HTTP Basic Auth header', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const credentials = Buffer.from(':secret').toString('base64');
+		const res = await request(app)
+			.get('/ok')
+			.set('Authorization', `Basic ${credentials}`);
+		expect(res.status).toBe(200);
+	});
+
+	// ──────────────── WWW-Authenticate header for browser requests ────────────────
+
+	test('sets WWW-Authenticate header when a browser sends an invalid API key', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('Accept', 'text/html,application/xhtml+xml');
+		expect(res.status).toBe(401);
+		expect(res.headers['www-authenticate']).toContain('Basic');
+	});
+
+	test('does not set WWW-Authenticate header for non-browser requests', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app).get('/ok').set('Accept', 'application/json');
+		expect(res.status).toBe(401);
+		expect(res.headers['www-authenticate']).toBeUndefined();
+	});
 });

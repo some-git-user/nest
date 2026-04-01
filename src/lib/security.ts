@@ -1,4 +1,9 @@
 import {NextFunction, Request, Response} from 'express';
+import {
+	apiKeyMatches,
+	isBrowserRequest,
+	parseBasicAuthPassword,
+} from './browser-auth';
 import {sendNagiosUnknownError} from './http-nagios';
 import {getClientIpFromRequest, normalizeIp} from './request-ip';
 
@@ -89,11 +94,24 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 	return (req: Request, res: Response, next: NextFunction) => {
 		if (expectedApiKey.length > 0) {
 			const rawHeader = req.headers[apiKeyHeader];
-			const providedApiKey = Array.isArray(rawHeader)
+			const headerKey = Array.isArray(rawHeader)
 				? String(rawHeader[0] ?? '')
 				: String(rawHeader ?? '');
 
-			if (providedApiKey !== expectedApiKey) {
+			// Also accept the key via HTTP Basic Auth (password field) for browser access
+			const basicKey = parseBasicAuthPassword(
+				String(req.headers.authorization ?? ''),
+			);
+			const providedApiKey = headerKey || basicKey;
+
+			if (!apiKeyMatches(providedApiKey, expectedApiKey)) {
+				if (isBrowserRequest(req)) {
+					// Trigger the browser's built-in credentials dialog
+					res.setHeader(
+						'WWW-Authenticate',
+						'Basic realm="Nest", charset="UTF-8"',
+					);
+				}
 				return sendNagiosUnknownError(
 					res,
 					401,
