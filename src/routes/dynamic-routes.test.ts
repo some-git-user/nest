@@ -7,6 +7,7 @@ type BuildAppOptions = {
 	nodeEnv?: string;
 	pluginFileUid?: number;
 	pluginFileMode?: number;
+	pluginModule?: unknown;
 };
 
 describe('dynamic routes (plugins)', () => {
@@ -45,7 +46,7 @@ describe('dynamic routes (plugins)', () => {
 			debug: jest.fn(),
 		};
 
-		const pluginModule = {
+		const pluginModule = options.pluginModule ?? {
 			meta: {
 				usage: {
 					http: usageHttp,
@@ -333,6 +334,78 @@ describe('dynamic routes (plugins)', () => {
 				kind: 'interactive',
 				method: 'POST',
 				path: '/plugins/check-test',
+			}),
+		]);
+	});
+
+	test('parses link examples and ignores malformed example definitions', () => {
+		const {registeredPluginRouteExamples} = buildApp({
+			pluginModule: {
+				meta: {
+					usage: {
+						http: '/plugins/check-test',
+					},
+					examples: [
+						'/plugins/check-test?nagiosReturnMessage=hello&nagiosReturnValue=0',
+						{method: 'POST', fields: []},
+						{method: 'POST', path: 'plugins/check-test', fields: []},
+						{method: 'POST', path: '/plugins/check-test', fields: 'bad'},
+						{
+							method: 'POST',
+							path: '/plugins/check-test',
+							fields: [{label: 'Missing name'}],
+						},
+						{
+							method: 'GET',
+							label: 'web get',
+							path: '/plugins/check-test',
+							fields: [
+								{
+									name: 'baseUrl',
+									label: 'Base URL',
+									type: 'url',
+									required: false,
+									defaultValue: 'https://cloud.example.com',
+								},
+							],
+						},
+						{
+							method: 'POST',
+							path: '/plugins/check-test',
+							fields: [{name: 'token', type: 'password'}],
+						},
+					],
+				},
+				checkTest: () => ({message: 'ok', code: 0, performanceData: []}),
+			},
+		});
+
+		expect(registeredPluginRouteExamples['/plugins/check-test']).toEqual([
+			expect.objectContaining({
+				kind: 'link',
+				method: 'GET',
+				href: '/plugins/check-test?nagiosReturnMessage=hello&nagiosReturnValue=0',
+			}),
+			expect.objectContaining({
+				kind: 'interactive',
+				method: 'GET',
+				label: 'web get',
+				path: '/plugins/check-test',
+				fields: [
+					expect.objectContaining({
+						name: 'baseUrl',
+						label: 'Base URL',
+						type: 'url',
+						required: false,
+						defaultValue: 'https://cloud.example.com',
+					}),
+				],
+			}),
+			expect.objectContaining({
+				kind: 'interactive',
+				method: 'POST',
+				path: '/plugins/check-test',
+				fields: [expect.objectContaining({name: 'token', type: 'password'})],
 			}),
 		]);
 	});

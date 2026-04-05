@@ -208,7 +208,9 @@ describe('createPluginRouteHandler', () => {
 	});
 
 	test('merges POST body params with URL params before executing plugin', async () => {
-		const pluginFunc = jest.fn().mockResolvedValue({message: 'ok', code: 0});
+		const pluginFunc = jest
+			.fn<Promise<{message: string; code: number}>, [{[key: string]: string}]>()
+			.mockResolvedValue({message: 'ok', code: 0});
 		const requireFn = jest.fn().mockReturnValue({check: pluginFunc});
 		(createRequire as unknown as jest.Mock).mockReturnValue(requireFn);
 		(getPluginFunction as jest.Mock).mockReturnValue(pluginFunc);
@@ -223,7 +225,13 @@ describe('createPluginRouteHandler', () => {
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test');
 		const req: Partial<Request> = {
 			url: '/check-test?fromQuery=1',
-			body: {baseUrl: 'https://cloud.example.com', token: 'secret'},
+			body: {
+				baseUrl: 'https://cloud.example.com',
+				token: 'secret',
+				retries: 2,
+				enabled: true,
+				nested: {nope: true},
+			},
 		};
 		const {res} = createMockRes();
 
@@ -234,8 +242,14 @@ describe('createPluginRouteHandler', () => {
 				fromQuery: '1',
 				baseUrl: 'https://cloud.example.com',
 				token: 'secret',
+				retries: '2',
+				enabled: 'true',
 			}),
 		);
+		const firstCallArg: unknown = pluginFunc.mock.calls[0]?.[0];
+		if (firstCallArg && typeof firstCallArg === 'object') {
+			expect('nested' in firstCallArg).toBe(false);
+		}
 	});
 
 	test('formats non-object load errors using String(err)', async () => {

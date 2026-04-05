@@ -156,6 +156,12 @@ describe('server bootstrap', () => {
 			registeredPluginRouteExamples: {
 				'/plugins/check-test': [
 					{
+						kind: 'link',
+						label: 'quick link',
+						method: 'GET',
+						href: '/plugins/check-test?nagiosReturnMessage=Quick&nagiosReturnValue=0',
+					},
+					{
 						kind: 'interactive',
 						label: 'post sample',
 						method: 'POST',
@@ -170,8 +176,9 @@ describe('server bootstrap', () => {
 							{
 								name: 'nagiosReturnValue',
 								label: 'code',
-								required: true,
+								required: false,
 								type: 'text',
+								defaultValue: '0',
 							},
 						],
 					},
@@ -361,6 +368,14 @@ describe('server bootstrap', () => {
 			expect.stringContaining(
 				'<form class="plugin-example-form" method="post" action="/plugins/check-test">',
 			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'<a class="plugin-example-link" href="/plugins/check-test?nagiosReturnMessage=Quick&nagiosReturnValue=0">quick link</a>',
+			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(' value="0"'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('Startup Warnings'),
@@ -562,7 +577,6 @@ describe('server bootstrap', () => {
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [],
 			registeredPluginRoutes: [],
-			registeredPluginRouteExamples: {},
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
