@@ -35,10 +35,20 @@ describe('dynamic-routes helpers', () => {
 		});
 	});
 
-	test('getPluginFunction returns first function export and undefined otherwise', () => {
-		const fn = () => Promise.resolve({message: 'ok', code: 0});
-		expect(getPluginFunction({checkA: 'x', checkB: fn})).toBe(fn);
+	test('getPluginFunction prefers exports named check* and returns undefined otherwise', () => {
+		const helperFn = () => Promise.resolve({Accept: 'application/json'});
+		const checkFn = () => Promise.resolve({message: 'ok', code: 0});
+
+		expect(
+			getPluginFunction({
+				meta: {usage: '/plugins/check-fake'},
+				buildHeaders: helperFn,
+				checkNextcloudServerinfo: checkFn,
+			}),
+		).toBe(checkFn);
+		expect(getPluginFunction({buildHeaders: helperFn})).toBe(helperFn);
 		expect(getPluginFunction({checkA: 'x'})).toBeUndefined();
+		expect(getPluginFunction(null)).toBeUndefined();
 	});
 
 	test('clearPluginRequireCache resolves and deletes cache entry', () => {

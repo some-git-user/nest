@@ -28,7 +28,20 @@ export const parseUrlParams = (url: string): {[key: string]: string} => {
 export const getPluginFunction = (
 	moduleValue: unknown,
 ): PluginFunction | undefined => {
-	const funcMatch = Object.values(moduleValue as Record<string, unknown>).find(
+	if (!moduleValue || typeof moduleValue !== 'object') {
+		return undefined;
+	}
+
+	const moduleRecord = moduleValue as Record<string, unknown>;
+	const preferredCheckFunc = Object.entries(moduleRecord).find(
+		([key, value]) => typeof value === 'function' && /^check/i.test(key),
+	)?.[1];
+
+	if (typeof preferredCheckFunc === 'function') {
+		return preferredCheckFunc as PluginFunction;
+	}
+
+	const funcMatch = Object.values(moduleRecord).find(
 		(value) => typeof value === 'function',
 	);
 

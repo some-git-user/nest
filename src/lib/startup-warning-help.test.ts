@@ -44,6 +44,19 @@ describe('startup warning help', () => {
 		expect(html).toContain('How to resolve this warning');
 	});
 
+	test('renders whitelist line additions as a dedicated single-line code block', () => {
+		const html = renderStartupWarningListItems([
+			'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc123. Review it and add "check_test.ts abc123" to plugins/plugin-whitelist.txt before enabling it.',
+		]);
+
+		expect(html).toContain(
+			'add the following line to plugins/plugin-whitelist.txt',
+		);
+		expect(html).toContain(
+			'<pre class="startup-warning-whitelist-entry"><code>check_test.ts abc123</code></pre>',
+		);
+	});
+
 	test('provides known topics and renders topic help HTML', () => {
 		const topic = getStartupWarningHelpTopic('plugin-hash-changed');
 		expect(topic).toBeDefined();

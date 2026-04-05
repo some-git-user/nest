@@ -22,14 +22,29 @@ type NextcloudServerInfoResponse = {
 			nextcloud?: {
 				system?: {
 					version?: string;
+					theme?: string;
+					enable_avatars?: string;
+					enable_previews?: string;
+					memcache_local?: string;
+					memcache_distributed?: string;
+					filelocking_enabled?: string;
+					memcache_locking?: string;
 					debug?: string;
 					freespace?: number | string;
 					cpuload?: Array<number | string>;
+					cpunum?: number | string;
+					mem_total?: number | string;
+					mem_free?: number | string;
+					swap_total?: number | string;
+					swap_free?: number | string;
 					apps?: {
+						num_installed?: number | string;
 						num_updates_available?: number | string;
+						app_updates?: Array<unknown>;
 					};
 					update?: {
 						available?: unknown;
+						available_version?: string;
 					};
 				};
 			};
@@ -41,6 +56,9 @@ type NextcloudServerInfoResponse = {
 		};
 	};
 };
+type NextcloudUpdateRecord = NonNullable<
+	NonNullable<NextcloudServerInfoResponse['ocs']['data']['nextcloud']>['system']
+>['update'];
 
 type PerformanceDataEntry = {
 	label: string;
@@ -263,7 +281,7 @@ const buildEndpointUrl = (
 	return url.toString();
 };
 
-const buildHeaders = (
+export const buildHeaders = (
 	params: NextcloudServerInfoParams,
 ): Record<string, string> => {
 	const headers: Record<string, string> = {
@@ -286,7 +304,7 @@ const buildHeaders = (
 	return headers;
 };
 
-const getStatusText = (code: number): string => {
+export const getStatusText = (code: number): string => {
 	if (code === STATUS_OK) {
 		return 'OK';
 	}
@@ -422,7 +440,9 @@ export const checkNextcloudServerinfo = async (
 			? systemRecord.apps
 			: undefined;
 		const appUpdates = readNumber(appsRecord?.num_updates_available) ?? 0;
-		const updateRecord = isRecord(systemRecord?.update)
+		const updateRecord: NextcloudUpdateRecord | undefined = isRecord(
+			systemRecord?.update,
+		)
 			? systemRecord.update
 			: undefined;
 		const updateAvailable = hasUpdateValue(updateRecord?.available);
@@ -467,7 +487,10 @@ export const checkNextcloudServerinfo = async (
 		}
 
 		if (!skipUpdate && updateAvailable) {
-			bumpCode(STATUS_WARNING, 'core update available');
+			bumpCode(
+				STATUS_CRITICAL,
+				`core update available. Current version: ${version}, available version: ${readString(updateRecord?.available_version)}`,
+			);
 		}
 
 		const summary: string[] = [];

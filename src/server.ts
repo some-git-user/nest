@@ -82,6 +82,8 @@ li{margin:.35rem 0}
 .warnings{background:#fff8e1;border-left:4px solid #f9a825;padding:.75rem 1rem;margin:1rem 0}
 .warnings h2{color:#7b5800;margin-top:0}
 .warnings ul{margin:.5rem 0;padding-left:1.5rem}
+.startup-warning-whitelist-entry{background:#fff3cd;border:1px solid #f2d28b;border-radius:4px;padding:.55rem .7rem;overflow-x:auto;white-space:pre;margin:.5rem 0}
+.startup-warning-whitelist-entry code{background:transparent;padding:0}
 </style>
 </head>
 <body>

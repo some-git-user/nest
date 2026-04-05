@@ -217,6 +217,23 @@ const escapeHtml = (value: string): string =>
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;');
 
+type RenderedStartupWarning = {
+	message: string;
+	whitelistEntry?: string;
+};
+
+const extractWhitelistEntry = (warning: string): RenderedStartupWarning => {
+	const match = warning.match(/add "([^"]+)" to /i);
+	if (!match) {
+		return {message: warning};
+	}
+
+	return {
+		message: warning.replace(/add "[^"]+" to /i, 'add the following line to '),
+		whitelistEntry: match[1],
+	};
+};
+
 export const resolveStartupWarningTopicId = (warning: string): string => {
 	for (const classifier of CLASSIFIERS) {
 		if (classifier.matcher.test(warning)) {
@@ -239,8 +256,12 @@ export const renderStartupWarningListItems = (warnings: string[]): string => {
 		.map((warning) => {
 			const topicId = resolveStartupWarningTopicId(warning);
 			const helpPath = getStartupWarningHelpPath(topicId);
+			const renderedWarning = extractWhitelistEntry(warning);
+			const whitelistEntryHtml = renderedWarning.whitelistEntry
+				? `<pre class="startup-warning-whitelist-entry"><code>${escapeHtml(renderedWarning.whitelistEntry)}</code></pre>`
+				: '';
 
-			return `<li><p>${escapeHtml(warning)}</p><p><a href="${helpPath}">How to resolve this warning</a></p></li>`;
+			return `<li><p>${escapeHtml(renderedWarning.message)}</p>${whitelistEntryHtml}<p><a href="${helpPath}">How to resolve this warning</a></p></li>`;
 		})
 		.join('');
 };

@@ -1,7 +1,7 @@
 import {Request, Response} from 'express';
 import {createRequire} from 'module';
 import {logger} from '../lib/logger';
-import {createPluginRouteHandler} from './dynamic-routes';
+import {createPluginRouteHandler, insertBeforeBodyEnd} from './dynamic-routes';
 import {
 	buildInvalidCodeResponse,
 	clearPluginRequireCache,
@@ -260,6 +260,10 @@ describe('createPluginRouteHandler', () => {
 		expect(sendMock).toHaveBeenCalledWith(
 			expect.stringContaining('/help/external-link-guard.js'),
 		);
+		expect(sendMock).toHaveBeenCalledWith(expect.stringContaining('NEST_HOST'));
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('NEST_API_KEY'),
+		);
 	});
 
 	test('serves full HTML document in a sandbox when meta.help starts with <!DOCTYPE', async () => {
@@ -287,6 +291,10 @@ describe('createPluginRouteHandler', () => {
 		);
 		expect(sendMock).toHaveBeenCalledWith(
 			expect.stringContaining('/help/external-link-guard.js'),
+		);
+		expect(sendMock).toHaveBeenCalledWith(expect.stringContaining('NEST_HOST'));
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('NEST_API_KEY'),
 		);
 	});
 
@@ -316,6 +324,10 @@ describe('createPluginRouteHandler', () => {
 		expect(sendMock).toHaveBeenCalledWith(
 			expect.stringContaining('/help/external-link-guard.js'),
 		);
+		expect(sendMock).toHaveBeenCalledWith(expect.stringContaining('NEST_HOST'));
+		expect(sendMock).toHaveBeenCalledWith(
+			expect.stringContaining('NEST_API_KEY'),
+		);
 	});
 
 	test('serves auto-generated help page with usage when no meta.help is defined', async () => {
@@ -343,7 +355,9 @@ describe('createPluginRouteHandler', () => {
 			expect.stringContaining('/plugins/check-test?foo=&lt;value&gt;'),
 		);
 		expect(sendMock).toHaveBeenCalledWith(
-			expect.stringContaining('./check_nest.sh check-test foo=&lt;value&gt;'),
+			expect.stringContaining(
+				'NEST_HOST=SERVER_IP_OR_DNS NEST_API_KEY=API_KEY ./check_nest.sh check-test foo=&lt;value&gt;',
+			),
 		);
 		expect(sendMock).toHaveBeenCalledWith(
 			expect.stringContaining('No extended help is available for this plugin.'),
@@ -493,5 +507,45 @@ describe('createPluginRouteHandler', () => {
 		expect(output).not.toMatch(/<script[^>]*>alert/i);
 		// The srcdoc attribute should contain the escaped (therefore inert) version
 		expect(output).toContain('sandbox="allow-popups"');
+	});
+
+	describe('insertBeforeBodyEnd utility', () => {
+		test('inserts content before closing body tag when present', () => {
+			const html = '<!DOCTYPE html><html><body><h1>Test</h1></body></html>';
+			const section = '<footer>Footer content</footer>';
+			const result = insertBeforeBodyEnd(html, section);
+
+			expect(result).toBe(
+				'<!DOCTYPE html><html><body><h1>Test</h1><footer>Footer content</footer></body></html>',
+			);
+		});
+
+		test('appends content when closing body tag is not present', () => {
+			const html = '<!DOCTYPE html><html><body><h1>Test</h1>';
+			const section = '<footer>Footer content</footer>';
+			const result = insertBeforeBodyEnd(html, section);
+
+			expect(result).toBe(
+				'<!DOCTYPE html><html><body><h1>Test</h1><footer>Footer content</footer>',
+			);
+		});
+
+		test('handles case-insensitive body closing tag search', () => {
+			const html = '<!DOCTYPE html><html><body><h1>Test</h1></BODY></html>';
+			const section = '<footer>Footer</footer>';
+			const result = insertBeforeBodyEnd(html, section);
+
+			expect(result).toContain('<footer>Footer</footer></body>');
+		});
+
+		test('handles empty section content', () => {
+			const html = '<!DOCTYPE html><html><body><h1>Test</h1></body></html>';
+			const section = '';
+			const result = insertBeforeBodyEnd(html, section);
+
+			expect(result).toBe(
+				'<!DOCTYPE html><html><body><h1>Test</h1></body></html>',
+			);
+		});
 	});
 });
