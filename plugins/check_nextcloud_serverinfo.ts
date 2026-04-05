@@ -80,6 +80,27 @@ export const meta = {
 		shell:
 			'./check_nest.sh check-nextcloud-serverinfo baseUrl=<nextcloud-base-url> token=<serverinfo-token> warningCpuLoad1m=<number> criticalCpuLoad1m=<number> warningFreeSpaceGiB=<number> criticalFreeSpaceGiB=<number> skipApps=<true|false> skipUpdate=<true|false>',
 	},
+	examples: [
+		{
+			label: 'Run with required variables',
+			method: 'POST',
+			path: '/plugins/check-nextcloud-serverinfo',
+			fields: [
+				{name: 'baseUrl', label: 'Nextcloud Base URL', type: 'url'},
+				{name: 'token', label: 'Serverinfo Token', type: 'password'},
+				{
+					name: 'skipApps',
+					label: 'Skip App Update Check',
+					defaultValue: 'true',
+				},
+				{
+					name: 'skipUpdate',
+					label: 'Skip Core Update Check',
+					defaultValue: 'true',
+				},
+			],
+		},
+	],
 	help: `<h1>check-nextcloud-serverinfo</h1>
 <p>Monitors a Nextcloud instance through the official <a href="https://github.com/nextcloud/serverinfo">serverinfo</a> endpoint and returns a Nagios-compatible status.</p>
 

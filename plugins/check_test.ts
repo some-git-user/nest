@@ -4,6 +4,39 @@ export const meta = {
 		shell:
 			'./check_nest.sh check-test nagiosReturnMessage=<string> nagiosReturnValue=<0 | 1 | 2 | 3> performanceData=<true | false>',
 	},
+	examples: [
+		{
+			label: 'Quick GET example',
+			method: 'GET',
+			path: '/plugins/check-test',
+			fields: [
+				{
+					name: 'nagiosReturnMessage',
+					label: 'Message',
+					defaultValue: 'Example OK',
+				},
+				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '0'},
+				{
+					name: 'performanceData',
+					label: 'Include Perf Data',
+					defaultValue: 'true',
+				},
+			],
+		},
+		{
+			label: 'POST body example',
+			method: 'POST',
+			path: '/plugins/check-test',
+			fields: [
+				{
+					name: 'nagiosReturnMessage',
+					label: 'Message',
+					defaultValue: 'Example Warning',
+				},
+				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '1'},
+			],
+		},
+	],
 };
 
 export const checkTest = (params: {

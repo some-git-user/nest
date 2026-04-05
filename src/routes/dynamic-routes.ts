@@ -27,6 +27,36 @@ const pluginWhitelistPath = path.resolve(
 export const pluginStartupWarnings: string[] = [];
 export const registeredPluginRoutes: string[] = [];
 
+export type PluginExampleFieldInputType = 'text' | 'password' | 'url';
+
+export type PluginExampleField = {
+	name: string;
+	label: string;
+	required: boolean;
+	type: PluginExampleFieldInputType;
+	defaultValue?: string;
+};
+
+export type PluginRouteExample =
+	| {
+			kind: 'link';
+			label: string;
+			method: 'GET';
+			href: string;
+	  }
+	| {
+			kind: 'interactive';
+			label: string;
+			method: 'GET' | 'POST';
+			path: string;
+			fields: PluginExampleField[];
+	  };
+
+export const registeredPluginRouteExamples: Record<
+	string,
+	PluginRouteExample[]
+> = {};
+
 type PluginMetaUsage =
 	| string
 	| {
@@ -37,6 +67,102 @@ type PluginMetaUsage =
 type PluginMeta = {
 	usage?: PluginMetaUsage;
 	help?: string;
+	examples?: unknown[];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === 'object' && value !== null;
+
+const toInputType = (value: unknown): PluginExampleFieldInputType => {
+	if (value === 'password' || value === 'url' || value === 'text') {
+		return value;
+	}
+
+	return 'text';
+};
+
+const getPluginMetaExamples = (pluginModule: unknown): PluginRouteExample[] => {
+	if (typeof pluginModule !== 'object' || pluginModule === null) {
+		return [];
+	}
+
+	const moduleRecord = pluginModule as Record<string, unknown>;
+	if (typeof moduleRecord.meta !== 'object' || moduleRecord.meta === null) {
+		return [];
+	}
+
+	const meta = moduleRecord.meta as PluginMeta;
+	if (!Array.isArray(meta.examples)) {
+		return [];
+	}
+
+	const parsedExamples: PluginRouteExample[] = [];
+	meta.examples.forEach((example, index) => {
+		const defaultLabel = `example ${index + 1}`;
+
+		if (typeof example === 'string' && example.startsWith('/')) {
+			parsedExamples.push({
+				kind: 'link',
+				label: defaultLabel,
+				method: 'GET',
+				href: example,
+			});
+			return;
+		}
+
+		if (!isRecord(example)) {
+			return;
+		}
+
+		const method = example.method === 'POST' ? 'POST' : 'GET';
+		const pathValue = typeof example.path === 'string' ? example.path : '';
+		if (!pathValue.startsWith('/')) {
+			return;
+		}
+
+		if (!Array.isArray(example.fields)) {
+			return;
+		}
+
+		const fields = example.fields
+			.filter(isRecord)
+			.map((field): PluginExampleField | undefined => {
+				const name = typeof field.name === 'string' ? field.name : '';
+				if (!name) {
+					return undefined;
+				}
+				const parsedField: PluginExampleField = {
+					name,
+					label: typeof field.label === 'string' ? field.label : name,
+					required: field.required !== false,
+					type: toInputType(field.type),
+				};
+
+				if (typeof field.defaultValue === 'string') {
+					parsedField.defaultValue = field.defaultValue;
+				}
+
+				return parsedField;
+			})
+			.filter((field): field is PluginExampleField => field !== undefined);
+
+		if (fields.length === 0) {
+			return;
+		}
+
+		parsedExamples.push({
+			kind: 'interactive',
+			label:
+				typeof example.label === 'string' && example.label.trim().length > 0
+					? example.label
+					: defaultLabel,
+			method,
+			path: pathValue,
+			fields,
+		});
+	});
+
+	return parsedExamples;
 };
 
 const getPluginMetaUsage = (
@@ -297,9 +423,11 @@ effectivePluginFiles.forEach((file) => {
 	);
 
 	let helpContext: PluginHelpContext = {};
+	let pluginExamples: PluginRouteExample[] = [];
 	try {
 		const pluginModule: unknown = requireFn(runtimePluginPath);
 		const usage = getPluginMetaUsage(pluginModule);
+		pluginExamples = getPluginMetaExamples(pluginModule);
 		let usageHttp: string | undefined;
 		let usageShell: string | undefined;
 		if (usage) {
@@ -321,11 +449,17 @@ effectivePluginFiles.forEach((file) => {
 		warnWithError(`Could not load plugin metadata for ${filePath}`, err);
 	}
 
-	router.get(
+	const handler = createPluginRouteHandler(
+		runtimePluginPath,
 		kebabCasePath,
-		createPluginRouteHandler(runtimePluginPath, kebabCasePath, helpContext),
+		helpContext,
 	);
+	router.get(kebabCasePath, handler);
+	router.post(kebabCasePath, handler);
 	registeredPluginRoutes.push(kebabCasePath);
+	if (pluginExamples.length > 0) {
+		registeredPluginRouteExamples[kebabCasePath] = pluginExamples;
+	}
 });
 
 registeredPluginRoutes.sort((a, b) => a.localeCompare(b));

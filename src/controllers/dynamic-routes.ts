@@ -141,6 +141,25 @@ ${shellHintSection}</body>
 </html>`);
 };
 
+const parseBodyParams = (body: unknown): {[key: string]: string} => {
+	if (!body || typeof body !== 'object' || Array.isArray(body)) {
+		return {};
+	}
+
+	const params: {[key: string]: string} = {};
+	for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+		if (
+			typeof value === 'string' ||
+			typeof value === 'number' ||
+			typeof value === 'boolean'
+		) {
+			params[key] = String(value);
+		}
+	}
+
+	return params;
+};
+
 export const createPluginRouteHandler = (
 	jsFilePath: string,
 	kebabCasePath: string,
@@ -175,7 +194,10 @@ export const createPluginRouteHandler = (
 			}
 
 			logger.debug(req.url);
-			const paramsObj = parseUrlParams(req.url);
+			const paramsObj = {
+				...parseUrlParams(req.url),
+				...parseBodyParams(req.body),
+			};
 
 			try {
 				const result = await pluginFunc(paramsObj);

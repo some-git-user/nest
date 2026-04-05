@@ -27,7 +27,9 @@ import {
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
+	PluginRouteExample,
 	pluginStartupWarnings,
+	registeredPluginRouteExamples,
 	registeredPluginRoutes,
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
@@ -35,11 +37,19 @@ import honeyPot from './routes/honey-pot';
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
 
+const escapeHtml = (value: string): string =>
+	value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
+
 const buildOverviewPageHtml = (
 	host: string,
 	port: number,
 	warnings: string[],
 	pluginRoutes: string[],
+	pluginRouteExamples?: Record<string, PluginRouteExample[]>,
 ): string => {
 	const baseUrl = `https://${host}:${port}`;
 	const staticRoutes = [
@@ -53,11 +63,43 @@ const buildOverviewPageHtml = (
 				`<li><a href="${routeInfo.path}">${routeInfo.path}</a> - <a href="${routeInfo.helpPath}">help</a></li>`,
 		)
 		.join('');
+	const examplesByRoute = pluginRouteExamples ?? {};
 	const pluginRouteItems = pluginRoutes
-		.map(
-			(routePath) =>
-				`<li><a href="${routePath}">${routePath}</a> - <a href="${routePath}?help">help</a></li>`,
-		)
+		.map((routePath) => {
+			const examples = examplesByRoute[routePath] ?? [];
+			const firstLinkExample = examples.find(
+				(example) => example.kind === 'link',
+			);
+			const primaryHref = firstLinkExample ? firstLinkExample.href : routePath;
+			const examplesHtml = examples
+				.map((example) => {
+					if (example.kind === 'link') {
+						return `<a class="plugin-example-link" href="${example.href}">${escapeHtml(example.label)}</a>`;
+					}
+
+					const fieldsHtml = example.fields
+						.map((field) => {
+							const requiredAttr = field.required ? ' required' : '';
+							const valueAttr = field.defaultValue
+								? ` value="${escapeHtml(field.defaultValue)}"`
+								: '';
+							const requiredLabel = field.required
+								? ' <span class="plugin-example-required" title="Required field">*</span>'
+								: '';
+							return `<label class="plugin-example-field"><span class="plugin-example-field-label">${escapeHtml(
+								field.label,
+							)}${requiredLabel}</span><input name="${escapeHtml(
+								field.name,
+							)}" type="${escapeHtml(field.type)}"${requiredAttr}${valueAttr}></label>`;
+						})
+						.join('');
+
+					return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions"><button type="submit">Run</button></div></form>`;
+				})
+				.join('');
+
+			return `<li class="plugin-route-item"><div class="plugin-route-header"><a href="${primaryHref}">${routePath}</a> - <a href="${routePath}?help">help</a></div>${examplesHtml ? `<div class="plugin-examples">${examplesHtml}</div>` : ''}</li>`;
+		})
 		.join('');
 
 	const warningsHtml =
@@ -79,6 +121,21 @@ h1,h2{margin-bottom:.5rem}
 .title-row{display:flex;align-items:center;gap:.6rem}
 code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
 li{margin:.35rem 0}
+.plugin-route-item{margin-bottom:.8rem}
+.plugin-route-header{font-weight:600}
+.plugin-examples{margin-top:.5rem;display:grid;grid-template-columns:1fr;gap:.5rem}
+.plugin-example-link{display:inline-block;padding:.35rem .55rem;background:#f7f7f7;border:1px solid #d9d9d9;border-radius:6px;text-decoration:none}
+.plugin-example-form{display:grid;grid-template-columns:1fr;gap:.5rem;background:#f7f7f7;border:1px solid #d9d9d9;border-radius:8px;padding:.6rem .7rem;max-width:100%}
+.plugin-example-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.plugin-example-title{font-weight:600}
+.plugin-example-method{font-size:.82rem;letter-spacing:.02em;padding:.12rem .45rem;border:1px solid #c8c8c8;border-radius:999px;background:#fff}
+.plugin-example-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.45rem .7rem}
+.plugin-example-field{display:grid;grid-template-columns:1fr;gap:.2rem}
+.plugin-example-field-label{font-size:.9rem;color:#333}
+.plugin-example-required{display:inline-block;margin-left:.28rem;font-size:1rem;line-height:1;color:#b3261e;vertical-align:middle;font-weight:700}
+.plugin-example-field input{width:100%;box-sizing:border-box;padding:.34rem .42rem}
+.plugin-example-actions{display:flex;justify-content:flex-end}
+.plugin-example-actions button{padding:.3rem .75rem}
 .warnings{background:#fff8e1;border-left:4px solid #f9a825;padding:.75rem 1rem;margin:1rem 0}
 .warnings h2{color:#7b5800;margin-top:0}
 .warnings ul{margin:.5rem 0;padding-left:1.5rem}
@@ -101,6 +158,12 @@ ${warningsHtml}
 
 app.use(
 	express.json({
+		limit: '16kb',
+	}),
+);
+app.use(
+	express.urlencoded({
+		extended: false,
 		limit: '16kb',
 	}),
 );
@@ -161,6 +224,7 @@ app.get('/', (_req: Request, res: Response) => {
 			env.PORT,
 			startupWarnings,
 			registeredPluginRoutes,
+			registeredPluginRouteExamples,
 		),
 	);
 });

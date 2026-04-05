@@ -41,9 +41,10 @@ describe('server bootstrap', () => {
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
 		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
 		const expressFactory = Object.assign(
 			jest.fn(() => app),
-			{json},
+			{json, urlencoded},
 		);
 		const listen = jest.fn(
 			(port: number, host: string, callback?: () => void) => {
@@ -152,6 +153,30 @@ describe('server bootstrap', () => {
 				'/plugins/check-test',
 				'/plugins/check-debian-eol',
 			],
+			registeredPluginRouteExamples: {
+				'/plugins/check-test': [
+					{
+						kind: 'interactive',
+						label: 'post sample',
+						method: 'POST',
+						path: '/plugins/check-test',
+						fields: [
+							{
+								name: 'nagiosReturnMessage',
+								label: 'message',
+								required: true,
+								type: 'text',
+							},
+							{
+								name: 'nagiosReturnValue',
+								label: 'code',
+								required: true,
+								type: 'text',
+							},
+						],
+					},
+				],
+			},
 		}));
 		const recordHoneypotSignal = jest.fn();
 		const recordNetworkProbeSignal = jest.fn();
@@ -333,6 +358,11 @@ describe('server bootstrap', () => {
 			expect.stringContaining('/plugins/check-debian-eol?help'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'<form class="plugin-example-form" method="post" action="/plugins/check-test">',
+			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('Startup Warnings'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
@@ -447,9 +477,10 @@ describe('server bootstrap', () => {
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
 		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
 		const expressFactory = Object.assign(
 			jest.fn(() => app),
-			{json},
+			{json, urlencoded},
 		);
 		const listen = jest.fn(
 			(port: number, host: string, callback?: () => void) => {
@@ -531,6 +562,7 @@ describe('server bootstrap', () => {
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [],
 			registeredPluginRoutes: [],
+			registeredPluginRouteExamples: {},
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
@@ -572,9 +604,10 @@ describe('server bootstrap', () => {
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
 		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
 		const expressFactory = Object.assign(
 			jest.fn(() => app),
-			{json},
+			{json, urlencoded},
 		);
 		const rateLimit = jest.fn(() => rateLimitMiddleware);
 		const listen = jest.fn(

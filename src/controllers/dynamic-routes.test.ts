@@ -207,6 +207,37 @@ describe('createPluginRouteHandler', () => {
 		);
 	});
 
+	test('merges POST body params with URL params before executing plugin', async () => {
+		const pluginFunc = jest.fn().mockResolvedValue({message: 'ok', code: 0});
+		const requireFn = jest.fn().mockReturnValue({check: pluginFunc});
+		(createRequire as unknown as jest.Mock).mockReturnValue(requireFn);
+		(getPluginFunction as jest.Mock).mockReturnValue(pluginFunc);
+		(parseUrlParams as jest.Mock).mockReturnValue({fromQuery: '1'});
+		(normalizePluginResult as jest.Mock).mockReturnValue({
+			message: 'ok',
+			code: 0,
+			performanceData: undefined,
+		});
+		(isKnownNagiosCode as jest.Mock).mockReturnValue(true);
+
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test');
+		const req: Partial<Request> = {
+			url: '/check-test?fromQuery=1',
+			body: {baseUrl: 'https://cloud.example.com', token: 'secret'},
+		};
+		const {res} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(pluginFunc).toHaveBeenCalledWith(
+			expect.objectContaining({
+				fromQuery: '1',
+				baseUrl: 'https://cloud.example.com',
+				token: 'secret',
+			}),
+		);
+	});
+
 	test('formats non-object load errors using String(err)', async () => {
 		(createRequire as unknown as jest.Mock).mockImplementation(() => {
 			throw 123 as unknown as Error;

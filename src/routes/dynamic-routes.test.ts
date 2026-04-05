@@ -52,6 +52,21 @@ describe('dynamic routes (plugins)', () => {
 					shell:
 						'./check_nest.sh check-test nagiosReturnMessage=<string> nagiosReturnValue=<0 | 1 | 2 | 3> performanceData=<true | false>',
 				},
+				examples: [
+					{
+						label: 'post sample',
+						method: 'POST',
+						path: '/plugins/check-test',
+						fields: [
+							{
+								name: 'nagiosReturnMessage',
+								defaultValue: 'Example OK',
+							},
+							{name: 'nagiosReturnValue', defaultValue: '0'},
+						],
+					},
+					'invalid-example',
+				],
 			},
 			checkTest: (params: {
 				nagiosReturnMessage?: string;
@@ -190,20 +205,28 @@ describe('dynamic routes (plugins)', () => {
 
 		let dynamicRoutes: express.Router;
 		let registeredPluginRoutes: string[];
+		let registeredPluginRouteExamples: Record<string, string[]>;
 		jest.isolateModules(() => {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const routesModule = require('./dynamic-routes') as {
 				default: express.Router;
 				registeredPluginRoutes: string[];
+				registeredPluginRouteExamples: Record<string, string[]>;
 			};
 			dynamicRoutes = routesModule.default;
 			registeredPluginRoutes = routesModule.registeredPluginRoutes;
+			registeredPluginRouteExamples =
+				routesModule.registeredPluginRouteExamples;
 		});
 
 		const builtApp = express();
 		builtApp.use(express.json());
 		builtApp.use('/', dynamicRoutes!);
-		return {app: builtApp, registeredPluginRoutes: registeredPluginRoutes!};
+		return {
+			app: builtApp,
+			registeredPluginRoutes: registeredPluginRoutes!,
+			registeredPluginRouteExamples: registeredPluginRouteExamples!,
+		};
 	};
 
 	beforeEach(() => {
@@ -228,6 +251,18 @@ describe('dynamic routes (plugins)', () => {
 			'performanceData',
 			"'WATER BOILER TEMP':55C°;WARN=80;CRIT=90;MIN=0;MAX=100 'OUTDOOR TEMP':21C°;WARN=30;CRIT=40;MIN=-20;MAX=50",
 		);
+	});
+
+	test('check-test plugin supports POST body params', async () => {
+		const res = await request(app).post('/plugins/check-test').send({
+			nagiosReturnMessage: 'hello-post',
+			nagiosReturnValue: '0',
+			performanceData: 'true',
+		});
+
+		expect(res.status).toBe(200);
+		expect(res.body).toHaveProperty('message', 'hello-post');
+		expect(res.body).toHaveProperty('code', 0);
 	});
 
 	test('check-test plugin returns usage and UNKNOWN code when required parameters are missing', async () => {
@@ -287,6 +322,18 @@ describe('dynamic routes (plugins)', () => {
 		expect(registeredPluginRoutes).toEqual([
 			'/plugins/alpha-plugin',
 			'/plugins/zeta-plugin',
+		]);
+	});
+
+	test('exports sanitized plugin examples for overview links', () => {
+		const {registeredPluginRouteExamples} = buildApp();
+
+		expect(registeredPluginRouteExamples['/plugins/check-test']).toEqual([
+			expect.objectContaining({
+				kind: 'interactive',
+				method: 'POST',
+				path: '/plugins/check-test',
+			}),
 		]);
 	});
 
