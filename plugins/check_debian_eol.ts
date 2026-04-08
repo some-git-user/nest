@@ -31,6 +31,31 @@ export const meta = {
 		shell:
 			'./check_nest.sh check-debian-eol warningEolRemainingDays=<number> criticalEolRemainingDays=<number>',
 	},
+	examples: [
+		{
+			label: 'Check with default thresholds',
+			method: 'GET',
+			path: '/plugins/check-debian-eol',
+			fields: [],
+		},
+		{
+			label: 'Check with custom thresholds',
+			method: 'GET',
+			path: '/plugins/check-debian-eol?warningEolRemainingDays=90&criticalEolRemainingDays=60',
+			fields: [
+				{
+					name: 'warningEolRemainingDays',
+					label: 'Warning threshold (days)',
+					defaultValue: '90',
+				},
+				{
+					name: 'criticalEolRemainingDays',
+					label: 'Critical threshold (days)',
+					defaultValue: '60',
+				},
+			],
+		},
+	],
 	help: `<h1>check-debian-eol</h1>
 <p>Checks the Debian release end-of-life (EOL) date using the
 <a href="https://endoflife.date/">endoflife.date</a> API and returns a
