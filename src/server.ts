@@ -27,12 +27,12 @@ import {
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
-	PluginRouteExample,
 	pluginStartupWarnings,
 	registeredPluginRouteExamples,
 	registeredPluginRoutes,
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
+import type {PluginRouteExample} from './types/plugin-meta';
 
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';

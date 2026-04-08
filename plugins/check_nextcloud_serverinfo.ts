@@ -1,3 +1,5 @@
+import type {PluginMeta} from '../src/types/plugin-meta';
+
 type NextcloudServerInfoParams = {
 	baseUrl?: string;
 	token?: string;
@@ -186,7 +188,7 @@ echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/p
   <li><strong>CRITICAL</strong> – CPU load or free space crossed critical thresholds</li>
   <li><strong>UNKNOWN</strong> – Request failed, authorization failed, or the response payload was not usable</li>
 </ul>`,
-};
+} satisfies PluginMeta;
 
 const usageMessage = (): string =>
 	`Usage: ${meta.usage.http}. Provide baseUrl plus either token or username/password.`;

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import type {PluginMeta} from '../src/types/plugin-meta';
 
 type endoflifeResponseType = {
 	result: {
@@ -69,7 +70,7 @@ Outbound HTTPS to <code>endoflife.date</code> must be allowed.</p>
 <h2>Example</h2>
 <pre><code>GET /plugins/check-debian-eol?warningEolRemainingDays=90&amp;criticalEolRemainingDays=30</code></pre>
 <pre><code>./check_nest.sh check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30</code></pre>`,
-};
+} satisfies PluginMeta;
 
 const isEndoflifeResponse = (
 	value: unknown,

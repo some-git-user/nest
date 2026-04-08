@@ -1,3 +1,5 @@
+import type {PluginMeta} from '../src/types/plugin-meta';
+
 export const meta = {
 	usage: {
 		http: '/plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
@@ -37,7 +39,7 @@ export const meta = {
 			],
 		},
 	],
-};
+} satisfies PluginMeta;
 
 export const checkTest = (params: {
 	nagiosReturnMessage: string;

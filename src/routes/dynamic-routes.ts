@@ -12,6 +12,13 @@ import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
 import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
+import type {
+	PluginExampleField,
+	PluginExampleFieldInputType,
+	PluginMeta,
+	PluginMetaUsage,
+	PluginRouteExample,
+} from '../types/plugin-meta';
 
 const router = express.Router();
 const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
@@ -27,48 +34,18 @@ const pluginWhitelistPath = path.resolve(
 export const pluginStartupWarnings: string[] = [];
 export const registeredPluginRoutes: string[] = [];
 
-export type PluginExampleFieldInputType = 'text' | 'password' | 'url';
-
-export type PluginExampleField = {
-	name: string;
-	label: string;
-	required: boolean;
-	type: PluginExampleFieldInputType;
-	defaultValue?: string;
-};
-
-export type PluginRouteExample =
-	| {
-			kind: 'link';
-			label: string;
-			method: 'GET';
-			href: string;
-	  }
-	| {
-			kind: 'interactive';
-			label: string;
-			method: 'GET' | 'POST';
-			path: string;
-			fields: PluginExampleField[];
-	  };
+export type {
+	PluginExampleField,
+	PluginExampleFieldInputType,
+	PluginMeta,
+	PluginMetaUsage,
+	PluginRouteExample,
+} from '../types/plugin-meta';
 
 export const registeredPluginRouteExamples: Record<
 	string,
 	PluginRouteExample[]
 > = {};
-
-type PluginMetaUsage =
-	| string
-	| {
-			http?: string;
-			shell?: string;
-	  };
-
-type PluginMeta = {
-	usage?: PluginMetaUsage;
-	help?: string;
-	examples?: unknown[];
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null;
