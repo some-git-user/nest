@@ -43,5 +43,5 @@ jobs:
           body: |
             Automated dependency fixes produced by `npm audit fix`.
             Please review the lockfile changes and run CI/tests before merging.
-          branch: 'audit-fix-${{ github.run_id }}'
+          branch: 'audit-fix'
           labels: 'dependencies, automated'
