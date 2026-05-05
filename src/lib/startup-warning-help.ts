@@ -223,15 +223,29 @@ type RenderedStartupWarning = {
 };
 
 const extractWhitelistEntry = (warning: string): RenderedStartupWarning => {
-	const match = warning.match(/add "([^"]+)" to /i);
-	if (!match) {
-		return {message: warning};
+	const addMatch = warning.match(/add "([^"]+)" to /i);
+	if (addMatch) {
+		return {
+			message: warning.replace(
+				/add "[^"]+" to /i,
+				'add the following line to ',
+			),
+			whitelistEntry: addMatch[1],
+		};
 	}
 
-	return {
-		message: warning.replace(/add "[^"]+" to /i, 'add the following line to '),
-		whitelistEntry: match[1],
-	};
+	const updateMatch = warning.match(/update "([^"]+)" in /i);
+	if (updateMatch) {
+		return {
+			message: warning.replace(
+				/update "[^"]+" in /i,
+				'update the following line in ',
+			),
+			whitelistEntry: updateMatch[1],
+		};
+	}
+
+	return {message: warning};
 };
 
 export const resolveStartupWarningTopicId = (warning: string): string => {

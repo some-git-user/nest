@@ -57,6 +57,19 @@ describe('startup warning help', () => {
 		);
 	});
 
+	test('renders whitelist line updates as a dedicated single-line code block', () => {
+		const html = renderStartupWarningListItems([
+			'Plugin trust warning: plugins/check_test.ts hash changed. Whitelist expects oldHash, current sha256 is newHash. Review it and update "check_test.ts newHash" in plugins/plugin-whitelist.txt before enabling it.',
+		]);
+
+		expect(html).toContain(
+			'update the following line in plugins/plugin-whitelist.txt',
+		);
+		expect(html).toContain(
+			'<pre class="startup-warning-whitelist-entry"><code>check_test.ts newHash</code></pre>',
+		);
+	});
+
 	test('provides known topics and renders topic help HTML', () => {
 		const topic = getStartupWarningHelpTopic('plugin-hash-changed');
 		expect(topic).toBeDefined();

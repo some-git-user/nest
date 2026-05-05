@@ -173,7 +173,7 @@ export const verifyPluginWhitelist = ({
 
 		if (approvedHash !== currentHash) {
 			warnings.push(
-				`Plugin trust warning: ${displayPluginPath} hash changed. Whitelist expects ${approvedHash}, current sha256 is ${currentHash}. Review it and update ${displayWhitelistPath} before enabling it.`,
+				`Plugin trust warning: ${displayPluginPath} hash changed. Whitelist expects ${approvedHash}, current sha256 is ${currentHash}. Review it and update "${fileName} ${currentHash}" in ${displayWhitelistPath} before enabling it.`,
 			);
 			continue;
 		}
