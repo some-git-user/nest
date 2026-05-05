@@ -4,15 +4,15 @@
 
 Nest is a Node.js/Express HTTPS server that exposes Nagios-compatible checks and dynamically loads plugin-based checks at startup.
 
-Unlike many traditional Nagios setups centered on Bash/Python/Ruby scripts, this project is built around TypeScript/JavaScript plugins so teams can use modern tooling, shared libraries, typing, and test workflows in one ecosystem.
+<p align=center>
+	<img width="1071" height="1373" alt="image" src="https://github.com/user-attachments/assets/9116cd6d-2426-45f7-aa2e-8fc08434b211" />
+</p>
 
 ## Why This Exists
 
-Most Nagios plugin stacks grow as mixed shell scripts that are hard to type-check, test, and reuse.
+Unlike many traditional Nagios setups centered on Bash/Python/Ruby scripts, this project is built around TypeScript/JavaScript plugins so teams can use modern tooling, shared libraries, typing, and test workflows in one ecosystem.
 
 Nest gives you a TypeScript-first monitoring runtime where checks are HTTP-addressable plugins with a strict Nagios output contract.
-
-Use this project when your platform/services already run on Node.js and you want monitoring logic to follow the same engineering standards as application code.
 
 ## Table of Contents
 
@@ -41,7 +41,6 @@ Use this project when your platform/services already run on Node.js and you want
 - Dynamic plugin loading from a filesystem directory.
 - Runtime TypeScript plugin transpilation and cache reuse.
 - Unified language stack for service logic and checks (TypeScript/JavaScript end to end).
-- Honeypot and probe detection endpoint with Nagios reporting.
 - Built-in and plugin help pages via `?help`.
 - External-link warning guard on help pages before leaving app origin.
 - Shell-friendly checks via `script/check_nest.sh`.
@@ -51,15 +50,7 @@ Use this project when your platform/services already run on Node.js and you want
 - Strong typing helps prevent fragile monitoring logic and parameter mistakes.
 - Reuse existing Node.js libraries instead of reimplementing logic in shell scripts.
 - Better testing ergonomics (Jest), linting, formatting, and CI integration.
-- Easier onboarding for teams already shipping TypeScript services.
 - Keeps plugin implementation and application runtime in a single ecosystem.
-
-## Architecture at a Glance
-
-- Core app routes are mounted in `src/server.ts`.
-- Dynamic plugins are discovered from `PLUGINS_DIR` and mounted as routes.
-- Unknown routes are recorded as honeypot signals and return Nagios UNKNOWN.
-- TLS/client protocol errors are also tracked as probe signals.
 
 ## Quick Start
 
@@ -200,7 +191,6 @@ Route path generation:
 
 - `.ts` plugins are transpiled at runtime.
 - Transpiled output is cached at `PLUGINS_DIR/plugin-cache/`.
-- Cache reuse is based on source and cache mtime.
 
 ### JavaScript plugin handling
 
@@ -350,12 +340,6 @@ Environment variables for `check_nest.sh`:
 - `NEST_API_KEY` (optional API key sent as request header)
 - `NEST_API_KEY_HEADER` (default: `x-api-key`)
 
-Notes:
-
-- Canonical parameter is `nagiosReturnValue`.
-- The legacy typo `nagiosRetunValue` is not supported.
-- Script requires `jq`.
-
 ## Nmap Honeypot E2E
 
 ```bash
@@ -390,22 +374,6 @@ E2E environment variables:
 - `NEST_E2E_PORT` (default `55443`)
 - `NEST_E2E_STRICT` (default `true`; set `false` for report-only)
 
-## Release Process (.deb)
-
-Release is triggered manually via GitHub Actions workflow dispatch.
-
-Version source:
-
-- Release tag is derived from `package.json` version as `v<version>`.
-- Example: `"version": "1.2.3"` -> release tag `v1.2.3`.
-
-Workflow behavior:
-
-- Builds `.deb` artifact.
-- Generates release body from commit messages.
-- Also enables GitHub generated release notes.
-- Uploads `build_deb/nest-deb.deb` and `script/check_nest.sh` as release assets.
-
 ## Troubleshooting
 
 - Plugin not visible:
@@ -432,7 +400,6 @@ Workflow behavior:
 
 - This service includes baseline application-layer protections, but public exposure still requires a reverse proxy, strong access control, trusted TLS, and network-level restrictions.
 - Honeypot and protocol-error detection is application-layer telemetry. It does not replace host/network IDS.
-- Report security issues privately to repository maintainers before opening a public issue.
 
 Built-in application controls:
 
@@ -454,15 +421,6 @@ At startup in production, the app logs warnings when recommended security settin
 - missing `API_KEY`
 - empty `ALLOWED_IPS`
 - non-positive rate-limit settings
-
-## Contributing
-
-Contributions are welcome. For a clean change:
-
-1. Create a branch.
-2. Run `npm run validate` locally.
-3. Add or update tests for behavior changes.
-4. Open a pull request with a concise summary and risk notes.
 
 ## License
 
