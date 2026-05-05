@@ -50,6 +50,22 @@ Maintainer: $MAINTAINER
 Description: $DESC
 EOF
 
+# Mark config files as conffiles so dpkg preserves local changes on upgrade.
+cat > "$BUILD_DIR/DEBIAN/conffiles" <<EOF
+/etc/nest/nest.conf
+EOF
+
+# Sanity-check package metadata so config handling cannot silently regress.
+if [ ! -f "$BUILD_DIR/etc/nest/nest.conf" ]; then
+  echo "Error: missing packaged config at $BUILD_DIR/etc/nest/nest.conf"
+  exit 1
+fi
+
+if ! grep -Fxq "/etc/nest/nest.conf" "$BUILD_DIR/DEBIAN/conffiles"; then
+  echo "Error: /etc/nest/nest.conf is not declared in DEBIAN/conffiles"
+  exit 1
+fi
+
 # Build package
 dpkg-deb --build --root-owner-group "$BUILD_DIR"
 
