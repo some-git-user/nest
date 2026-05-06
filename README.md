@@ -17,7 +17,6 @@ Nest gives you a TypeScript-first monitoring runtime where checks are HTTP-addre
 ## Table of Contents
 
 - [Features](#features)
-- [Why TypeScript for Nagios Checks](#why-typescript-for-nagios-checks)
 - [Architecture at a Glance](#architecture-at-a-glance)
 - [Quick Start](#quick-start)
 - [Build Targets](#build-targets)
@@ -26,11 +25,9 @@ Nest gives you a TypeScript-first monitoring runtime where checks are HTTP-addre
 - [Plugin Development](#plugin-development)
 - [Testing and Quality](#testing-and-quality)
 - [Nmap Honeypot E2E](#nmap-honeypot-e2e)
-- [Release Process (.deb)](#release-process-deb)
 - [Troubleshooting](#troubleshooting)
 - [Support](#support)
 - [Security](#security)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Features
