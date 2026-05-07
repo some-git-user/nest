@@ -2,7 +2,7 @@ name: Daily Dependency Vulnerability Audit
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '17 0 * * *'
   workflow_dispatch:
 
 env:
@@ -31,17 +31,226 @@ jobs:
       - name: Install dependencies
         run: npm ci --omit=dev --ignore-scripts
 
+      - name: Capture npm audit report (before fix)
+        run: |
+          set +e
+          npm audit --omit=dev --json > audit-before.json
+          echo $? > audit-before.exitcode
+          exit 0
+
       - name: Attempt fix
-        run: npm run fix:vulnerabilities
+        run: |
+          set +e
+          npm run fix:vulnerabilities
+          echo $? > audit-fix.exitcode
+          exit 0
+
+      - name: Capture npm audit report (after fix)
+        run: |
+          set +e
+          npm audit --omit=dev --json > audit-after.json
+          echo $? > audit-after.exitcode
+          exit 0
+
+      - name: Build security summary for PR and job
+        run: |
+          node - <<'NODE'
+          const fs = require('fs')
+
+            function safeReadJson(path) {
+            try {
+              return JSON.parse(fs.readFileSync(path, 'utf8'))
+            } catch {
+              return null
+            }
+          }
+
+            function safeReadExitCode(path) {
+              try {
+                const raw = fs.readFileSync(path, 'utf8').trim()
+                const code = Number(raw)
+                return Number.isFinite(code) ? code : 999
+              } catch {
+                return 999
+              }
+            }
+
+          function extractVulns(report) {
+            if (!report || typeof report !== 'object') return []
+
+            // npm v7+ style
+            if (report.vulnerabilities && typeof report.vulnerabilities === 'object') {
+              const out = []
+              for (const [name, vuln] of Object.entries(report.vulnerabilities)) {
+                const severity = vuln?.severity || 'unknown'
+                const via = Array.isArray(vuln?.via)
+                  ? vuln.via
+                  : vuln?.via
+                    ? [vuln.via]
+                    : []
+                const findings = via
+                  .filter((x) => typeof x === 'object' && x)
+                  .map((x) => ({
+                    title: x.title || 'Unknown advisory',
+                    url: x.url || '',
+                    range: x.range || '',
+                    source: x.source || '',
+                  }))
+
+                out.push({ name, severity, findings })
+              }
+              return out
+            }
+
+            return []
+          }
+
+          function countBySeverity(vulns) {
+            const counts = { critical: 0, high: 0, moderate: 0, low: 0, info: 0, unknown: 0 }
+            for (const v of vulns) {
+              const key = counts[v.severity] !== undefined ? v.severity : 'unknown'
+              counts[key] += 1
+            }
+            return counts
+          }
+
+          function totals(report, vulns) {
+            const m = report?.metadata?.vulnerabilities
+            if (m && typeof m === 'object') return m
+            return countBySeverity(vulns)
+          }
+
+          function topFindings(vulns, limit = 8) {
+            const rows = []
+            for (const v of vulns) {
+              if (!v.findings.length) {
+                rows.push({
+                  pkg: v.name,
+                  sev: v.severity,
+                  title: 'No advisory details from npm output',
+                  url: '',
+                })
+                continue
+              }
+              for (const f of v.findings) {
+                rows.push({ pkg: v.name, sev: v.severity, title: f.title, url: f.url })
+              }
+            }
+
+            const order = { critical: 5, high: 4, moderate: 3, low: 2, info: 1, unknown: 0 }
+            rows.sort((a, b) => (order[b.sev] || 0) - (order[a.sev] || 0))
+            return rows.slice(0, limit)
+          }
+
+          function renderCounts(label, c) {
+            return `- ${label}: critical=${c.critical || 0}, high=${c.high || 0}, moderate=${c.moderate || 0}, low=${c.low || 0}, info=${c.info || 0}`
+          }
+
+            const beforeExitCode = safeReadExitCode('audit-before.exitcode')
+            const fixExitCode = safeReadExitCode('audit-fix.exitcode')
+            const afterExitCode = safeReadExitCode('audit-after.exitcode')
+
+            const beforeReport = safeReadJson('audit-before.json')
+            const afterReport = safeReadJson('audit-after.json')
+          const beforeVulns = extractVulns(beforeReport)
+          const afterVulns = extractVulns(afterReport)
+          const beforeCounts = totals(beforeReport, beforeVulns)
+          const afterCounts = totals(afterReport, afterVulns)
+
+          const findings = topFindings(beforeVulns)
+
+          const pr = []
+            if (fixExitCode === 0) {
+              pr.push('Automated dependency fixes produced by `npm audit fix --omit=dev`.')
+            } else {
+              pr.push(`Automated dependency fix attempt executed with non-zero exit code (${fixExitCode}).`)
+            }
+          pr.push('')
+            pr.push('### Security Summary (npm audit --omit=dev)')
+            if (beforeExitCode === 0 && beforeReport) {
+              pr.push(renderCounts('Before fix', beforeCounts))
+            } else {
+              pr.push(`- Before fix: audit collection failed (exit code ${beforeExitCode}).`)
+            }
+            if (afterExitCode === 0 && afterReport) {
+              pr.push(renderCounts('After fix', afterCounts))
+            } else {
+              pr.push(`- After fix: audit collection failed (exit code ${afterExitCode}).`)
+            }
+          pr.push('')
+            pr.push('Top findings before fix (prod dependencies only):')
+            if (beforeExitCode !== 0 || !beforeReport) {
+              pr.push('- No findings listed because npm audit report generation failed.')
+            } else if (!findings.length) {
+            pr.push('- No vulnerability details found in npm audit output.')
+          } else {
+            for (const f of findings) {
+              if (f.url) {
+                pr.push(`- [${f.sev}] ${f.pkg}: ${f.title} (${f.url})`)
+              } else {
+                pr.push(`- [${f.sev}] ${f.pkg}: ${f.title}`)
+              }
+            }
+          }
+          pr.push('')
+          pr.push('Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).')
+          pr.push('Please review lockfile changes and run CI/tests before merging.')
+
+          fs.writeFileSync('audit-pr-body.md', pr.join('\n') + '\n')
+
+          const summary = []
+            summary.push('## npm audit security summary (prod dependencies)')
+            if (beforeExitCode === 0 && beforeReport) {
+              summary.push(renderCounts('Before fix', beforeCounts))
+            } else {
+              summary.push(`- Before fix: audit collection failed (exit code ${beforeExitCode}).`)
+            }
+            if (afterExitCode === 0 && afterReport) {
+              summary.push(renderCounts('After fix', afterCounts))
+            } else {
+              summary.push(`- After fix: audit collection failed (exit code ${afterExitCode}).`)
+            }
+          summary.push('')
+            summary.push('Top findings before fix (prod dependencies only):')
+            if (beforeExitCode !== 0 || !beforeReport) {
+              summary.push('- No findings listed because npm audit report generation failed.')
+            } else if (!findings.length) {
+            summary.push('- No vulnerability details found in npm audit output.')
+          } else {
+            for (const f of findings) {
+              if (f.url) {
+                summary.push(`- [${f.sev}] ${f.pkg}: [${f.title}](${f.url})`)
+              } else {
+                summary.push(`- [${f.sev}] ${f.pkg}: ${f.title}`)
+              }
+            }
+          }
+
+          fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\n') + '\n')
+          NODE
+
+      - name: Upload npm audit reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-reports
+          path: |
+            audit-before.json
+            audit-before.exitcode
+            audit-after.json
+            audit-after.exitcode
+            audit-fix.exitcode
+            audit-pr-body.md
+          retention-days: 14
 
       - name: Create PR if lockfile changed
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: |
+            package-lock.json
+            package.json
           commit-message: 'chore(deps): npm audit fix'
           title: 'chore(deps): npm audit fix'
-          body: |
-            Automated dependency fixes produced by `npm audit fix`.
-            Please review the lockfile changes and run CI/tests before merging.
+          body-path: audit-pr-body.md
           branch: 'audit-fix'
           labels: 'dependencies, automated'
