@@ -84,7 +84,10 @@ Output is produced in `standalone/`.
 npm run build:deb
 ```
 
-Package artifacts are generated in `build_deb/`.
+Produces two packages in `build_deb/`:
+
+- `nest-deb.deb` — main application + systemd service
+- `nest-plugins-deb.deb` — bundled plugins (requires `nest` installed first)
 
 ## Configuration
 

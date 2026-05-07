@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+NEST_CONF="/etc/nest/nest.conf"
+
+# Only warn on 'remove'; nothing to do on other actions (upgrade, etc.)
+if [ "$1" = "remove" ]; then
+    PLUGINS_DIR=""
+    if [ -f "$NEST_CONF" ]; then
+        PLUGINS_DIR=$(grep -E '^PLUGINS_DIR=' "$NEST_CONF" | cut -d= -f2-)
+    fi
+
+    if [ -n "$PLUGINS_DIR" ]; then
+        echo "WARNING: nest-plugins has been removed, but plugin files were NOT deleted from $PLUGINS_DIR."
+        echo "         This directory may also contain user-added plugins. Remove manually if desired."
+    fi
+fi

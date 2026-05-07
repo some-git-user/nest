@@ -104,6 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s ./build_deb/nest-deb.deb
+          test -s ./build_deb/nest-plugins-deb.deb
           test -s ./script/check_nest.sh
 
       - name: Create Release and Upload Assets
@@ -117,6 +118,7 @@ jobs:
           previous_tag: ${{ steps.changelog.outputs.previous_tag }}
           files: |
             ./build_deb/nest-deb.deb
+            ./build_deb/nest-plugins-deb.deb
             ./script/check_nest.sh
           fail_on_unmatched_files: true
           draft: false

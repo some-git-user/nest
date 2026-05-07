@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+NEST_CONF="/etc/nest/nest.conf"
+STAGING_DIR="/usr/share/nest-plugins"
+
+if [ ! -f "$NEST_CONF" ]; then
+    echo "Error: $NEST_CONF not found. Is the 'nest' package installed?" >&2
+    exit 1
+fi
+
+# Read PLUGINS_DIR from the installed nest.conf
+PLUGINS_DIR=$(grep -E '^PLUGINS_DIR=' "$NEST_CONF" | cut -d= -f2-)
+
+if [ -z "$PLUGINS_DIR" ]; then
+    echo "Error: PLUGINS_DIR not set in $NEST_CONF." >&2
+    exit 1
+fi
+
+mkdir -p "$PLUGINS_DIR"
+
+# Copy staged plugins to the configured PLUGINS_DIR
+for f in "$STAGING_DIR"/*.ts; do
+    [ -f "$f" ] || continue
+    cp "$f" "$PLUGINS_DIR/"
+done
+
+echo "Plugins installed to $PLUGINS_DIR"
