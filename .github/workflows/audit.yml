@@ -242,6 +242,22 @@ jobs:
             audit-pr-body.md
           retention-days: 14
 
+      - name: Verify audit report file exists
+        run: |
+          if [ ! -f audit-pr-body.md ]; then
+            echo "WARNING: audit-pr-body.md not found, creating default body"
+            cat > audit-pr-body.md << 'EOF'
+          ## npm audit security summary (prod dependencies)
+          
+          Automated dependency fixes produced by `npm audit fix --omit=dev`.
+          
+          Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).
+          Please review lockfile changes and run CI/tests before merging.
+          EOF
+          fi
+          echo "✓ Audit report file ready"
+          wc -l audit-pr-body.md
+
       - name: Create PR if lockfile changed
         uses: peter-evans/create-pull-request@v8
         with:
@@ -251,6 +267,13 @@ jobs:
             package.json
           commit-message: 'chore(deps): npm audit fix'
           title: 'chore(deps): npm audit fix'
-          body-path: audit-pr-body.md
+          body-path: ${{ github.workspace }}/audit-pr-body.md
+          body: |
+            ## npm audit security summary (prod dependencies)
+            
+            Automated dependency fixes produced by `npm audit fix --omit=dev`.
+            
+            Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).
+            Please review lockfile changes and run CI/tests before merging.
           branch: 'audit-fix'
           labels: 'dependencies, automated'
