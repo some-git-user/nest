@@ -23,3 +23,9 @@ certs
 
 # plugins whitelist
 plugins/plugin-whitelist.txt
+
+# misc temporary files
+*.log
+*.tmp
+*.bak
+temp
