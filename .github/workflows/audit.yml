@@ -154,6 +154,36 @@ jobs:
             return `- ${label}: audit report JSON parse failed (npm exit code ${exitCode}).`
           }
 
+          function parseDiagnostics(label, path, exitCode, report) {
+            if (report) return []
+
+            const lines = []
+            if (!fs.existsSync(path)) {
+              lines.push(`- ${label}: diagnostics: file '${path}' not found.`)
+              return lines
+            }
+
+            let size = 0
+            try {
+              size = fs.statSync(path).size
+            } catch {
+              // Keep default size when stat fails.
+            }
+
+            let firstLine = ''
+            try {
+              const raw = fs.readFileSync(path, 'utf8')
+              firstLine = (raw.split(/\r?\n/)[0] || '').slice(0, 240)
+            } catch {
+              // Keep empty preview when read fails.
+            }
+
+            const preview = firstLine.trim() || '(empty line)'
+            lines.push(`- ${label}: diagnostics: file='${path}', size=${size} bytes, npm exit code ${exitCode}.`)
+            lines.push(`- ${label}: diagnostics: first line preview: ${preview}`)
+            return lines
+          }
+
             const beforeExitCode = safeReadExitCode('audit-before.exitcode')
             const fixExitCode = safeReadExitCode('audit-fix.exitcode')
             const afterExitCode = safeReadExitCode('audit-after.exitcode')
@@ -196,6 +226,16 @@ jobs:
           pr.push('Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).')
           pr.push('Please review lockfile changes and run CI/tests before merging.')
 
+          const prDiagnostics = [
+            ...parseDiagnostics('Before fix', 'audit-before.json', beforeExitCode, beforeReport),
+            ...parseDiagnostics('After fix', 'audit-after.json', afterExitCode, afterReport),
+          ]
+          if (prDiagnostics.length) {
+            pr.push('')
+            pr.push('Audit JSON parse diagnostics:')
+            pr.push(...prDiagnostics)
+          }
+
           fs.writeFileSync('audit-pr-body.md', pr.join('\n') + '\n')
 
           const summary = []
@@ -216,6 +256,16 @@ jobs:
                 summary.push(`- [${f.sev}] ${f.pkg}: ${f.title}`)
               }
             }
+          }
+
+          const summaryDiagnostics = [
+            ...parseDiagnostics('Before fix', 'audit-before.json', beforeExitCode, beforeReport),
+            ...parseDiagnostics('After fix', 'audit-after.json', afterExitCode, afterReport),
+          ]
+          if (summaryDiagnostics.length) {
+            summary.push('')
+            summary.push('Audit JSON parse diagnostics:')
+            summary.push(...summaryDiagnostics)
           }
 
           fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\n') + '\n')
