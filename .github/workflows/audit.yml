@@ -146,6 +146,14 @@ jobs:
             return `- ${label}: critical=${c.critical || 0}, high=${c.high || 0}, moderate=${c.moderate || 0}, low=${c.low || 0}, info=${c.info || 0}`
           }
 
+          function renderAuditStatus(label, exitCode, report, counts) {
+            if (report) {
+              const suffix = exitCode === 0 ? '' : ` (npm exit code ${exitCode}; expected when vulnerabilities are present)`
+              return `${renderCounts(label, counts)}${suffix}`
+            }
+            return `- ${label}: audit report JSON parse failed (npm exit code ${exitCode}).`
+          }
+
             const beforeExitCode = safeReadExitCode('audit-before.exitcode')
             const fixExitCode = safeReadExitCode('audit-fix.exitcode')
             const afterExitCode = safeReadExitCode('audit-after.exitcode')
@@ -167,19 +175,11 @@ jobs:
             }
           pr.push('')
             pr.push('### Security Summary (npm audit --omit=dev)')
-            if (beforeExitCode === 0 && beforeReport) {
-              pr.push(renderCounts('Before fix', beforeCounts))
-            } else {
-              pr.push(`- Before fix: audit collection failed (exit code ${beforeExitCode}).`)
-            }
-            if (afterExitCode === 0 && afterReport) {
-              pr.push(renderCounts('After fix', afterCounts))
-            } else {
-              pr.push(`- After fix: audit collection failed (exit code ${afterExitCode}).`)
-            }
+            pr.push(renderAuditStatus('Before fix', beforeExitCode, beforeReport, beforeCounts))
+            pr.push(renderAuditStatus('After fix', afterExitCode, afterReport, afterCounts))
           pr.push('')
             pr.push('Top findings before fix (prod dependencies only):')
-            if (beforeExitCode !== 0 || !beforeReport) {
+            if (!beforeReport) {
               pr.push('- No findings listed because npm audit report generation failed.')
             } else if (!findings.length) {
             pr.push('- No vulnerability details found in npm audit output.')
@@ -200,19 +200,11 @@ jobs:
 
           const summary = []
             summary.push('## npm audit security summary (prod dependencies)')
-            if (beforeExitCode === 0 && beforeReport) {
-              summary.push(renderCounts('Before fix', beforeCounts))
-            } else {
-              summary.push(`- Before fix: audit collection failed (exit code ${beforeExitCode}).`)
-            }
-            if (afterExitCode === 0 && afterReport) {
-              summary.push(renderCounts('After fix', afterCounts))
-            } else {
-              summary.push(`- After fix: audit collection failed (exit code ${afterExitCode}).`)
-            }
+            summary.push(renderAuditStatus('Before fix', beforeExitCode, beforeReport, beforeCounts))
+            summary.push(renderAuditStatus('After fix', afterExitCode, afterReport, afterCounts))
           summary.push('')
             summary.push('Top findings before fix (prod dependencies only):')
-            if (beforeExitCode !== 0 || !beforeReport) {
+            if (!beforeReport) {
               summary.push('- No findings listed because npm audit report generation failed.')
             } else if (!findings.length) {
             summary.push('- No vulnerability details found in npm audit output.')
