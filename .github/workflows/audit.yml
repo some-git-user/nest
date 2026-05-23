@@ -248,9 +248,9 @@ jobs:
             echo "WARNING: audit-pr-body.md not found, creating default body"
             cat > audit-pr-body.md << 'EOF'
           ## npm audit security summary (prod dependencies)
-          
+
           Automated dependency fixes produced by `npm audit fix --omit=dev`.
-          
+
           Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).
           Please review lockfile changes and run CI/tests before merging.
           EOF
@@ -270,9 +270,9 @@ jobs:
           body-path: ${{ github.workspace }}/audit-pr-body.md
           body: |
             ## npm audit security summary (prod dependencies)
-            
+
             Automated dependency fixes produced by `npm audit fix --omit=dev`.
-            
+
             Full audit JSON reports are attached as workflow artifacts (`audit-before.json`, `audit-after.json`).
             Please review lockfile changes and run CI/tests before merging.
           branch: 'audit-fix'
