@@ -21,14 +21,17 @@ import type {
 } from '../types/plugin-meta';
 
 const router = express.Router();
-const pluginsDir = path.join(process.cwd(), env.PLUGINS_DIR);
+const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
 const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
 const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
+const configuredPluginWhitelistPath = String(
+	env.PLUGIN_WHITELIST_PATH || '',
+).trim();
 const pluginWhitelistPath = path.resolve(
 	process.cwd(),
-	String(env.PLUGIN_WHITELIST_PATH || '').trim() ||
-		path.join(env.PLUGINS_DIR, 'plugin-whitelist.txt'),
+	configuredPluginWhitelistPath ||
+		path.join(pluginsDir, 'plugin-whitelist.txt'),
 );
 
 export const pluginStartupWarnings: string[] = [];

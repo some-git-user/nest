@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import express from 'express';
+import path from 'path';
 import request from 'supertest';
 
 type BuildAppOptions = {
@@ -8,6 +9,8 @@ type BuildAppOptions = {
 	pluginFileUid?: number;
 	pluginFileMode?: number;
 	pluginModule?: unknown;
+	pluginsDir?: string;
+	pluginWhitelistPath?: string;
 };
 
 describe('dynamic routes (plugins)', () => {
@@ -30,11 +33,17 @@ describe('dynamic routes (plugins)', () => {
 			'/plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>';
 		const pluginSource = 'export const checkTest = async () => ({})';
 		const pluginFiles = options.pluginFiles ?? ['check_test.ts'];
+		const pluginsDir = options.pluginsDir ?? 'plugins';
+		const whitelistPath = options.pluginWhitelistPath
+			? path.resolve(process.cwd(), options.pluginWhitelistPath)
+			: path.join(
+					path.resolve(process.cwd(), pluginsDir),
+					'plugin-whitelist.txt',
+				);
 		const approvedHash = crypto
 			.createHash('sha256')
 			.update(pluginSource)
 			.digest('hex');
-		const whitelistPath = `${process.cwd()}/plugins/plugin-whitelist.txt`;
 		const currentUid =
 			typeof process.getuid === 'function' ? process.getuid() : 1000;
 		const pluginFileUid = options.pluginFileUid ?? currentUid;
@@ -194,8 +203,8 @@ describe('dynamic routes (plugins)', () => {
 				NODE_ENV: options.nodeEnv ?? 'production',
 				HOST: 'localhost',
 				PORT: 5000,
-				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
+				PLUGINS_DIR: pluginsDir,
+				PLUGIN_WHITELIST_PATH: options.pluginWhitelistPath ?? '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -227,6 +236,7 @@ describe('dynamic routes (plugins)', () => {
 			app: builtApp,
 			registeredPluginRoutes: registeredPluginRoutes!,
 			registeredPluginRouteExamples: registeredPluginRouteExamples!,
+			logger,
 		};
 	};
 
@@ -236,6 +246,14 @@ describe('dynamic routes (plugins)', () => {
 
 	afterEach(() => {
 		cleanupTestMocks();
+	});
+
+	test('preserves absolute PLUGINS_DIR when resolving plugin directory', () => {
+		const {logger} = buildApp({pluginsDir: '/opt/nest-plugins'});
+
+		expect(logger.info).toHaveBeenCalledWith(
+			'Use plugins directory: /opt/nest-plugins',
+		);
 	});
 
 	test('check-test plugin returns a Nagios-style JSON object', async () => {
