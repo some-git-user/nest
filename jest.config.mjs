@@ -1,6 +1,7 @@
 export default {
 	roots: ['<rootDir>/src', '<rootDir>/plugins'],
 	coveragePathIgnorePatterns: ['<rootDir>/plugins/plugin-cache/'],
+	moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 	testMatch: [
 		'**/__tests__/**/*.+(ts|tsx|js)',
 		'**/?(*.)+(spec|test).+(ts|tsx|js)',
