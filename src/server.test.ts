@@ -17,14 +17,20 @@ describe('server bootstrap', () => {
 		res: {
 			setHeader: (name: string, value: string) => unknown;
 			send: (body: unknown) => unknown;
+			locals?: Record<string, string>;
 		},
 	) => unknown;
 	type NotFoundHandler = (
 		req: {url: string},
 		res: {status: (code: number) => {send: (body: unknown) => unknown}},
 	) => unknown;
+	type MiddlewareHandler = (
+		req: unknown,
+		res: unknown,
+		next?: () => void,
+	) => unknown;
 	type GetRouteCall = [string, FaviconHandler | RootHandler];
-	type UseCall = [string | NotFoundHandler, unknown?];
+	type UseCall = [string | NotFoundHandler | MiddlewareHandler, unknown?];
 
 	afterEach(() => {
 		jest.restoreAllMocks();
@@ -89,7 +95,7 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
-			default: jest.fn(() => helmetMiddleware),
+			default: jest.fn((_config?: unknown) => helmetMiddleware),
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
@@ -207,17 +213,23 @@ describe('server bootstrap', () => {
 		const guardScriptCall = getCalls.find(
 			([route]) => route === '/help/external-link-guard.js',
 		);
+		const pluginExampleFormScriptCall = getCalls.find(
+			([route]) => route === '/help/plugin-example-form.js',
+		);
 		const warningHelpCall = getCalls.find(
 			([route]) => route === '/help/startup-warnings/:warningId',
 		);
 		const rootCall = getCalls.find(([route]) => route === '/');
 		const notFoundCall = useCalls.find(
-			(call): call is [NotFoundHandler] => typeof call[0] === 'function',
+			(call): call is [NotFoundHandler] =>
+				typeof call[0] === 'function' && call[0].length === 2,
 		);
 		const faviconEnd = jest.fn();
 		const faviconStatus = jest.fn(() => ({end: faviconEnd}));
 		const guardScriptSetHeader = jest.fn();
 		const guardScriptSend = jest.fn();
+		const pluginExampleFormScriptSetHeader = jest.fn();
+		const pluginExampleFormScriptSend = jest.fn();
 		const rootSetHeader = jest.fn();
 		const rootSend = jest.fn();
 		const warningHelpSetHeader = jest.fn();
@@ -228,15 +240,21 @@ describe('server bootstrap', () => {
 		}));
 		const send = jest.fn();
 		const status = jest.fn(() => ({send}));
+		const rootLocals = {cspNonce: 'test-nonce-12345678901234567890'};
 
 		expect(faviconCall).toBeDefined();
 		expect(guardScriptCall).toBeDefined();
+		expect(pluginExampleFormScriptCall).toBeDefined();
 		expect(warningHelpCall).toBeDefined();
 		expect(rootCall).toBeDefined();
 		expect(notFoundCall).toBeDefined();
 
 		const [, faviconHandler] = faviconCall as [string, FaviconHandler];
 		const [, guardScriptHandler] = guardScriptCall as [
+			string,
+			GuardScriptHandler,
+		];
+		const [, pluginExampleFormScriptHandler] = pluginExampleFormScriptCall as [
 			string,
 			GuardScriptHandler,
 		];
@@ -260,6 +278,13 @@ describe('server bootstrap', () => {
 			{
 				setHeader: guardScriptSetHeader,
 				send: guardScriptSend,
+			},
+		);
+		pluginExampleFormScriptHandler(
+			{},
+			{
+				setHeader: pluginExampleFormScriptSetHeader,
+				send: pluginExampleFormScriptSend,
 			},
 		);
 		warningHelpHandler(
@@ -286,7 +311,10 @@ describe('server bootstrap', () => {
 				status: warningHelpUnknownStatus,
 			},
 		);
-		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
+		rootHandler(
+			{},
+			{setHeader: rootSetHeader, send: rootSend, locals: rootLocals},
+		);
 		notFoundHandler({url: '/missing'}, {status});
 
 		eventHandlers.get('unhandledRejection')?.({message: 'rejection'});
@@ -298,6 +326,10 @@ describe('server bootstrap', () => {
 		expect(get).toHaveBeenCalledWith('/favicon.ico', expect.any(Function));
 		expect(get).toHaveBeenCalledWith(
 			'/help/external-link-guard.js',
+			expect.any(Function),
+		);
+		expect(get).toHaveBeenCalledWith(
+			'/help/plugin-example-form.js',
 			expect.any(Function),
 		);
 		expect(get).toHaveBeenCalledWith(
@@ -326,6 +358,13 @@ describe('server bootstrap', () => {
 		);
 		expect(guardScriptSend).toHaveBeenCalledWith(
 			expect.stringContaining('window.confirm'),
+		);
+		expect(pluginExampleFormScriptSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'application/javascript; charset=utf-8',
+		);
+		expect(pluginExampleFormScriptSend).toHaveBeenCalledWith(
+			expect.stringContaining("document.addEventListener('submit'"),
 		);
 		expect(warningHelpSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
@@ -367,6 +406,11 @@ describe('server bootstrap', () => {
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
 				'<form class="plugin-example-form" method="post" action="/plugins/check-test">',
+			),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'<script src="/help/plugin-example-form.js" defer></script>',
 			),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
@@ -521,7 +565,7 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
-			default: jest.fn(() => helmetMiddleware),
+			default: jest.fn((_config?: unknown) => helmetMiddleware),
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
@@ -589,9 +633,13 @@ describe('server bootstrap', () => {
 		const rootCall = getCalls.find(([route]) => route === '/');
 		const rootSetHeader = jest.fn();
 		const rootSend = jest.fn();
+		const rootLocals = {cspNonce: 'test-nonce-12345678901234567890'};
 		expect(rootCall).toBeDefined();
 		const [, rootHandler] = rootCall as [string, RootHandler];
-		rootHandler({}, {setHeader: rootSetHeader, send: rootSend});
+		rootHandler(
+			{},
+			{setHeader: rootSetHeader, send: rootSend, locals: rootLocals},
+		);
 
 		expect(expressFactory).toHaveBeenCalledTimes(1);
 		expect(use).toHaveBeenCalledWith('json-middleware');
@@ -642,7 +690,7 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
-			default: jest.fn(() => helmetMiddleware),
+			default: jest.fn((_config?: unknown) => helmetMiddleware),
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
@@ -722,5 +770,66 @@ describe('server bootstrap', () => {
 				max: 120,
 			}),
 		);
+	});
+});
+
+describe('form submission filtering', () => {
+	it('filters empty parameters from GET form submission URLs', () => {
+		const buildUrl = (params: Record<string, string>): string => {
+			const url = new URL('http://localhost/plugins/check-nvidia-smi');
+			for (const [key, value] of Object.entries(params)) {
+				if (value !== '') {
+					url.searchParams.append(key, value);
+				}
+			}
+			return url.toString();
+		};
+
+		// All empty fields
+		const result = buildUrl({
+			expectedGpuCount: '',
+			warningTempC: '',
+			criticalTempC: '',
+			warningUtilizationPercent: '',
+			criticalUtilizationPercent: '',
+			warningMemoryUsagePercent: '',
+			criticalMemoryUsagePercent: '',
+			warningPowerUsagePercent: '',
+			criticalPowerUsagePercent: '',
+		});
+
+		expect(result).toBe('http://localhost/plugins/check-nvidia-smi');
+		expect(result).not.toContain('expectedGpuCount=');
+		expect(result).not.toContain('warningTempC=');
+		expect(result).not.toContain('?');
+	});
+
+	it('includes non-empty parameters in filtered URLs', () => {
+		const buildUrl = (params: Record<string, string>): string => {
+			const url = new URL('http://localhost/plugins/check-nvidia-smi');
+			for (const [key, value] of Object.entries(params)) {
+				if (value !== '') {
+					url.searchParams.append(key, value);
+				}
+			}
+			return url.toString();
+		};
+
+		const result = buildUrl({
+			expectedGpuCount: '',
+			warningTempC: '80',
+			criticalTempC: '',
+			warningUtilizationPercent: '75',
+			criticalUtilizationPercent: '',
+			warningMemoryUsagePercent: '',
+			criticalMemoryUsagePercent: '',
+			warningPowerUsagePercent: '',
+			criticalPowerUsagePercent: '',
+		});
+
+		expect(result).toContain('warningTempC=80');
+		expect(result).toContain('warningUtilizationPercent=75');
+		expect(result).not.toContain('expectedGpuCount=');
+		expect(result).not.toContain('criticalTempC=');
 	});
 });

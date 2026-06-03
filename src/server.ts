@@ -37,6 +37,7 @@ import type {PluginRouteExample} from './types/plugin-meta';
 
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
+const PLUGIN_EXAMPLE_FORM_SCRIPT_PATH = '/help/plugin-example-form.js';
 
 const escapeHtml = (value: string): string =>
 	value
@@ -44,6 +45,9 @@ const escapeHtml = (value: string): string =>
 		.replace(/</g, '&lt;')
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;');
+
+const getPluginExampleFormScriptContent = (): string =>
+	`(function(){document.addEventListener('submit',function(event){const target=event.target;if(!(target instanceof HTMLFormElement)){return;}if(!target.classList.contains('plugin-example-form')){return;}console.log('[nest-form-filter] intercepting form submit');event.preventDefault();const method=(target.getAttribute('method')||'get').toLowerCase();console.log('[nest-form-filter] method:',method);const action=target.getAttribute('action')||window.location.pathname;console.log('[nest-form-filter] action:',action);const destination=new URL(action,window.location.href);if(method==='get'){const formData=new FormData(target);const entries=Array.from(formData.entries());console.log('[nest-form-filter] form fields before filter:',entries);destination.search='';for(const [name,value] of formData.entries()){if(typeof value==='string'&&value!==''){destination.searchParams.append(name,value);}}const finalUrl=destination.toString();console.log('[nest-form-filter] navigating to:',finalUrl);window.location.assign(finalUrl);}else{console.log('[nest-form-filter] handling POST form');const formData=new FormData(target);const filtered=new FormData();for(const [name,value] of formData.entries()){if(typeof value==='string'&&value!==''){filtered.append(name,value);}}target.innerHTML='';for(const [name,value] of filtered.entries()){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;target.appendChild(input);}const form=document.createElement('form');form.method='POST';form.action=action;for(const [name,value] of filtered.entries()){const input=document.createElement('input');input.type='hidden';input.name=name;input.value=value;form.appendChild(input);}document.body.appendChild(form);form.submit();}},true);})();`;
 
 const buildOverviewPageHtml = (
 	host: string,
@@ -143,6 +147,7 @@ li{margin:.35rem 0}
 .startup-warning-whitelist-entry{background:#fff3cd;border:1px solid #f2d28b;border-radius:4px;padding:.55rem .7rem;overflow-x:auto;white-space:pre;margin:.5rem 0}
 .startup-warning-whitelist-entry code{background:transparent;padding:0}
 </style>
+	<script src="${PLUGIN_EXAMPLE_FORM_SCRIPT_PATH}" defer></script>
 </head>
 <body>
 <h1 class="title-row">Nest Route Overview</h1>
@@ -207,6 +212,10 @@ app.get('/favicon.ico', (_req: Request, res: Response) => {
 app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
 	return res.send(getExternalLinkGuardScriptContent());
+});
+app.get(PLUGIN_EXAMPLE_FORM_SCRIPT_PATH, (_req: Request, res: Response) => {
+	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+	return res.send(getPluginExampleFormScriptContent());
 });
 app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
 	const warningId = String(req.params?.warningId ?? '');
