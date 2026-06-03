@@ -1,1 +1,1 @@
-npm run validate
+npm run test:coverage:src && npm run validate

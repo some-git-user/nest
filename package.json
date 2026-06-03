@@ -20,6 +20,7 @@
 		"fix:vulnerabilities": "npm audit fix --omit=dev --ignore-scripts",
 		"test": "jest --watch",
 		"test:ci": "jest --runInBand",
+		"test:coverage:src": "jest --coverage --collectCoverageFrom='src/**/*.{ts,tsx}' --collectCoverageFrom='!src/**/*.d.ts' --collectCoverageFrom='!src/**/*.test.ts' --collectCoverageFrom='!src/**/*.spec.ts' --collectCoverageFrom='!src/**/*.test.tsx' --collectCoverageFrom='!src/**/*.spec.tsx' && npm run test:shell",
 		"test:coverage": "jest --coverage && npm run test:shell",
 		"validate": "npm run lint:check && npm run format:check && npx tsc --noEmit && npm run build && npm run test:ci",
 		"prepare": "node .husky/install.mjs"
