@@ -24,6 +24,7 @@ import {
 	renderStartupWarningHelpHtml,
 	renderStartupWarningListItems,
 } from './lib/startup-warning-help';
+import {getStartupWarnings} from './lib/startup-warning-registry';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
@@ -188,7 +189,13 @@ if (env.ENABLE_SECURITY_MIDDLEWARE) {
 }
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
-const startupWarnings = [...pluginStartupWarnings, ...securityWarnings];
+const startupWarnings = Array.from(
+	new Set([
+		...getStartupWarnings(),
+		...pluginStartupWarnings,
+		...securityWarnings,
+	]),
+);
 for (const warning of securityWarnings) {
 	logger.warn(warning);
 }

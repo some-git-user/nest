@@ -146,6 +146,17 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Restart the service to load the now-approved plugin.',
 		],
 	},
+	'plugin-insecure-permissions': {
+		id: 'plugin-insecure-permissions',
+		title: 'Plugin File Permissions Are Insecure',
+		description:
+			'The plugin file is writable by group or other users, so the service refuses to register it.',
+		handlingSteps: [
+			'Set restrictive permissions on the plugin file so only the service owner can modify it.',
+			'Confirm the file is not group-writable or world-writable with ls -l.',
+			'Restart the service after fixing the file permissions.',
+		],
+	},
 	'plugin-hash-changed': {
 		id: 'plugin-hash-changed',
 		title: 'Plugin Hash Changed',
@@ -207,6 +218,10 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		matcher: /could not hash .*skipping plugin registration/i,
 	},
 	{id: 'plugin-not-whitelisted', matcher: /is new or not whitelisted/i},
+	{
+		id: 'plugin-insecure-permissions',
+		matcher: /Skipping plugin .* due to insecure permissions/i,
+	},
 	{id: 'plugin-hash-changed', matcher: /hash changed\. whitelist expects/i},
 ];
 

@@ -22,6 +22,12 @@ describe('startup warning help', () => {
 
 		expect(
 			resolveStartupWarningTopicId(
+				'Skipping plugin /opt/nest-plugins/check_nvidia_smi.ts due to insecure permissions: plugin files must not be writable by group or others.',
+			),
+		).toBe('plugin-insecure-permissions');
+
+		expect(
+			resolveStartupWarningTopicId(
 				'Plugin trust warning: whitelist file plugins/plugin-whitelist.txt has insecure permissions; it must not be writable by group or others. Refusing to trust whitelist entries.',
 			),
 		).toBe('whitelist-insecure-permissions');
@@ -37,10 +43,14 @@ describe('startup warning help', () => {
 		const html = renderStartupWarningListItems([
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
 			'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc.',
+			'Skipping plugin /opt/nest-plugins/check_nvidia_smi.ts due to insecure permissions: plugin files must not be writable by group or others.',
 		]);
 
 		expect(html).toContain('/help/startup-warnings/api-key-missing');
 		expect(html).toContain('/help/startup-warnings/plugin-not-whitelisted');
+		expect(html).toContain(
+			'/help/startup-warnings/plugin-insecure-permissions',
+		);
 		expect(html).toContain('How to resolve this warning');
 	});
 

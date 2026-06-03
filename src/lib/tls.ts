@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {env} from '../config/env';
 import {logger} from './logger';
+import {recordStartupWarning} from './startup-warning-registry';
 
 const resolvePathFromCwd = (inputPath: string): string => {
 	if (path.isAbsolute(inputPath)) {
@@ -92,6 +93,9 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 	}
 
 	logger.warn(
+		`TLS certificate or key missing. Generating self-signed certificate at cert=${certPath}, key=${keyPath}`,
+	);
+	recordStartupWarning(
 		`TLS certificate or key missing. Generating self-signed certificate at cert=${certPath}, key=${keyPath}`,
 	);
 

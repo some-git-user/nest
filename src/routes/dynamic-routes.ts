@@ -12,6 +12,10 @@ import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
 import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
+import {
+	recordStartupWarning,
+	recordStartupWarnings,
+} from '../lib/startup-warning-registry';
 import type {
 	PluginExampleField,
 	PluginExampleFieldInputType,
@@ -260,9 +264,9 @@ const isPluginFileSecurityAcceptable = (
 	}
 
 	if (!validation.ok && validation.reason === 'group-or-other-writable') {
-		logger.warn(
-			`Skipping plugin ${filePath} due to insecure permissions: plugin files must not be writable by group or others.`,
-		);
+		const warning = `Skipping plugin ${filePath} due to insecure permissions: plugin files must not be writable by group or others.`;
+		recordStartupWarning(warning);
+		logger.warn(warning);
 		return false;
 	}
 
@@ -362,6 +366,7 @@ const pluginWhitelistVerification = verifyPluginWhitelist({
 	whitelistPath: pluginWhitelistPath,
 });
 pluginStartupWarnings.push(...pluginWhitelistVerification.warnings);
+recordStartupWarnings(pluginWhitelistVerification.warnings);
 for (const warning of pluginStartupWarnings) {
 	logger.warn(warning);
 }
@@ -392,9 +397,9 @@ effectivePluginFiles.forEach((file) => {
 	const helpUrl = buildPluginHelpUrl(kebabCasePath);
 	const existingFilePath = routePathToFilePath.get(kebabCasePath);
 	if (existingFilePath) {
-		logger.warn(
-			`Skipping plugin ${filePath} because route ${kebabCasePath} already belongs to ${existingFilePath}. Keep plugin filenames unique after kebab-case normalization.`,
-		);
+		const warning = `Skipping plugin ${filePath} because route ${kebabCasePath} already belongs to ${existingFilePath}. Keep plugin filenames unique after kebab-case normalization.`;
+		recordStartupWarning(warning);
+		logger.warn(warning);
 		return;
 	}
 	routePathToFilePath.set(kebabCasePath, filePath);

@@ -6,6 +6,7 @@ import {
 } from './browser-auth';
 import {sendNagiosUnknownError} from './http-nagios';
 import {getClientIpFromRequest, normalizeIp} from './request-ip';
+import {recordStartupWarnings} from './startup-warning-registry';
 
 export type AccessControlConfig = {
 	apiKey?: string;
@@ -54,6 +55,7 @@ export const getRecommendedSecurityWarnings = (
 		warnings.push(
 			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
 		);
+		recordStartupWarnings(warnings);
 		return warnings;
 	}
 
@@ -82,6 +84,8 @@ export const getRecommendedSecurityWarnings = (
 			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
 		);
 	}
+
+	recordStartupWarnings(warnings);
 
 	return warnings;
 };
