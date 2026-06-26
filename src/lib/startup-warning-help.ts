@@ -36,9 +36,9 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 	},
 	'allowed-ips-empty': {
 		id: 'allowed-ips-empty',
-		title: 'Allowed IP List Is Empty',
+		title: 'Allowed IP List Not Configured',
 		description:
-			'No source-IP restriction is applied, so requests can come from any address.',
+			'No ALLOWED_IPS value is configured, so access is restricted to loopback by default (127.0.0.1, ::1).',
 		handlingSteps: [
 			'Set ALLOWED_IPS to a comma-separated list of trusted monitoring source IPs.',
 			'Use exact IP values and avoid leaving the variable blank.',
@@ -186,7 +186,7 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		matcher: /ENABLE_SECURITY_MIDDLEWARE is disabled/i,
 	},
 	{id: 'api-key-missing', matcher: /API_KEY is not configured/i},
-	{id: 'allowed-ips-empty', matcher: /ALLOWED_IPS is empty/i},
+	{id: 'allowed-ips-empty', matcher: /ALLOWED_IPS is not configured/i},
 	{
 		id: 'allowed-ips-loopback-only',
 		matcher: /ALLOWED_IPS is limited to loopback addresses/i,

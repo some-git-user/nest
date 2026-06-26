@@ -23,6 +23,8 @@ export type RecommendedSecurityConfig = {
 	RATE_LIMIT_MAX?: number;
 };
 
+const DEFAULT_ALLOWED_IPS = '127.0.0.1,::1';
+
 const parseAllowedIps = (value: string | undefined): Set<string> => {
 	if (!value) {
 		return new Set<string>();
@@ -36,14 +38,14 @@ const parseAllowedIps = (value: string | undefined): Set<string> => {
 	);
 };
 
-const isDefaultLoopbackAllowlist = (value: string | undefined): boolean => {
-	const allowedIps = parseAllowedIps(value);
+const getAllowedIpsOrDefault = (value: string | undefined): Set<string> => {
+	const parsedAllowedIps = parseAllowedIps(value);
 
-	return (
-		allowedIps.size === 2 &&
-		allowedIps.has('127.0.0.1') &&
-		allowedIps.has('::1')
-	);
+	if (parsedAllowedIps.size > 0) {
+		return parsedAllowedIps;
+	}
+
+	return parseAllowedIps(DEFAULT_ALLOWED_IPS);
 };
 
 export const getRecommendedSecurityWarnings = (
@@ -65,14 +67,9 @@ export const getRecommendedSecurityWarnings = (
 		);
 	}
 
-	const allowedIpsValue = String(config.ALLOWED_IPS ?? '').trim();
-	if (allowedIpsValue.length === 0) {
+	if (parseAllowedIps(config.ALLOWED_IPS).size === 0) {
 		warnings.push(
-			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
-		);
-	} else if (isDefaultLoopbackAllowlist(config.ALLOWED_IPS)) {
-		warnings.push(
-			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
+			'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 		);
 	}
 
@@ -93,7 +90,7 @@ export const getRecommendedSecurityWarnings = (
 export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 	const expectedApiKey = String(config.apiKey ?? '').trim();
 	const apiKeyHeader = String(config.apiKeyHeader ?? 'x-api-key').toLowerCase();
-	const allowedIps = parseAllowedIps(config.allowedIps);
+	const allowedIps = getAllowedIpsOrDefault(config.allowedIps);
 
 	return (req: Request, res: Response, next: NextFunction) => {
 		if (expectedApiKey.length > 0) {

@@ -14,10 +14,20 @@ describe('security middleware', () => {
 		return app;
 	};
 
-	test('allows request when no restrictions are configured', async () => {
+	test('allows loopback request when allowedIps is not configured', async () => {
 		const app = makeApp(createAccessControlMiddleware({}));
 		const res = await request(app).get('/ok');
 		expect(res.status).toBe(200);
+	});
+
+	test('denies non-loopback request when allowedIps is not configured', async () => {
+		const app = makeApp(createAccessControlMiddleware({}));
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(403);
+		expect(String(body.message)).toContain('not allowed');
 	});
 
 	test('denies request when API key is missing', async () => {

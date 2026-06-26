@@ -23,7 +23,7 @@ describe('getRecommendedSecurityWarnings', () => {
 		]);
 	});
 
-	test('warns when api key and allowed IPs are missing in production', () => {
+	test('warns when api key is missing in production', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
@@ -35,11 +35,10 @@ describe('getRecommendedSecurityWarnings', () => {
 			}),
 		).toEqual([
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
-			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		]);
 	});
 
-	test('warns when allowed IPs are explicitly emptied in production', () => {
+	test('does not warn when allowed IPs are explicitly emptied in production', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
@@ -50,8 +49,21 @@ describe('getRecommendedSecurityWarnings', () => {
 				RATE_LIMIT_MAX: 120,
 			}),
 		).toEqual([
-			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
+			'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 		]);
+	});
+
+	test('does not warn when loopback IPs are explicitly configured', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				ENABLE_SECURITY_MIDDLEWARE: true,
+				API_KEY: 'secret',
+				ALLOWED_IPS: '127.0.0.1, ::1',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+			}),
+		).toEqual([]);
 	});
 
 	test('warns when rate limiting is non-positive', () => {
@@ -119,7 +131,7 @@ describe('getRecommendedSecurityWarnings', () => {
 			}),
 		).toEqual([
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
-			'Security recommendation: ALLOWED_IPS is empty; requests are not restricted to trusted source IPs.',
+			'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
 		]);
 	});
