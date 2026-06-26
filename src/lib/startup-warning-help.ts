@@ -164,7 +164,7 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'The current plugin file hash does not match the approved hash in the whitelist file.',
 		handlingSteps: [
 			'Review the plugin diff and confirm the change is expected.',
-			'Update the whitelist entry with the new approved sha256 hash.',
+			"Update the whitelist entry in 'plugins/plugin-whitelist.txt' with the new approved sha256 hash.",
 			'Restart the service to load the updated plugin.',
 		],
 	},
