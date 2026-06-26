@@ -121,15 +121,13 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 			}
 		}
 
-		if (allowedIps.size > 0) {
-			const requesterIp = getClientIpFromRequest(req);
-			if (!allowedIps.has(requesterIp)) {
-				return sendNagiosUnknownError(
-					res,
-					403,
-					`Forbidden: IP ${requesterIp} is not allowed`,
-				);
-			}
+		const requesterIp = getClientIpFromRequest(req);
+		if (!allowedIps.has(requesterIp)) {
+			return sendNagiosUnknownError(
+				res,
+				403,
+				`Forbidden: IP ${requesterIp} is not allowed`,
+			);
 		}
 
 		next();
