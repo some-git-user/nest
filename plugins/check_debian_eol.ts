@@ -1,5 +1,10 @@
 import fs from 'fs';
-import type {PluginMeta} from '../src/types/plugin-meta';
+import {NagiosReturnCodes} from '../src/types/nagios';
+import type {
+	HtmlTemplateString,
+	PluginMeta,
+	PluginReturn,
+} from '../src/types/plugin';
 
 type endoflifeResponseType = {
 	result: {
@@ -25,7 +30,7 @@ type endoflifeResponseType = {
 	};
 };
 
-export const meta = {
+export const meta: PluginMeta = {
 	usage: {
 		http: '/plugins/check-debian-eol?warningEolRemainingDays=<number>&criticalEolRemainingDays=<number>',
 		shell:
@@ -94,7 +99,7 @@ Outbound HTTPS to <code>endoflife.date</code> must be allowed.</p>
 
 <h2>Example</h2>
 <pre><code>GET /plugins/check-debian-eol?warningEolRemainingDays=90&amp;criticalEolRemainingDays=30</code></pre>
-<pre><code>./check_nest.sh check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30</code></pre>`,
+<pre><code>./check_nest.sh check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30</code></pre>` as HtmlTemplateString,
 } satisfies PluginMeta;
 
 const isEndoflifeResponse = (
@@ -119,11 +124,11 @@ const isEndoflifeResponse = (
 export const checkDebianEol = async (params: {
 	warningEolRemainingDays: number;
 	criticalEolRemainingDays: number;
-}) => {
+}): Promise<PluginReturn> => {
 	const {warningEolRemainingDays = 60, criticalEolRemainingDays = 30} = params;
-	const returnObject = {
+	const returnObject: PluginReturn = {
 		message: 'Should not be here',
-		code: 3,
+		code: NagiosReturnCodes.UNKNOWN,
 	};
 	const debianVersionFile = '/etc/os-release';
 	const debianVersion = await fs.promises
@@ -170,7 +175,7 @@ export const checkDebianEol = async (params: {
 		}
 		if (latestMatchingRelease.isEol) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL since ${latestMatchingRelease.eolFrom}`;
-			returnObject.code = 2;
+			returnObject.code = NagiosReturnCodes.CRITICAL;
 		}
 		const eolDate = new Date(latestMatchingRelease.eolFrom);
 		const today = new Date();
@@ -180,13 +185,13 @@ export const checkDebianEol = async (params: {
 
 		if (daysRemaining <= criticalEolRemainingDays) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
-			returnObject.code = 2; // CRITICAL
+			returnObject.code = NagiosReturnCodes.CRITICAL;
 		} else if (daysRemaining <= warningEolRemainingDays) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
-			returnObject.code = 1; // WARNING
+			returnObject.code = NagiosReturnCodes.WARNING;
 		} else if (daysRemaining > warningEolRemainingDays) {
 			returnObject.message = `Debian version "${debianVersion}" is not EOL. Remaining days: ${daysRemaining}`;
-			returnObject.code = 0; // OK
+			returnObject.code = NagiosReturnCodes.OK;
 		}
 	}
 
