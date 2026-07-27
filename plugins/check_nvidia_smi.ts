@@ -1,6 +1,11 @@
 import {execFile} from 'child_process';
 import {promisify} from 'util';
-import type {PluginMeta} from '../src/types/plugin-meta';
+import {NagiosReturnCodes} from '../src/types/nagios';
+import type {
+	HtmlTemplateString,
+	PluginMeta,
+	PluginReturn,
+} from '../src/types/plugin';
 
 type CommandOutput = {
 	stdout: string;
@@ -40,17 +45,111 @@ type ThresholdConfig = {
 	criticalPowerUsagePercent?: number;
 };
 
-const STATUS_OK = 0;
-const STATUS_WARNING = 1;
-const STATUS_CRITICAL = 2;
-const STATUS_UNKNOWN = 3;
-
-export const meta = {
+export const meta: PluginMeta = {
 	usage: {
 		http: '/plugins/check-nvidia-smi[?expectedGpuCount=<number>&warningTempC=<number>&criticalTempC=<number>&warningUtilizationPercent=<number>&criticalUtilizationPercent=<number>&warningMemoryUsagePercent=<number>&criticalMemoryUsagePercent=<number>&warningPowerUsagePercent=<number>&criticalPowerUsagePercent=<number>]',
 		shell:
 			'./check_nest.sh check-nvidia-smi [expectedGpuCount=<number>] [warningTempC=<number>] [criticalTempC=<number>] [warningUtilizationPercent=<number>] [criticalUtilizationPercent=<number>] [warningMemoryUsagePercent=<number>] [criticalMemoryUsagePercent=<number>] [warningPowerUsagePercent=<number>] [criticalPowerUsagePercent=<number>]',
 	},
+	help: `<h1>check-nvidia-smi</h1>
+<p>Monitors NVIDIA GPU health using <code>nvidia-smi</code> and reports metrics in Nagios-compatible format.</p>
+
+<h2>What This Plugin Checks</h2>
+<ul>
+  <li>NVIDIA driver communication and GPU detection</li>
+  <li>GPU temperature against thresholds</li>
+  <li>GPU utilization percentage</li>
+  <li>Memory usage percentage</li>
+  <li>Power draw percentage (if available)</li>
+  <li>Expected GPU count verification</li>
+</ul>
+
+<h2>Parameters</h2>
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>expectedGpuCount</code></td>
+      <td>number</td>
+      <td>1</td>
+      <td>Minimum number of GPUs that should be detected</td>
+    </tr>
+    <tr>
+      <td><code>warningTempC</code></td>
+      <td>number</td>
+      <td>80</td>
+      <td>Warning threshold for GPU temperature (°C)</td>
+    </tr>
+    <tr>
+      <td><code>criticalTempC</code></td>
+      <td>number</td>
+      <td>90</td>
+      <td>Critical threshold for GPU temperature (°C)</td>
+    </tr>
+    <tr>
+      <td><code>warningUtilizationPercent</code></td>
+      <td>number</td>
+      <td>85</td>
+      <td>Warning threshold for GPU utilization (%)</td>
+    </tr>
+    <tr>
+      <td><code>criticalUtilizationPercent</code></td>
+      <td>number</td>
+      <td>95</td>
+      <td>Critical threshold for GPU utilization (%)</td>
+    </tr>
+    <tr>
+      <td><code>warningMemoryUsagePercent</code></td>
+      <td>number</td>
+      <td>85</td>
+      <td>Warning threshold for memory usage (%)</td>
+    </tr>
+    <tr>
+      <td><code>criticalMemoryUsagePercent</code></td>
+      <td>number</td>
+      <td>95</td>
+      <td>Critical threshold for memory usage (%)</td>
+    </tr>
+    <tr>
+      <td><code>warningPowerUsagePercent</code></td>
+      <td>number</td>
+      <td>85</td>
+      <td>Warning threshold for power usage (%)</td>
+    </tr>
+    <tr>
+      <td><code>criticalPowerUsagePercent</code></td>
+      <td>number</td>
+      <td>95</td>
+      <td>Critical threshold for power usage (%)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Return Codes</h2>
+<table>
+  <tr><th>Code</th><th>Status</th><th>Description</th></tr>
+  <tr><td>0</td><td>OK</td><td>All GPUs healthy and within thresholds</td></tr>
+  <tr><td>1</td><td>WARNING</td><td>One or more metrics in warning range</td></tr>
+  <tr><td>2</td><td>CRITICAL</td><td>Driver failure, missing GPUs, or critical thresholds exceeded</td></tr>
+  <tr><td>3</td><td>UNKNOWN</td><td>Plugin execution error</td></tr>
+</table>
+
+<h2>Prerequisites</h2>
+<ul>
+  <li>NVIDIA drivers installed and functional</li>
+  <li><code>nvidia-smi</code> in PATH</li>
+  <li>Read access to GPU metrics</li>
+</ul>
+
+<h2>Examples</h2>
+<h3>Basic check with defaults</h3>
+<pre><code>./check_nest.sh check-nvidia-smi</code></pre>
+
+<h3>Custom thresholds for high-performance workload</h3>
+<pre><code>./check_nest.sh check-nvidia-smi expectedGpuCount=4 warningTempC=85 criticalTempC=95 warningUtilizationPercent=90 criticalUtilizationPercent=98</code></pre>
+
+<h3>Check with performance data</h3>
+<pre><code>GET /plugins/check-nvidia-smi?expectedGpuCount=1&warningTempC=80&criticalTempC=90</code></pre>` as HtmlTemplateString,
 	examples: [
 		{
 			label: 'Check NVIDIA driver and detect at least one GPU',
@@ -423,13 +522,13 @@ const parseGpuMetrics = (output: string): GpuMetrics[] => {
 export const getStatusText = (
 	status: number,
 ): 'OK' | 'WARNING' | 'CRITICAL' | 'UNKNOWN' => {
-	if (status === STATUS_OK) {
+	if (status === NagiosReturnCodes.OK) {
 		return 'OK';
 	}
-	if (status === STATUS_WARNING) {
+	if (status === NagiosReturnCodes.WARNING) {
 		return 'WARNING';
 	}
-	if (status === STATUS_CRITICAL) {
+	if (status === NagiosReturnCodes.CRITICAL) {
 		return 'CRITICAL';
 	}
 
@@ -512,14 +611,14 @@ const evaluateMetrics = (
 	}
 
 	if (criticalIssues.length > 0) {
-		return {status: STATUS_CRITICAL, issues: criticalIssues};
+		return {status: NagiosReturnCodes.CRITICAL, issues: criticalIssues};
 	}
 
 	if (warningIssues.length > 0) {
-		return {status: STATUS_WARNING, issues: warningIssues};
+		return {status: NagiosReturnCodes.WARNING, issues: warningIssues};
 	}
 
-	return {status: STATUS_OK, issues: []};
+	return {status: NagiosReturnCodes.OK, issues: []};
 };
 
 const buildPerformanceData = (
@@ -664,27 +763,27 @@ export const analyzeNvidiaSmiOutput = (output: string): NvidiaSmiAnalysis => {
 export const checkNvidiaSmi = async (
 	params: Record<string, string> = {},
 	runner: CommandRunner = runNvidiaSmi,
-) => {
+): Promise<PluginReturn> => {
 	const {thresholds, error: thresholdParseError} = getThresholds(params);
 	const expectedGpuCount = parseExpectedGpuCount(params.expectedGpuCount);
 	if (params.expectedGpuCount !== undefined && expectedGpuCount === undefined) {
 		return {
 			message:
 				'UNKNOWN: invalid expectedGpuCount. Provide a non-negative integer value.',
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 	if (thresholdParseError) {
 		return {
 			message: `UNKNOWN: invalid threshold configuration: ${thresholdParseError}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 	const thresholdValidationError = validateThresholds(thresholds);
 	if (thresholdValidationError) {
 		return {
 			message: `UNKNOWN: invalid threshold configuration: ${thresholdValidationError}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -697,7 +796,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'CRITICAL: nvidia-smi could not communicate with the NVIDIA driver. Ensure the NVIDIA driver is installed and running.',
-				code: STATUS_CRITICAL,
+				code: NagiosReturnCodes.CRITICAL,
 			};
 		}
 
@@ -705,7 +804,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'UNKNOWN: nvidia-smi did not return recognizable output. Verify command execution and permissions.',
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -713,7 +812,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'CRITICAL: NVIDIA driver was detected but no GPU entries were found in nvidia-smi output.',
-				code: STATUS_CRITICAL,
+				code: NagiosReturnCodes.CRITICAL,
 			};
 		}
 
@@ -723,7 +822,7 @@ export const checkNvidiaSmi = async (
 		) {
 			return {
 				message: `CRITICAL: detected ${analysis.metrics.length} GPU(s), expected ${expectedGpuCount}.`,
-				code: STATUS_CRITICAL,
+				code: NagiosReturnCodes.CRITICAL,
 				performanceData: buildPerformanceData(analysis.metrics, thresholds),
 			};
 		}
@@ -741,7 +840,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'CRITICAL: GPU entries were found but NVIDIA driver version could not be detected.',
-				code: STATUS_CRITICAL,
+				code: NagiosReturnCodes.CRITICAL,
 			};
 		}
 
@@ -774,7 +873,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'UNKNOWN: nvidia-smi command was not found on this system. Install NVIDIA drivers and utilities.',
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -798,7 +897,7 @@ export const checkNvidiaSmi = async (
 			return {
 				message:
 					'CRITICAL: nvidia-smi could not communicate with the NVIDIA driver. Ensure the NVIDIA driver is installed and running.',
-				code: STATUS_CRITICAL,
+				code: NagiosReturnCodes.CRITICAL,
 			};
 		}
 
@@ -806,7 +905,7 @@ export const checkNvidiaSmi = async (
 			message: `UNKNOWN: failed to execute nvidia-smi: ${
 				error instanceof Error ? error.message : 'unexpected error'
 			}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 };
