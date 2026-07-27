@@ -1,5 +1,5 @@
 import {Response} from 'express';
-import {NagiosReturnValuesEnum} from '../types/nagios';
+import {NagiosReturnCodes} from '../types/nagios';
 import {createNagiosReturnMessage} from './nagios';
 
 export const sendNagiosUnknownError = (
@@ -9,5 +9,5 @@ export const sendNagiosUnknownError = (
 ) => {
 	return res
 		.status(httpStatus)
-		.send(createNagiosReturnMessage(message, NagiosReturnValuesEnum.UNKNOWN));
+		.send(createNagiosReturnMessage(message, NagiosReturnCodes.UNKNOWN));
 };

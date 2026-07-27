@@ -1,9 +1,12 @@
-import {
-	NagiosReturnMessage,
-	NagiosReturnValuesEnum,
-	PerformanceData,
-} from '../types/nagios';
+import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
+import {NagiosReturnCodes} from '../types/nagios';
 import {logger} from './logger';
+
+type NagiosReturnMessage = {
+	message: string;
+	code: NagiosReturnCode;
+	performanceData?: string;
+};
 
 /**
  * Creates a Nagios return message with status code and optional performance data.
@@ -14,7 +17,7 @@ import {logger} from './logger';
  * @returns A NagiosReturnMessage object containing the message, code, and formatted performance data
  *
  * @example
- * const result = createNagiosReturnMessage('CPU Load OK', NagiosReturnValuesEnum.OK, {
+ * const result = createNagiosReturnMessage('CPU Load OK', NagiosReturnCodes.OK, {
  *   label: 'cpu',
  *   value: 45,
  *   uom: '%',
@@ -24,8 +27,8 @@ import {logger} from './logger';
  */
 export const createNagiosReturnMessage = (
 	message: string,
-	code: NagiosReturnValuesEnum,
-	performanceData?: PerformanceData | PerformanceData[],
+	code: NagiosReturnCode,
+	performanceData?: NagiosPerformanceData | NagiosPerformanceData[],
 ): NagiosReturnMessage => {
 	const nagiosReturnMessage: NagiosReturnMessage = {
 		message,
@@ -64,16 +67,16 @@ export const createNagiosReturnMessage = (
 	return nagiosReturnMessage;
 };
 
-export const getNagiosStatusText = (code: NagiosReturnValuesEnum): string => {
-	if (code === NagiosReturnValuesEnum.OK) {
+export const getNagiosStatusText = (code: NagiosReturnCode): string => {
+	if (code === NagiosReturnCodes.OK) {
 		return 'OK';
 	}
 
-	if (code === NagiosReturnValuesEnum.WARNING) {
+	if (code === NagiosReturnCodes.WARNING) {
 		return 'WARNING';
 	}
 
-	if (code === NagiosReturnValuesEnum.CRITICAL) {
+	if (code === NagiosReturnCodes.CRITICAL) {
 		return 'CRITICAL';
 	}
 
@@ -87,7 +90,9 @@ export const getNagiosStatusText = (code: NagiosReturnValuesEnum): string => {
  * @returns True if v is a PerformanceData object with required properties (value and uom), false otherwise
  */
 
-export const isPerformanceData = (value: unknown): value is PerformanceData => {
+export const isPerformanceData = (
+	value: unknown,
+): value is NagiosPerformanceData => {
 	if (typeof value !== 'object' || value === null) {
 		return false;
 	}
@@ -176,5 +181,5 @@ export const isPerformanceData = (value: unknown): value is PerformanceData => {
  */
 export const isPerformanceDataArray = (
 	value: unknown,
-): value is PerformanceData[] =>
+): value is NagiosPerformanceData[] =>
 	Array.isArray(value) && value.every((item) => isPerformanceData(item));
