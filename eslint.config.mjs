@@ -14,6 +14,13 @@ const compat = new FlatCompat({
 	baseDirectory: __dirname,
 });
 
+// Load custom ESLint rules
+const enforcePluginMetaType = (
+	await import(
+		path.join(__dirname, 'eslint-rules/enforce-plugin-meta-type.mjs')
+	)
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -34,6 +41,7 @@ export default [
 			'.github/**',
 			'plugins/*.js',
 			'plugins/**/*.js',
+			'src/types/*.d.ts',
 		],
 	},
 	js.configs.recommended, // ESLint recommended config for JavaScript
@@ -80,6 +88,34 @@ export default [
 					objectLiteralTypeAssertions: 'never',
 				},
 			],
+		},
+	},
+	{
+		files: ['plugins/**/*.ts'], // Apply to plugins folder TypeScript files only
+		plugins: {
+			custom: {
+				rules: {
+					'enforce-plugin-meta-type': enforcePluginMetaType,
+				},
+			},
+		},
+		rules: {
+			// Only require explicit return types on exported functions (module boundaries)
+			// This allows internal helper functions to use type inference
+			'@typescript-eslint/explicit-module-boundary-types': [
+				'error',
+				{
+					// Allow functions with explicit return type annotations
+					allowTypedFunctionExpressions: true,
+					// Allow higher order functions (functions returning functions)
+					allowHigherOrderFunctions: true,
+				},
+			],
+			// Disable the overly strict explicit-function-return-type rule
+			'@typescript-eslint/explicit-function-return-type': 'off',
+			'@typescript-eslint/typedef': 'warn',
+			// Custom rule to enforce explicit PluginMeta type on exported meta variables
+			'custom/enforce-plugin-meta-type': 'error',
 		},
 	},
 ];
