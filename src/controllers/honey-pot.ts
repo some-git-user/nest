@@ -5,7 +5,8 @@ import {
 } from '../lib/help-page';
 import {getHoneypotStats} from '../lib/honey-pot';
 import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
-import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
+import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
+import {NagiosReturnCodes} from '../types/nagios';
 
 const getHoneypotHelpHtml = (): string => {
 	return appendExternalLinkGuard(`<!DOCTYPE html>
@@ -72,21 +73,21 @@ export const getHoneypotStatus = (req: Request, res: Response) => {
 	const warnPortScanIps = parseThreshold(req.query.warnPortScanIps, 1);
 	const critPortScanIps = parseThreshold(req.query.critPortScanIps, 1);
 
-	let status = NagiosReturnValuesEnum.OK;
+	let status: NagiosReturnCode = NagiosReturnCodes.OK;
 	if (
 		stats.totalHits >= critHits ||
 		stats.suspiciousHits >= critSuspicious ||
 		stats.probableScanIps >= critScanIps ||
 		stats.probablePortScanIps >= critPortScanIps
 	) {
-		status = NagiosReturnValuesEnum.CRITICAL;
+		status = NagiosReturnCodes.CRITICAL;
 	} else if (
 		stats.totalHits >= warnHits ||
 		stats.suspiciousHits >= warnSuspicious ||
 		stats.probableScanIps >= warnScanIps ||
 		stats.probablePortScanIps >= warnPortScanIps
 	) {
-		status = NagiosReturnValuesEnum.WARNING;
+		status = NagiosReturnCodes.WARNING;
 	}
 
 	const statusText = getNagiosStatusText(status);
@@ -100,7 +101,7 @@ export const getHoneypotStatus = (req: Request, res: Response) => {
 
 	const message = `${statusText} - probes=${stats.totalHits} suspicious=${stats.suspiciousHits} unique_ips=${stats.uniqueIps}${scanDetails}${latestDetails}`;
 
-	const performanceData: PerformanceData[] = [
+	const performanceData: NagiosPerformanceData[] = [
 		{label: 'honeypot_probes', value: stats.totalHits, uom: 'c'},
 		{label: 'honeypot_suspicious', value: stats.suspiciousHits, uom: 'c'},
 		{label: 'honeypot_unique_ips', value: stats.uniqueIps, uom: 'c'},

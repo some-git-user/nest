@@ -33,7 +33,7 @@ import dynamicRoutes, {
 	registeredPluginRoutes,
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
-import type {PluginRouteExample} from './types/plugin-meta';
+import type {PluginRouteExample} from './types/plugin';
 
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';

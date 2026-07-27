@@ -5,7 +5,8 @@ import {
 	applyHelpPageSecurityHeaders,
 } from '../lib/help-page';
 import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
-import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
+import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
+import {NagiosReturnCodes} from '../types/nagios';
 
 const getAppInfoHelpHtml = (): string => {
 	return appendExternalLinkGuard(`<!DOCTYPE html>
@@ -71,14 +72,14 @@ export const getAppInfo = (req: Request, res: Response) => {
 	const memCrit = Number(req.query.memCrit ?? 90);
 
 	// determine highest-severity state across metrics
-	let status = NagiosReturnValuesEnum.OK;
+	let status: NagiosReturnCode = NagiosReturnCodes.OK;
 	if (cpuPercent >= cpuCrit || usedMemPercent >= memCrit) {
-		status = NagiosReturnValuesEnum.CRITICAL;
+		status = NagiosReturnCodes.CRITICAL;
 	} else if (cpuPercent >= cpuWarn || usedMemPercent >= memWarn) {
-		status = NagiosReturnValuesEnum.WARNING;
+		status = NagiosReturnCodes.WARNING;
 	}
 
-	const perf: PerformanceData[] = [
+	const perf: NagiosPerformanceData[] = [
 		{label: 'cpu_load_1min', value: Number(cpuPercent.toFixed(2)), uom: '%'},
 		{label: 'memory_used_bytes', value: usedMem, uom: 'B'},
 		{label: 'memory_free_bytes', value: freeMem, uom: 'B'},
