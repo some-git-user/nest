@@ -1,3 +1,5 @@
+import type {NagiosPerformanceData} from './nagios';
+
 export type PluginExampleFieldInputType = 'text' | 'password' | 'url';
 
 /**
@@ -8,7 +10,7 @@ export type PluginExampleFieldInputType = 'text' | 'password' | 'url';
  * - required defaults to true unless explicitly set to false
  * - type defaults to text unless explicitly set to password or url
  */
-export type PluginMetaExampleFieldDefinition = {
+type PluginMetaExampleFieldDefinition = {
 	name: string;
 	label?: string;
 	required?: boolean;
@@ -20,32 +22,40 @@ export type PluginMetaExampleFieldDefinition = {
  * Authoring-time example definition used by plugins.
  *
  * Supported forms:
- * - string: GET link example beginning with /
  * - object: interactive example rendered as a GET or POST form
  */
-export type PluginMetaExampleDefinition =
-	| string
-	| {
-			label?: string;
-			method?: 'GET' | 'POST';
-			path: string;
-			fields: PluginMetaExampleFieldDefinition[];
-	  };
+type PluginMetaExampleDefinition = {
+	label?: string;
+	method?: 'GET' | 'POST';
+	path: string;
+	fields: PluginMetaExampleFieldDefinition[];
+};
 
-export type PluginMetaUsage =
-	| string
-	| {
-			http?: string;
-			shell?: string;
-	  };
+export type PluginMetaUsage = {
+	http?: string;
+	shell?: string;
+};
+
+/**
+ * HTML template string type for help content.
+ * Used to distinguish HTML content from regular strings in plugin metadata.
+ *
+ * @example
+ * ```typescript
+ * const help = `<h1>Plugin Help</h1><p>Description here</p>`;
+ * ```
+ */
+export type HtmlTemplateString = string & {
+	readonly __htmlTemplate: unique symbol;
+};
 
 /**
  * Shared plugin metadata contract consumed by both plugin authors and the core loader.
  */
 export type PluginMeta = {
-	usage?: PluginMetaUsage;
-	help?: string;
-	examples?: PluginMetaExampleDefinition[];
+	usage: PluginMetaUsage;
+	help: HtmlTemplateString;
+	examples: PluginMetaExampleDefinition[];
 };
 
 /**
@@ -76,3 +86,13 @@ export type PluginRouteExample =
 			path: string;
 			fields: PluginExampleField[];
 	  };
+
+/**
+ * Standard return type for plugin execution results.
+ * Used by both the core plugin loader and plugin implementations.
+ */
+export type PluginReturn = {
+	message: string;
+	code: NagiosReturnCodes;
+	performanceData?: NagiosPerformanceData[];
+};
