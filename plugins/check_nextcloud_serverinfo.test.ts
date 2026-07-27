@@ -623,6 +623,131 @@ describe('checkNextcloudServerinfo plugin', () => {
 		expect(result.message).toContain('socket closed');
 	});
 
+	test('returns WARNING when fetch fails with SSL certificate error in error.cause', async () => {
+		const sslError = new Error('certificate has expired');
+		(sslError as NodeJS.ErrnoException).code = 'CERT_HAS_EXPIRED';
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		fetchError.cause = sslError;
+
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('SSL certificate issue');
+		expect(result.message).toContain('certificate has expired');
+	});
+
+	test('uses https.Agent for HTTPS endpoints', async () => {
+		const response = buildHealthyResponse();
+		mockFetch(response);
+
+		await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(global.fetch).toHaveBeenCalled();
+		const fetchCall = (global.fetch as jest.Mock).mock.calls[0] as [
+			string,
+			{agent?: unknown},
+		];
+		expect(fetchCall[1].agent).toBeDefined();
+	});
+
+	test('does not use https.Agent for HTTP endpoints', async () => {
+		const response = buildHealthyResponse();
+		mockFetch(response);
+
+		await checkNextcloudServerinfo({
+			baseUrl: 'http://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(global.fetch).toHaveBeenCalled();
+		const fetchCall = (global.fetch as jest.Mock).mock.calls[0] as [
+			string,
+			{agent?: unknown},
+		];
+		expect(fetchCall[1].agent).toBeUndefined();
+	});
+
+	test('returns WARNING for self-signed certificate error', async () => {
+		const sslError = new Error('self-signed certificate');
+		(sslError as NodeJS.ErrnoException).code = 'DEPTH_ZERO_SELF_SIGNED_CERT';
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		fetchError.cause = sslError;
+
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('SSL certificate issue');
+		expect(result.message).toContain('self-signed certificate');
+	});
+
+	test('returns WARNING when causeMessage is used for certDetails', async () => {
+		const sslError = new Error('unable to verify certificate');
+		(sslError as NodeJS.ErrnoException).code =
+			'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
+		const fetchError = new Error('request failed') as Error & {cause?: unknown};
+		fetchError.cause = sslError;
+
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('SSL certificate issue');
+		expect(result.message).toContain('unable to verify certificate');
+	});
+
+	test('returns WARNING when error message contains SSL keywords but cause is non-Error', async () => {
+		const fetchError = new Error('certificate validation failed') as Error & {
+			cause?: unknown;
+		};
+		fetchError.cause = 'some non-error cause';
+
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('SSL certificate issue');
+		expect(result.message).toContain('some non-error cause');
+	});
+
+	test('returns WARNING when cause is empty string and uses errorMessage for certDetails', async () => {
+		const fetchError = new Error('certificate has expired') as Error & {
+			cause?: unknown;
+		};
+		fetchError.cause = '';
+
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('SSL certificate issue');
+		expect(result.message).toContain('certificate has expired');
+	});
+
 	test('returns UNKNOWN when response shape is invalid', async () => {
 		mockFetch(
 			{invalid: 'structure'},

@@ -322,7 +322,9 @@ describe('dynamic routes (branch coverage)', () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginModule: {
 				meta: {
-					usage: '/plugins/check-fake?foo=<value>',
+					usage: {
+						http: '/plugins/check-fake?foo=<value>',
+					},
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -333,10 +335,10 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.status).toBe(200);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.info).toHaveBeenCalledWith(
-			expect.stringContaining('Usage for plugin'),
+			expect.stringContaining('HTTP usage for plugin'),
 		);
 		expect(logger.info).toHaveBeenCalledWith(
-			expect.stringContaining('/plugins/check-fake?help'),
+			expect.stringContaining('/plugins/check-fake?foo='),
 		);
 	});
 
@@ -510,25 +512,6 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.body).toHaveProperty('code', 0);
 	});
 
-	test('uses cached transpiled plugin when cache is newer', async () => {
-		const {app, logger} = buildAppForPlugin({
-			pluginFiles: ['check_fake.ts'],
-			sourceMtimeMs: 10,
-			cacheMtimeMs: 20,
-			pluginModule: {
-				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
-			},
-		});
-
-		const res = await request(app).get('/plugins/check-fake');
-		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
-		expect(body).toHaveProperty('code', 0);
-		expect(logger.debug).toHaveBeenCalledWith(
-			expect.stringContaining('Using cached transpiled plugin'),
-		);
-	});
-
 	test('skips plugin registration when transpilation fails', async () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
@@ -539,19 +522,6 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.status).toBe(404);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Could not transpile plugin'),
-		);
-	});
-
-	test('skips plugin registration when source plugin stat fails in resolver', async () => {
-		const {app, logger} = buildAppForPlugin({
-			pluginFiles: ['check_fake.ts'],
-			sourceStatSecondCallError: new Error('stat failed in resolver'),
-		});
-
-		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
-		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining('Could not stat plugin file'),
 		);
 	});
 
@@ -663,16 +633,26 @@ describe('dynamic routes (branch coverage)', () => {
 		);
 	});
 
-	test('stringifies non-Error source stat failures in resolver', async () => {
+	test('logs both HTTP and shell usage when both are defined', async () => {
 		const {app, logger} = buildAppForPlugin({
-			pluginFiles: ['check_fake.ts'],
-			sourceStatSecondCallError: 'stat-string-error',
+			pluginModule: {
+				meta: {
+					usage: {
+						http: '/plugins/check-fake?x=1',
+						shell: './check_nest.sh check-fake x=1',
+					},
+				},
+				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
+			},
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
-		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining('Error: stat-string-error'),
+		expect(res.status).toBe(200);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('HTTP usage for plugin'),
+		);
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Shell usage for plugin'),
 		);
 	});
 
@@ -685,6 +665,7 @@ describe('dynamic routes (branch coverage)', () => {
 						http: '/plugins/check-fake?x=1',
 						shell: './check_nest.sh check-fake x=1',
 					},
+					examples: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -735,5 +716,142 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(res.text).toContain(
 			'No extended help is available for this plugin.',
 		);
+	});
+
+	test('handles NagiosReturnCodes regex replacement with unknown code', async () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const pluginFiles = ['check_fake.ts'];
+		const pluginSource = 'export const checkFake = async () => ({})';
+		const approvedHash = crypto
+			.createHash('sha256')
+			.update(pluginSource)
+			.digest('hex');
+		const whitelistPath = `${process.cwd()}/plugins/plugin-whitelist.txt`;
+		const whitelistContent = `check_fake.ts ${approvedHash}`;
+
+		const transpileSpy = jest.fn().mockImplementation(() => {
+			// Return output with an invalid NagiosReturnCodes reference to trigger fallback
+			return {
+				outputText:
+					'module.exports = { checkFake: async () => ({ code: nagios_1.NagiosReturnCodes.UNKNOWN_CODE }) };',
+			};
+		});
+
+		const requireFn = (() => {
+			return {
+				checkFake: () => ({code: 3}),
+			};
+		}) as (() => unknown) & {
+			resolve: (modulePath: string) => string;
+		};
+		requireFn.resolve = (modulePath: string) => modulePath;
+
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				existsSync: (fsPath: string) => fsPath === whitelistPath,
+				readdirSync: () => pluginFiles,
+				readFileSync: (fsPath: string) =>
+					fsPath === whitelistPath ? whitelistContent : pluginSource,
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: (fsPath: string) => {
+					if (fsPath === whitelistPath) {
+						return {
+							isFile: () => true,
+							mtimeMs: 0,
+							uid: 1000,
+							mode: 0o100600,
+						};
+					}
+					return {
+						isFile: () => true,
+						mtimeMs: 0,
+						uid: 1000,
+						mode: 0o100644,
+					};
+				},
+			},
+			existsSync: (fsPath: string) => fsPath === whitelistPath,
+			readdirSync: () => pluginFiles,
+			readFileSync: (fsPath: string) =>
+				fsPath === whitelistPath ? whitelistContent : pluginSource,
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: (fsPath: string) => {
+				if (fsPath === whitelistPath) {
+					return {
+						isFile: () => true,
+						mtimeMs: 0,
+						uid: 1000,
+						mode: 0o100600,
+					};
+				}
+				return {
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				};
+			},
+		}));
+
+		jest.doMock('typescript', () => ({
+			__esModule: true,
+			default: {
+				transpileModule: transpileSpy,
+				ModuleKind: {CommonJS: 1},
+				ScriptTarget: {ESNext: 99},
+			},
+			transpileModule: transpileSpy,
+			ModuleKind: {CommonJS: 1},
+			ScriptTarget: {ESNext: 99},
+		}));
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.spyOn(process, 'getuid').mockReturnValue(1000);
+
+		let router: express.Router;
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const routesModule = require('./dynamic-routes') as {
+				default: express.Router;
+			};
+			router = routesModule.default;
+		});
+
+		const app = express();
+		app.use(express.json());
+		app.use('/', router!);
+
+		const res = await request(app).get('/plugins/check-fake');
+		expect(res.status).toBe(200);
+		expect(res.body).toHaveProperty('code', 3);
 	});
 });

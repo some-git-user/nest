@@ -1,6 +1,7 @@
 import {Request, Response} from 'express';
 import {createRequire} from 'module';
 import {logger} from '../lib/logger';
+import type {HtmlTemplateString} from '../types/plugin';
 import {createPluginRouteHandler, insertBeforeBodyEnd} from './dynamic-routes';
 import {
 	buildInvalidCodeResponse,
@@ -274,7 +275,8 @@ describe('createPluginRouteHandler', () => {
 
 	test('serves wrapped HTML help page when meta.help is a partial fragment', async () => {
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
-			helpHtml: '<h1>Setup Guide</h1><p>Install the plugin first.</p>',
+			helpHtml:
+				'<h1>Setup Guide</h1><p>Install the plugin first.</p>' as HtmlTemplateString,
 			pluginName: 'check_test',
 		});
 		const req: Partial<Request> = {
@@ -311,9 +313,42 @@ describe('createPluginRouteHandler', () => {
 		);
 	});
 
+	test('handles normalized code that is not a number', async () => {
+		const requireFn = jest.fn().mockReturnValue({check: jest.fn()});
+		(createRequire as unknown as jest.Mock).mockReturnValue(requireFn);
+		(getPluginFunction as jest.Mock).mockReturnValue(() =>
+			Promise.resolve({ok: true}),
+		);
+		(parseUrlParams as jest.Mock).mockReturnValue({});
+		(normalizePluginResult as jest.Mock).mockReturnValue({
+			message: 'ok',
+			code: 'invalid-code',
+			performanceData: undefined,
+		});
+		(isKnownNagiosCode as jest.Mock).mockReturnValue(false);
+		(buildInvalidCodeResponse as jest.Mock).mockReturnValue({
+			errorMessage: 'Invalid return code "invalid-code"',
+			nagiosReturn: {message: 'Invalid return code "invalid-code"', code: 3},
+		});
+
+		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test');
+		const req: Partial<Request> = {url: '/check-test'};
+		const {res} = createMockRes();
+
+		await handler(req as Request, res);
+
+		expect(buildInvalidCodeResponse).toHaveBeenCalledWith(
+			undefined,
+			'/tmp/check.js',
+			'/check-test',
+			'localhost',
+			5000,
+		);
+	});
+
 	test('serves full HTML document in a sandbox when meta.help starts with <!DOCTYPE', async () => {
 		const fullHtml =
-			'<!DOCTYPE html><html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>';
+			'<!DOCTYPE html><html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>' as HtmlTemplateString;
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
 			helpHtml: fullHtml,
 		});
@@ -345,7 +380,7 @@ describe('createPluginRouteHandler', () => {
 
 	test('serves full HTML document in a sandbox when meta.help starts with <html', async () => {
 		const fullHtml =
-			'<html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>';
+			'<html lang="en"><head><title>Custom</title></head><body><p>Hello</p></body></html>' as HtmlTemplateString;
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
 			helpHtml: fullHtml,
 		});
@@ -497,7 +532,7 @@ describe('createPluginRouteHandler', () => {
 	test('sanitizes script tags in partial-HTML meta.help payload', async () => {
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
 			helpHtml:
-				'<p>Setup guide</p><script>alert(document.cookie)</script><p>End</p>',
+				'<p>Setup guide</p><script>alert(document.cookie)</script><p>End</p>' as HtmlTemplateString,
 		});
 		const req: Partial<Request> = {
 			url: '/check-test?help',
@@ -516,7 +551,7 @@ describe('createPluginRouteHandler', () => {
 	test('sanitizes event-handler attributes in partial-HTML meta.help payload', async () => {
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
 			helpHtml:
-				'<p onclick="stealCookies()">click me</p><img src="x" onerror="pwned()">',
+				'<p onclick="stealCookies()">click me</p><img src="x" onerror="pwned()"' as HtmlTemplateString,
 		});
 		const req: Partial<Request> = {
 			url: '/check-test?help',
@@ -535,7 +570,7 @@ describe('createPluginRouteHandler', () => {
 
 	test('sends full-doc meta.help through sandbox and strips inline scripts from srcdoc', async () => {
 		const fullDoc =
-			'<!DOCTYPE html><html><body><script>alert(1)</script><p>Docs</p></body></html>';
+			'<!DOCTYPE html><html><body><script>alert(1)</script><p>Docs</p></body></html>' as HtmlTemplateString;
 		const handler = createPluginRouteHandler('/tmp/check.js', '/check-test', {
 			helpHtml: fullDoc,
 		});

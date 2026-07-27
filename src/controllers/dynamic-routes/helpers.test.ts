@@ -1,4 +1,5 @@
-import {NagiosReturnValuesEnum} from '../../types/nagios';
+import type {} from '../../types/nagios';
+import {NagiosReturnCodes} from '../../types/nagios';
 import {
 	buildInvalidCodeResponse,
 	clearPluginRequireCache,
@@ -15,7 +16,6 @@ describe('dynamic-routes helpers', () => {
 		);
 
 		expect(params).toEqual({
-			'/check-test': undefined,
 			nagiosReturnMessage: 'hello world',
 			nagiosReturnValue: '1',
 			performanceData: 'true',
@@ -28,11 +28,25 @@ describe('dynamic-routes helpers', () => {
 		);
 
 		expect(params).toEqual({
-			'/check-test': undefined,
 			nagiosReturnMessage: 'hello',
 			nagiosRetunValue: '2',
 			performanceData: 'true',
 		});
+	});
+
+	test('parseUrlParams returns empty object for URL without query string', () => {
+		const params = parseUrlParams('/check-test');
+		expect(params).toEqual({});
+	});
+
+	test('parseUrlParams returns empty object for empty string', () => {
+		const params = parseUrlParams('');
+		expect(params).toEqual({});
+	});
+
+	test('parseUrlParams handles + as space in query values', () => {
+		const params = parseUrlParams('/check-test?message=Hello+World');
+		expect(params).toEqual({message: 'Hello World'});
 	});
 
 	test('getPluginFunction prefers exports named check* and returns undefined otherwise', () => {
@@ -111,11 +125,87 @@ describe('dynamic-routes helpers', () => {
 		);
 
 		expect(normalized.message).toContain('did not return a message');
-		expect(normalized.code).toBe(NagiosReturnValuesEnum.UNKNOWN);
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
 		expect(normalized.performanceData).toBeUndefined();
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining('returned invalid performanceData'),
 		);
+	});
+
+	test('normalizePluginResult warns for invalid performanceData string', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+				performanceData: 'invalid-string',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toBeUndefined();
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining('returned invalid performanceData'),
+		);
+	});
+
+	test('normalizePluginResult warns for invalid performanceData number', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+				performanceData: 123,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toBeUndefined();
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining('returned invalid performanceData'),
+		);
+	});
+
+	test('normalizePluginResult accepts valid performanceData array', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+				performanceData: [
+					{label: 'cpu', value: 50, uom: '%'},
+					{label: 'memory', value: 75, uom: '%'},
+				],
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toEqual([
+			{label: 'cpu', value: 50, uom: '%'},
+			{label: 'memory', value: 75, uom: '%'},
+		]);
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	test('normalizePluginResult accepts valid single performanceData object', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+				performanceData: {label: 'disk', value: 80, uom: '%'},
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toEqual([
+			{label: 'disk', value: 80, uom: '%'},
+		]);
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	test('normalizePluginResult throws for invalid non-object result', () => {
@@ -125,17 +215,15 @@ describe('dynamic-routes helpers', () => {
 	});
 
 	test('isKnownNagiosCode validates known enum values', () => {
-		expect(isKnownNagiosCode(NagiosReturnValuesEnum.OK)).toBe(true);
-		expect(isKnownNagiosCode(NagiosReturnValuesEnum.WARNING)).toBe(true);
-		expect(isKnownNagiosCode(9 as NagiosReturnValuesEnum)).toBe(false);
-		expect(
-			isKnownNagiosCode(undefined as unknown as NagiosReturnValuesEnum),
-		).toBe(false);
+		expect(isKnownNagiosCode(NagiosReturnCodes.OK)).toBe(true);
+		expect(isKnownNagiosCode(NagiosReturnCodes.WARNING)).toBe(true);
+		expect(isKnownNagiosCode(9)).toBe(false);
+		expect(isKnownNagiosCode(-1)).toBe(false);
 	});
 
 	test('buildInvalidCodeResponse creates UNKNOWN nagios payload', () => {
 		const response = buildInvalidCodeResponse(
-			9 as NagiosReturnValuesEnum,
+			9,
 			'/tmp/check.js',
 			'/check-test',
 			'localhost',
@@ -147,5 +235,231 @@ describe('dynamic-routes helpers', () => {
 			message: response.errorMessage,
 			code: 3,
 		});
+	});
+
+	test('buildInvalidCodeResponse handles string code', () => {
+		const response = buildInvalidCodeResponse(
+			'9',
+			'/tmp/check.js',
+			'/check-test',
+			'localhost',
+			5000,
+		);
+
+		expect(response.errorMessage).toContain('Invalid return code "9"');
+		expect(response.nagiosReturn.code).toBe(3);
+	});
+
+	test('buildInvalidCodeResponse handles unknown code type', () => {
+		const response = buildInvalidCodeResponse(
+			undefined,
+			'/tmp/check.js',
+			'/check-test',
+			'localhost',
+			5000,
+		);
+
+		expect(response.errorMessage).toContain(
+			'Invalid return code "unkown code"',
+		);
+		expect(response.nagiosReturn.code).toBe(3);
+	});
+
+	test('normalizePluginResult handles performanceData as array', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+				performanceData: [],
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toEqual([]);
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	test('normalizePluginResult accepts code 0', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 0,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(0);
+	});
+
+	test('normalizePluginResult accepts code 1', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'warning',
+				code: 1,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(1);
+	});
+
+	test('normalizePluginResult accepts code 2', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'critical',
+				code: 2,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(2);
+	});
+
+	test('normalizePluginResult accepts code 3', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'unknown',
+				code: 3,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(3);
+	});
+
+	test('normalizePluginResult accepts string code "0"', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: '0',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(0);
+	});
+
+	test('normalizePluginResult accepts string code "1"', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'warning',
+				code: '1',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(1);
+	});
+
+	test('normalizePluginResult accepts string code "2"', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'critical',
+				code: '2',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(2);
+	});
+
+	test('normalizePluginResult accepts string code "3"', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'unknown',
+				code: '3',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(3);
+	});
+
+	test('normalizePluginResult handles invalid string code', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 'invalid',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
+	});
+
+	test('normalizePluginResult handles code as boolean', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: true,
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
+	});
+
+	test('normalizePluginResult handles code as object', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: {value: 0},
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
+	});
+
+	test('normalizePluginResult handles string code that parses to NaN', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				code: 'not-a-number',
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
+	});
+
+	test('normalizePluginResult handles missing code field', () => {
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'ok',
+				// code field is missing
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
 	});
 });

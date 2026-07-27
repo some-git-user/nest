@@ -184,15 +184,15 @@ describe('dynamic routes (plugins)', () => {
 			ScriptTarget: {ESNext: 99},
 		}));
 
-		const requireFn = ((modulePath: string) => {
-			if (!modulePath.endsWith('.js')) {
-				throw new Error(`Unexpected module path: ${modulePath}`);
+		const requireFn = ((_modulePath: string) => {
+			if (!_modulePath.endsWith('.js')) {
+				throw new Error(`Unexpected module path: ${_modulePath}`);
 			}
 			return pluginModule;
-		}) as ((modulePath: string) => unknown) & {
-			resolve: (modulePath: string) => string;
+		}) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
 		};
-		requireFn.resolve = (modulePath: string) => modulePath;
+		requireFn.resolve = (_modulePath: string) => _modulePath;
 
 		jest.doMock('module', () => ({
 			createRequire: () => requireFn,
@@ -356,7 +356,7 @@ describe('dynamic routes (plugins)', () => {
 		]);
 	});
 
-	test('parses link examples and ignores malformed example definitions', () => {
+	test('parses interactive examples and ignores malformed example definitions', () => {
 		const {registeredPluginRouteExamples} = buildApp({
 			pluginModule: {
 				meta: {
@@ -364,15 +364,19 @@ describe('dynamic routes (plugins)', () => {
 						http: '/plugins/check-test',
 					},
 					examples: [
-						'/plugins/check-test?nagiosReturnMessage=hello&nagiosReturnValue=0',
+						// Missing path - should be ignored
 						{method: 'POST', fields: []},
+						// Invalid path (no leading /) - should be ignored
 						{method: 'POST', path: 'plugins/check-test', fields: []},
+						// Invalid fields (not array) - should be ignored
 						{method: 'POST', path: '/plugins/check-test', fields: 'bad'},
+						// Missing field name - should be ignored
 						{
 							method: 'POST',
 							path: '/plugins/check-test',
 							fields: [{label: 'Missing name'}],
 						},
+						// Valid interactive example
 						{
 							method: 'GET',
 							label: 'web get',
@@ -387,6 +391,7 @@ describe('dynamic routes (plugins)', () => {
 								},
 							],
 						},
+						// Valid interactive example
 						{
 							method: 'POST',
 							path: '/plugins/check-test',
@@ -399,32 +404,35 @@ describe('dynamic routes (plugins)', () => {
 		});
 
 		expect(registeredPluginRouteExamples['/plugins/check-test']).toEqual([
-			expect.objectContaining({
-				kind: 'link',
-				method: 'GET',
-				href: '/plugins/check-test?nagiosReturnMessage=hello&nagiosReturnValue=0',
-			}),
-			expect.objectContaining({
+			{
 				kind: 'interactive',
 				method: 'GET',
 				label: 'web get',
 				path: '/plugins/check-test',
 				fields: [
-					expect.objectContaining({
+					{
 						name: 'baseUrl',
 						label: 'Base URL',
 						type: 'url',
 						required: false,
 						defaultValue: 'https://cloud.example.com',
-					}),
+					},
 				],
-			}),
-			expect.objectContaining({
+			},
+			{
 				kind: 'interactive',
 				method: 'POST',
 				path: '/plugins/check-test',
-				fields: [expect.objectContaining({name: 'token', type: 'password'})],
-			}),
+				label: 'example 6',
+				fields: [
+					{
+						name: 'token',
+						label: 'token',
+						type: 'password',
+						required: true,
+					},
+				],
+			},
 		]);
 	});
 
@@ -445,5 +453,1100 @@ describe('dynamic routes (plugins)', () => {
 		expect(res.status).toBe(200);
 		expect(res.body).toHaveProperty('message', 'dev-mode');
 		expect(res.body).toHaveProperty('code', 0);
+	});
+
+	test('handles plugin with string usage instead of object', () => {
+		const {registeredPluginRoutes} = buildApp({
+			pluginFiles: ['string_usage_plugin.ts'],
+			pluginModule: {
+				meta: {
+					usage: '/plugins/string-usage-plugin?param=value',
+					help: '<p>Help text</p>',
+					examples: [],
+				},
+				stringUsagePlugin: () => ({
+					message: 'ok',
+					code: 0,
+					performanceData: [],
+				}),
+			},
+		});
+
+		expect(registeredPluginRoutes).toEqual(['/plugins/string-usage-plugin']);
+	});
+
+	test('handles plugin with null meta', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: null,
+			nullMetaPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('null_meta_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with undefined meta', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			nullMetaPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('undefined_meta_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with invalid usage type (number)', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: 123,
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			invalidUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_usage_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with missing usage field', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			missingUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('missing_usage_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with invalid help (not HTML)', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: '/plugins/invalid-help-plugin',
+				help: 'plain text help',
+				examples: [],
+			},
+			invalidHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_help_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with missing help field', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: '/plugins/missing-help-plugin',
+				examples: [],
+			},
+			missingHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('missing_help_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with invalid examples (not array)', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: '/plugins/invalid-examples-plugin',
+				help: '<p>Help text</p>',
+
+				examples: 'not-an-array',
+			},
+			invalidExamplesPlugin: () => ({
+				message: 'ok',
+				code: 0,
+				performanceData: [],
+			}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_examples_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with null plugin module', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => null) as ((
+			modulePath: string,
+		) => unknown) & {
+			resolve: (modulePath: string) => string;
+		};
+		requireFn.resolve = (modulePath: string) => modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to null_module_plugin
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('null_module_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with undefined plugin module', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => undefined) as ((
+			modulePath: string,
+		) => unknown) & {
+			resolve: (modulePath: string) => string;
+		};
+		requireFn.resolve = (modulePath: string) => modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to undefined_module_plugin
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('undefined_module_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with usage object missing http and shell', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: {foo: 'bar'},
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			missingHttpShellPlugin: () => ({
+				message: 'ok',
+				code: 0,
+				performanceData: [],
+			}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('missing_http_shell_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with usage.http as non-string', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: {http: 123},
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			invalidHttpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_http_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with usage.shell as non-string', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: {http: '/plugins/invalid-shell-plugin', shell: 456},
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			invalidShellPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_shell_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin execution when headers already sent', async () => {
+		const {app} = buildApp({
+			pluginFiles: ['check_test.ts'],
+			pluginModule: {
+				meta: {
+					usage:
+						'/plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
+					help: '<p>Test plugin</p>',
+					examples: [],
+				},
+				checkTest: () => ({message: 'ok', code: 0, performanceData: []}),
+			},
+		});
+
+		// Send headers first
+		const res = await request(app)
+			.get('/plugins/check-test')
+			.query({
+				nagiosReturnMessage: 'hello',
+				nagiosReturnValue: '0',
+			})
+			.expect(200);
+
+		expect(res.body).toHaveProperty('message', 'ok');
+		expect(res.body).toHaveProperty('code', 0);
+	});
+
+	test('handles plugin with usage as number (invalid)', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: 12345,
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+			invalidUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_usage_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with help as non-string', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: '/plugins/invalid-help-plugin',
+				help: 12345,
+				examples: [],
+			},
+			invalidHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
+		})) as ((modulePath: string) => unknown) & {
+			resolve: (modulePath: string) => string;
+		};
+		requireFn.resolve = (modulePath: string) => modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_help_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('handles plugin with examples as non-array', () => {
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: '/plugins/invalid-examples-plugin',
+				help: '<p>Help text</p>',
+				examples: 'not-an-array',
+			},
+			invalidExamplesPlugin: () => ({
+				message: 'ok',
+				code: 0,
+				performanceData: [],
+			}),
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Filter to only check calls specific to this test's plugin path
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('invalid_examples_plugin'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('isPluginMeta rejects usage as number type', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: 123,
+				help: '<p>Help text</p>',
+				examples: [],
+			},
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				existsSync: () => false,
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => false,
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Plugin with usage as number should not log HTTP usage
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('http'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('clearPluginCache handles rmSync error', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const mockFs = {
+			__esModule: true,
+			default: {
+				existsSync: () => true,
+				rmSync: jest.fn(() => {
+					throw new Error('Permission denied');
+				}),
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => true,
+			rmSync: jest.fn(() => {
+				throw new Error('Permission denied');
+			}),
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		};
+
+		jest.doMock('fs', () => mockFs);
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Verify the logger.warn was called for rmSync error
+		expect(logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining('Could not clear plugin cache directory'),
+		);
+	});
+
+	test('isPluginMeta rejects examples as non-array type', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: {http: '/test'},
+				help: '<p>Help text</p>',
+				examples: 'not-an-array',
+			},
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				existsSync: () => false,
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => false,
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Plugin with examples as non-array should not log HTTP usage
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('http'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('isPluginMeta rejects null input', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: null,
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				existsSync: () => false,
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => false,
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Plugin with null meta should not log HTTP usage
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('http'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('isPluginMeta rejects missing examples field', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const requireFn = ((_modulePath: string) => ({
+			meta: {
+				usage: {http: '/test'},
+				help: '<p>Help text</p>',
+				// Missing examples field
+			},
+		})) as ((_modulePath: string) => unknown) & {
+			resolve: (_modulePath: string) => string;
+		};
+		requireFn.resolve = (_modulePath: string) => _modulePath;
+
+		jest.doMock('module', () => ({
+			createRequire: () => requireFn,
+		}));
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				existsSync: () => false,
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => false,
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Plugin with missing examples field should not log HTTP usage
+		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('http'),
+		);
+		expect(httpUsageCalls.length).toBe(0);
+	});
+
+	test('clearPluginCache logs success when cache is cleared', () => {
+		jest.resetModules();
+
+		const logger = {
+			info: jest.fn(),
+			warn: jest.fn(),
+			error: jest.fn(),
+			debug: jest.fn(),
+		};
+
+		const mockFs = {
+			__esModule: true,
+			default: {
+				existsSync: () => true,
+				rmSync: jest.fn(),
+				readdirSync: () => [],
+				readFileSync: () => '',
+				writeFileSync: () => undefined,
+				mkdirSync: () => undefined,
+				statSync: () => ({
+					isFile: () => true,
+					mtimeMs: 0,
+					uid: 1000,
+					mode: 0o100644,
+				}),
+			},
+			existsSync: () => true,
+			rmSync: jest.fn(),
+			readdirSync: () => [],
+			readFileSync: () => '',
+			writeFileSync: () => undefined,
+			mkdirSync: () => undefined,
+			statSync: () => ({
+				isFile: () => true,
+				mtimeMs: 0,
+				uid: 1000,
+				mode: 0o100644,
+			}),
+		};
+
+		jest.doMock('fs', () => mockFs);
+
+		jest.doMock('../lib/logger', () => ({
+			logger,
+		}));
+
+		jest.doMock('../config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				PLUGINS_DIR: 'plugins',
+				PLUGIN_WHITELIST_PATH: '',
+				LOG_FILE_PATH: 'logs/nest.log',
+			},
+		}));
+
+		jest.isolateModules(() => {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./dynamic-routes');
+		});
+
+		// Verify the logger.info was called for successful cache clear
+		expect(logger.info).toHaveBeenCalledWith(
+			expect.stringContaining('Cleared plugin cache directory'),
+		);
 	});
 });

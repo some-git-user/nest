@@ -4,7 +4,8 @@ import {
 	isPerformanceData,
 	isPerformanceDataArray,
 } from '../lib/nagios';
-import {NagiosReturnValuesEnum, PerformanceData} from '../types/nagios';
+import type {NagiosPerformanceData} from '../types/nagios';
+import {NagiosReturnCodes} from '../types/nagios';
 import {logger} from './logger';
 
 jest.mock('../lib/logger');
@@ -13,7 +14,7 @@ describe('createNagiosReturnMessage', () => {
 	it('produces correct message and code without performance data', () => {
 		const result = createNagiosReturnMessage(
 			'Test message',
-			NagiosReturnValuesEnum.OK,
+			NagiosReturnCodes.OK,
 		);
 		expect(result.message).toBe('Test message');
 		expect(result.code).toBe(0);
@@ -22,7 +23,7 @@ describe('createNagiosReturnMessage', () => {
 
 	describe('with performance data', () => {
 		it('transforms valid data into a string', () => {
-			const performanceData: PerformanceData = {
+			const performanceData: NagiosPerformanceData = {
 				label: 'Test',
 				value: 42,
 				uom: 'unit',
@@ -33,7 +34,7 @@ describe('createNagiosReturnMessage', () => {
 			};
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.OK,
+				NagiosReturnCodes.OK,
 				[performanceData],
 			);
 
@@ -45,7 +46,7 @@ describe('createNagiosReturnMessage', () => {
 		});
 
 		it('handles multiple performance data', () => {
-			const performanceData1: PerformanceData = {
+			const performanceData1: NagiosPerformanceData = {
 				label: 'Test1',
 				value: 42,
 				uom: 'unit',
@@ -55,7 +56,7 @@ describe('createNagiosReturnMessage', () => {
 				max: 50,
 			};
 
-			const performanceData2: PerformanceData = {
+			const performanceData2: NagiosPerformanceData = {
 				label: 'Test2',
 				value: 42,
 				uom: 'unit',
@@ -67,7 +68,7 @@ describe('createNagiosReturnMessage', () => {
 
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.OK,
+				NagiosReturnCodes.OK,
 				[performanceData1, performanceData2],
 			);
 
@@ -79,7 +80,7 @@ describe('createNagiosReturnMessage', () => {
 		it('handles null performance data', () => {
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.OK,
+				NagiosReturnCodes.OK,
 				undefined,
 			);
 			expect(result.message).toBe('Test message');
@@ -89,7 +90,7 @@ describe('createNagiosReturnMessage', () => {
 		it('handles empty performance data array', () => {
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.OK,
+				NagiosReturnCodes.OK,
 				[],
 			);
 			expect(result.message).toBe('Test message');
@@ -100,7 +101,7 @@ describe('createNagiosReturnMessage', () => {
 		it('accepts a single performance object and omits optional fields when absent', () => {
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.WARNING,
+				NagiosReturnCodes.WARNING,
 				{label: 'disk', value: 0, uom: '%'},
 			);
 
@@ -109,7 +110,7 @@ describe('createNagiosReturnMessage', () => {
 		});
 
 		it('formats value without label or uom when those fields are empty', () => {
-			const performanceDataWithoutLabelOrUom: PerformanceData = {
+			const performanceDataWithoutLabelOrUom: NagiosPerformanceData = {
 				label: '',
 				value: 5,
 				uom: '',
@@ -117,7 +118,7 @@ describe('createNagiosReturnMessage', () => {
 
 			const result = createNagiosReturnMessage(
 				'Test message',
-				NagiosReturnValuesEnum.OK,
+				NagiosReturnCodes.OK,
 				[performanceDataWithoutLabelOrUom],
 			);
 
@@ -129,8 +130,8 @@ describe('createNagiosReturnMessage', () => {
 
 			const result = createNagiosReturnMessage(
 				'Bad perf',
-				NagiosReturnValuesEnum.UNKNOWN,
-				[null as unknown as PerformanceData],
+				NagiosReturnCodes.UNKNOWN,
+				[null as unknown as NagiosPerformanceData],
 			);
 
 			expect(result).not.toHaveProperty('performanceData');
@@ -275,11 +276,9 @@ describe('createNagiosReturnMessage', () => {
 
 describe('getNagiosStatusText', () => {
 	it('returns status labels for known Nagios codes', () => {
-		expect(getNagiosStatusText(NagiosReturnValuesEnum.OK)).toBe('OK');
-		expect(getNagiosStatusText(NagiosReturnValuesEnum.WARNING)).toBe('WARNING');
-		expect(getNagiosStatusText(NagiosReturnValuesEnum.CRITICAL)).toBe(
-			'CRITICAL',
-		);
-		expect(getNagiosStatusText(NagiosReturnValuesEnum.UNKNOWN)).toBe('UNKNOWN');
+		expect(getNagiosStatusText(NagiosReturnCodes.OK)).toBe('OK');
+		expect(getNagiosStatusText(NagiosReturnCodes.WARNING)).toBe('WARNING');
+		expect(getNagiosStatusText(NagiosReturnCodes.CRITICAL)).toBe('CRITICAL');
+		expect(getNagiosStatusText(NagiosReturnCodes.UNKNOWN)).toBe('UNKNOWN');
 	});
 });
