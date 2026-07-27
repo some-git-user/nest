@@ -5,6 +5,6 @@
 		"rootDir": "plugins",
 		"outDir": "dist/plugins"
 	},
-	"include": ["plugins/**/*.ts"],
+	"include": ["plugins/**/*.ts", "src/types/**/*.ts"],
 	"exclude": ["node_modules", "**/*.spec.ts"]
 }
