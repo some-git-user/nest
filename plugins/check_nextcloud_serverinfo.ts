@@ -1,4 +1,14 @@
-import type {PluginMeta} from '../src/types/plugin-meta';
+import https from 'https';
+import {
+	NagiosPerformanceData,
+	NagiosReturnCode,
+	NagiosReturnCodes,
+} from '../src/types/nagios';
+import type {
+	HtmlTemplateString,
+	PluginMeta,
+	PluginReturn,
+} from '../src/types/plugin';
 
 type NextcloudServerInfoParams = {
 	baseUrl?: string;
@@ -62,21 +72,7 @@ type NextcloudUpdateRecord = NonNullable<
 	NonNullable<NextcloudServerInfoResponse['ocs']['data']['nextcloud']>['system']
 >['update'];
 
-type PerformanceDataEntry = {
-	label: string;
-	value: string;
-	uom: string;
-	warn?: string;
-	crit?: string;
-	min?: string;
-};
-
-const STATUS_OK = 0;
-const STATUS_WARNING = 1;
-const STATUS_CRITICAL = 2;
-const STATUS_UNKNOWN = 3;
-
-export const meta = {
+export const meta: PluginMeta = {
 	usage: {
 		http: '/plugins/check-nextcloud-serverinfo?baseUrl=<nextcloud-base-url>&token=<serverinfo-token>&warningCpuLoad1m=<number>&criticalCpuLoad1m=<number>&warningFreeSpaceGiB=<number>&criticalFreeSpaceGiB=<number>&skipApps=<true|false>&skipUpdate=<true|false>',
 		shell:
@@ -187,8 +183,8 @@ echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/p
   <li><strong>WARNING</strong> – CPU load, free space, or optional update checks crossed warning thresholds</li>
   <li><strong>CRITICAL</strong> – CPU load or free space crossed critical thresholds</li>
   <li><strong>UNKNOWN</strong> – Request failed, authorization failed, or the response payload was not usable</li>
-</ul>`,
-} satisfies PluginMeta;
+</ul>` as HtmlTemplateString,
+};
 
 const usageMessage = (): string =>
 	`Usage: ${meta.usage.http}. Provide baseUrl plus either token or username/password.`;
@@ -328,15 +324,15 @@ export const buildHeaders = (
 };
 
 export const getStatusText = (code: number): string => {
-	if (code === STATUS_OK) {
+	if (code === NagiosReturnCodes.OK) {
 		return 'OK';
 	}
 
-	if (code === STATUS_WARNING) {
+	if (code === NagiosReturnCodes.WARNING) {
 		return 'WARNING';
 	}
 
-	if (code === STATUS_CRITICAL) {
+	if (code === NagiosReturnCodes.CRITICAL) {
 		return 'CRITICAL';
 	}
 
@@ -345,18 +341,18 @@ export const getStatusText = (code: number): string => {
 
 export const checkNextcloudServerinfo = async (
 	params: NextcloudServerInfoParams,
-) => {
+): Promise<PluginReturn> => {
 	if (!params.baseUrl) {
 		return {
 			message: usageMessage(),
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
 	if (!params.token && !(params.username && params.password)) {
 		return {
 			message: usageMessage(),
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -366,7 +362,7 @@ export const checkNextcloudServerinfo = async (
 	) {
 		return {
 			message: usageMessage(),
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -379,7 +375,7 @@ export const checkNextcloudServerinfo = async (
 		return {
 			message:
 				'criticalCpuLoad1m must be greater than or equal to warningCpuLoad1m.',
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -387,7 +383,7 @@ export const checkNextcloudServerinfo = async (
 		return {
 			message:
 				'criticalFreeSpaceGiB must be less than or equal to warningFreeSpaceGiB.',
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -400,19 +396,25 @@ export const checkNextcloudServerinfo = async (
 	} catch (error) {
 		return {
 			message: `Nextcloud serverinfo configuration error: ${String(error)}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
 	try {
+		const httpsAgent = endpointUrl.startsWith('https://')
+			? new https.Agent({rejectUnauthorized: false})
+			: undefined;
+
 		const response = await fetch(endpointUrl, {
 			headers: buildHeaders(params),
+			signal: AbortSignal.timeout(10000),
+			...(httpsAgent && {agent: httpsAgent}),
 		});
 
 		if (!response.ok) {
 			return {
 				message: `Nextcloud serverinfo request failed: ${response.status} ${response.statusText}.`,
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -420,7 +422,7 @@ export const checkNextcloudServerinfo = async (
 		if (!isNextcloudServerInfoResponse(payloadUnknown)) {
 			return {
 				message: 'Nextcloud serverinfo returned an unexpected payload shape.',
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -430,7 +432,7 @@ export const checkNextcloudServerinfo = async (
 		if (statusText !== 'ok' || statusCode !== 200) {
 			return {
 				message: `Nextcloud serverinfo returned ${statusText ?? 'unknown'} (${statusCode ?? 'unknown'}): ${readString(metaRecord.message) ?? 'no message'}.`,
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -470,22 +472,22 @@ export const checkNextcloudServerinfo = async (
 			: undefined;
 		const updateAvailable = hasUpdateValue(updateRecord?.available);
 
-		let code = STATUS_OK;
+		let code: NagiosReturnCode = NagiosReturnCodes.OK;
 		const findings: string[] = [];
 		const bumpCode = (candidate: number, detail: string) => {
-			code = Math.max(code, candidate);
+			code = Math.max(code, candidate) as NagiosReturnCode;
 			findings.push(detail);
 		};
 
 		if (typeof freeSpaceGiB === 'number') {
 			if (freeSpaceGiB <= criticalFreeSpaceGiB) {
 				bumpCode(
-					STATUS_CRITICAL,
+					NagiosReturnCodes.CRITICAL,
 					`free space ${formatGiB(freeSpaceGiB)} GiB is at or below critical threshold ${criticalFreeSpaceGiB} GiB`,
 				);
 			} else if (freeSpaceGiB <= warningFreeSpaceGiB) {
 				bumpCode(
-					STATUS_WARNING,
+					NagiosReturnCodes.WARNING,
 					`free space ${formatGiB(freeSpaceGiB)} GiB is at or below warning threshold ${warningFreeSpaceGiB} GiB`,
 				);
 			}
@@ -494,24 +496,27 @@ export const checkNextcloudServerinfo = async (
 		if (typeof cpuLoad1m === 'number') {
 			if (cpuLoad1m >= criticalCpuLoad1m) {
 				bumpCode(
-					STATUS_CRITICAL,
+					NagiosReturnCodes.CRITICAL,
 					`cpu load 1m ${formatLoad(cpuLoad1m)} is at or above critical threshold ${criticalCpuLoad1m}`,
 				);
 			} else if (cpuLoad1m >= warningCpuLoad1m) {
 				bumpCode(
-					STATUS_WARNING,
+					NagiosReturnCodes.WARNING,
 					`cpu load 1m ${formatLoad(cpuLoad1m)} is at or above warning threshold ${warningCpuLoad1m}`,
 				);
 			}
 		}
 
 		if (!skipApps && appUpdates > 0) {
-			bumpCode(STATUS_WARNING, `app updates available: ${appUpdates}`);
+			bumpCode(
+				NagiosReturnCodes.WARNING,
+				`app updates available: ${appUpdates}`,
+			);
 		}
 
 		if (!skipUpdate && updateAvailable) {
 			bumpCode(
-				STATUS_CRITICAL,
+				NagiosReturnCodes.CRITICAL,
 				`core update available. Current version: ${version}, available version: ${readString(updateRecord?.available_version)}`,
 			);
 		}
@@ -530,7 +535,7 @@ export const checkNextcloudServerinfo = async (
 			summary.push('debug on');
 		}
 
-		const performanceData: PerformanceDataEntry[] = [];
+		const performanceData: NagiosPerformanceData[] = [];
 		if (typeof freeSpaceGiB === 'number') {
 			performanceData.push({
 				label: 'free_space_gib',
@@ -602,9 +607,58 @@ export const checkNextcloudServerinfo = async (
 		};
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : String(error);
+		const errorString = errorMessage.toLowerCase();
+
+		// Check the error cause for SSL/certificate related errors
+		const cause = (error as Error & {cause?: unknown})?.cause;
+		const causeMessage =
+			cause instanceof Error
+				? cause.message
+				: cause != null && typeof cause === 'string'
+					? cause
+					: '';
+		const causeString = causeMessage.toLowerCase();
+		const causeCode = (cause as {code?: string} | undefined)?.code;
+
+		// Check for SSL/certificate related errors in both error and cause
+		if (
+			errorString.includes('certificate') ||
+			errorString.includes('cert') ||
+			errorString.includes('self-signed') ||
+			errorString.includes('expired') ||
+			errorString.includes('unable to verify') ||
+			errorString.includes('certificate authority') ||
+			errorString.includes('tls') ||
+			errorString.includes('ssl') ||
+			causeString.includes('certificate') ||
+			causeString.includes('cert') ||
+			causeString.includes('self-signed') ||
+			causeString.includes('expired') ||
+			causeString.includes('unable to verify') ||
+			causeString.includes('certificate authority') ||
+			causeString.includes('tls') ||
+			causeString.includes('ssl') ||
+			causeCode === 'CERT_HAS_EXPIRED' ||
+			causeCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+			causeCode === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+			causeCode === 'SELF_SIGNED_CERT_IN_CHAIN' ||
+			causeCode === 'ERR_TLS_CERT_ALTNAME_INVALID'
+		) {
+			const certDetails = causeMessage || errorMessage;
+			return {
+				message: `Nextcloud serverinfo WARNING: SSL certificate issue - ${certDetails}`,
+				code: NagiosReturnCodes.WARNING,
+			};
+		}
+		if (errorString.includes('timeout')) {
+			return {
+				message: `Nextcloud serverinfo request error: Network timeout - request timed out. The server may be unreachable.`,
+				code: NagiosReturnCodes.UNKNOWN,
+			};
+		}
 		return {
 			message: `Nextcloud serverinfo request error: ${errorMessage}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 };
