@@ -7,7 +7,10 @@ import type {
 	ServerHostKeyAlgorithm,
 } from 'ssh2';
 import {Client} from 'ssh2';
-import type {PluginMeta} from '../src/types/plugin-meta';
+import type {NagiosReturnCode} from '../src/types/nagios';
+import {NagiosReturnCodes} from '../src/types/nagios';
+import type {HtmlTemplateString, PluginMeta} from '../src/types/plugin';
+import {PluginReturn} from '../src/types/plugin';
 
 type VigorVdslParams = {
 	host?: string;
@@ -61,11 +64,6 @@ type ResolvedTarget = {
 	port: number;
 };
 
-const STATUS_OK = 0;
-const STATUS_WARNING = 1;
-const STATUS_CRITICAL = 2;
-const STATUS_UNKNOWN = 3;
-
 const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_PORT = 22;
 const DEFAULT_COMMAND = 'vdsl status';
@@ -74,7 +72,7 @@ const DEFAULT_KEX_ALGORITHMS: KexAlgorithm[] = ['diffie-hellman-group1-sha1'];
 const DEFAULT_CIPHERS: CipherAlgorithm[] = ['3des-cbc'];
 const DEFAULT_HOST_KEY_ALGORITHMS: ServerHostKeyAlgorithm[] = ['ssh-rsa'];
 
-export const meta = {
+export const meta: PluginMeta = {
 	usage: {
 		http: '/plugins/check-vigor165-vdsl?host=<router-ip-or-dns>&port=<ssh-port>&username=<user>&password=<pass>&bookedDownstreamMbps=<number>&warningPercentBelow=<0-100>&criticalPercentBelow=<0-100>&timeoutMs=<milliseconds>&command=<optional-cli-command>&prompt=<optional-cli-prompt>&kexAlgorithms=<csv>&ciphers=<csv>&hostKeyAlgorithms=<csv>',
 		shell:
@@ -170,8 +168,8 @@ DrayTek&gt; vdsl status</code></pre>
   bookedDownstreamMbps=100 \
   warningPercentBelow=20 \
   criticalPercentBelow=40 \
-  timeoutMs=10000</code></pre>`,
-} satisfies PluginMeta;
+  timeoutMs=10000</code></pre>` as HtmlTemplateString,
+};
 
 const usageMessage = (): string =>
 	`Usage: ${meta.usage.http}. Provide host, username, password, and bookedDownstreamMbps.`;
@@ -642,14 +640,16 @@ export const extractDslMetricsFromPayload = (
 	};
 };
 
-export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
+export const checkVigor165Vdsl = async (params: {
+	[key: string]: string;
+}): Promise<PluginReturn> => {
 	const resolvedParams: VigorVdslParams = params;
 
 	const target = resolveTarget(resolvedParams);
 	if (!target || !resolvedParams.username || !resolvedParams.password) {
 		return {
 			message: usageMessage(),
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -660,7 +660,7 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 	if (!Number.isFinite(bookedDownstreamMbps)) {
 		return {
 			message: `${usageMessage()} bookedDownstreamMbps must be a positive number.`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -676,7 +676,7 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 		return {
 			message:
 				'criticalPercentBelow must be greater than or equal to warningPercentBelow.',
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 
@@ -693,7 +693,7 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 			return {
 				message:
 					'Could not parse downstream sync rate from VDSL SSH output. Verify the CLI command and prompt settings for this DrayTek router.',
-				code: STATUS_UNKNOWN,
+				code: NagiosReturnCodes.UNKNOWN,
 			};
 		}
 
@@ -702,15 +702,15 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 			100;
 		const boundedDelta = Math.max(0, deltaPercent);
 
-		let code = STATUS_OK;
+		let code: NagiosReturnCode = NagiosReturnCodes.OK;
 		const findings: string[] = [];
 		if (metrics.isDslUp === false) {
-			code = STATUS_CRITICAL;
+			code = NagiosReturnCodes.CRITICAL;
 			findings.push('dsl link appears down');
 		}
 
 		if (boundedDelta >= criticalPercentBelow) {
-			code = Math.max(code, STATUS_CRITICAL);
+			code = Math.max(code, NagiosReturnCodes.CRITICAL) as NagiosReturnCode;
 			findings.push(
 				`downstream ${round(metrics.downstreamMbps, 2)} Mbps is ${round(
 					boundedDelta,
@@ -718,7 +718,7 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 				)}% below booked ${round(bookedDownstreamMbps, 2)} Mbps (critical ${criticalPercentBelow}%)`,
 			);
 		} else if (boundedDelta >= warningPercentBelow) {
-			code = Math.max(code, STATUS_WARNING);
+			code = Math.max(code, NagiosReturnCodes.WARNING) as NagiosReturnCode;
 			findings.push(
 				`downstream ${round(metrics.downstreamMbps, 2)} Mbps is ${round(
 					boundedDelta,
@@ -912,7 +912,7 @@ export const checkVigor165Vdsl = async (params: {[key: string]: string}) => {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		return {
 			message: `Vigor SSH status error: ${errorMessage}`,
-			code: STATUS_UNKNOWN,
+			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 };
