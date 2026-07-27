@@ -11,6 +11,8 @@ import {
 import {sendNagiosUnknownError} from '../lib/http-nagios';
 import {logger} from '../lib/logger';
 import {createNagiosReturnMessage} from '../lib/nagios';
+import {NagiosReturnCode, NagiosReturnCodes} from '../types/nagios';
+import type {HtmlTemplateString} from '../types/plugin';
 import {
 	buildInvalidCodeResponse,
 	clearPluginRequireCache,
@@ -21,7 +23,7 @@ import {
 } from './dynamic-routes/helpers';
 
 export type PluginHelpContext = {
-	helpHtml?: string;
+	helpHtml?: HtmlTemplateString;
 	usageHttp?: string;
 	usageShell?: string;
 	pluginName?: string;
@@ -207,10 +209,20 @@ export const createPluginRouteHandler = (
 					return;
 				}
 
-				const isValidCode = isKnownNagiosCode(normalized.code);
+				const code =
+					typeof normalized.code === 'number' ? normalized.code : undefined;
+				const message =
+					typeof normalized.message === 'string'
+						? normalized.message
+						: undefined;
+				const performanceData = Array.isArray(normalized.performanceData)
+					? normalized.performanceData
+					: undefined;
+				const isValidCode = isKnownNagiosCode(code);
+
 				if (!isValidCode) {
 					const invalidCodeResponse = buildInvalidCodeResponse(
-						normalized.code,
+						code,
 						jsFilePath,
 						kebabCasePath,
 						env.HOST,
@@ -220,18 +232,17 @@ export const createPluginRouteHandler = (
 					return res.send(invalidCodeResponse.nagiosReturn);
 				}
 
-				const debugTemplate = `Debug: message=${normalized.message}, code=${normalized.code}, performanceData=${
-					normalized.performanceData
-						? JSON.stringify(normalized.performanceData)
-						: undefined
+				const validCode = Number(code) as NagiosReturnCode;
+				const debugTemplate = `Debug: message=${message}, code=${validCode}, performanceData=${
+					performanceData ? JSON.stringify(performanceData) : undefined
 				}`;
 				logger.debug(debugTemplate);
 
-				if (isValidCode && typeof normalized.message === 'string') {
+				if (isValidCode && typeof message === 'string') {
 					const nagiosReturn = createNagiosReturnMessage(
-						normalized.message,
-						normalized.code,
-						normalized.performanceData,
+						message,
+						validCode,
+						performanceData,
 					);
 					logger.debug(nagiosReturn);
 
@@ -240,8 +251,8 @@ export const createPluginRouteHandler = (
 
 				return res.send(
 					createNagiosReturnMessage(
-						normalized.message ?? `Unknown command ${req.url}`,
-						3,
+						message ?? `Unknown command ${req.url}`,
+						NagiosReturnCodes.UNKNOWN,
 					),
 				);
 			} catch (err) {
