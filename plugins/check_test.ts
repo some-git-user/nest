@@ -1,11 +1,62 @@
-import type {PluginMeta} from '../src/types/plugin-meta';
+import type {NagiosReturnCode} from '../src/types/nagios';
+import type {
+	HtmlTemplateString,
+	PluginMeta,
+	PluginReturn,
+} from '../src/types/plugin';
 
-export const meta = {
+export const meta: PluginMeta = {
 	usage: {
 		http: '/plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
 		shell:
 			'./check_nest.sh check-test nagiosReturnMessage=<string> nagiosReturnValue=<0 | 1 | 2 | 3> performanceData=<true | false>',
 	},
+	help: `<h1>check-test</h1>
+<p>A test plugin for verifying the NEST plugin system and Nagios integration.</p>
+
+<h2>Parameters</h2>
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>nagiosReturnMessage</code></td>
+      <td>string</td>
+      <td>-</td>
+      <td>The message to return in the Nagios check result</td>
+    </tr>
+    <tr>
+      <td><code>nagiosReturnValue</code></td>
+      <td>number</td>
+      <td>-</td>
+      <td>Nagios return code: 0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN</td>
+    </tr>
+    <tr>
+      <td><code>performanceData</code></td>
+      <td>boolean</td>
+      <td>false</td>
+      <td>When true, includes sample performance data in the result</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Return Codes</h2>
+<table>
+  <tr><th>Code</th><th>Status</th><th>Description</th></tr>
+  <tr><td>0</td><td>OK</td><td>Check passed successfully</td></tr>
+  <tr><td>1</td><td>WARNING</td><td>Warning condition</td></tr>
+  <tr><td>2</td><td>CRITICAL</td><td>Critical condition</td></tr>
+  <tr><td>3</td><td>UNKNOWN</td><td>Unknown error or invalid parameters</td></tr>
+</table>
+
+<h2>Examples</h2>
+<h3>Basic OK check</h3>
+<pre><code>GET /plugins/check-test?nagiosReturnMessage=All+systems+operational&nagiosReturnValue=0</code></pre>
+
+<h3>Warning with performance data</h3>
+<pre><code>GET /plugins/check-test?nagiosReturnMessage=High+load+detected&nagiosReturnValue=1&performanceData=true</code></pre>
+
+<h3>Using check_nest.sh</h3>
+<pre><code>./check_nest.sh check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=false</code></pre>` as HtmlTemplateString,
 	examples: [
 		{
 			label: 'Quick GET example',
@@ -39,44 +90,32 @@ export const meta = {
 			],
 		},
 	],
-} satisfies PluginMeta;
+};
 
 export const checkTest = (params: {
 	nagiosReturnMessage: string;
-	nagiosReturnValue: 0 | 1 | 2 | 3;
+	nagiosReturnValue: NagiosReturnCode;
 	performanceData: boolean;
-}) => {
+}): PluginReturn => {
 	const {nagiosReturnMessage, nagiosReturnValue, performanceData} = params;
 	console.log(
-		`Testplugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosReturnValue=${nagiosReturnValue}, performanceData=${performanceData}`,
+		`Test plugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosReturnValue=${nagiosReturnValue}, performanceData=${performanceData}`,
 	);
 
-	const returnObject: {
-		message: string;
-		code: number;
-		performanceData: Array<{
-			label: string;
-			value: number | string;
-			uom?: string;
-			warn?: string | null;
-			crit?: string | null;
-			min?: number | string | null;
-			max?: number | string | null;
-		}>;
-	} = {
+	const returnObject: PluginReturn = {
 		message: nagiosReturnMessage,
-		code: Number.isInteger(Number(nagiosReturnValue))
-			? Number(nagiosReturnValue)
-			: 3,
+		code: nagiosReturnValue,
 		performanceData: [],
 	};
 
 	if (
 		!nagiosReturnMessage ||
 		nagiosReturnValue === undefined ||
-		nagiosReturnValue === null
+		nagiosReturnValue === null ||
+		performanceData === undefined ||
+		performanceData === null
 	) {
-		returnObject.message = `Usage: ${meta.usage.http}`;
+		returnObject.message = `Usage: ${meta.usage?.http}`;
 		returnObject.code = 3;
 	}
 
@@ -88,7 +127,7 @@ export const checkTest = (params: {
 		let crit = '90';
 		let min = '0';
 		let max = '100';
-		returnObject.performanceData.push({
+		returnObject.performanceData?.push({
 			label,
 			value,
 			uom,
@@ -105,7 +144,7 @@ export const checkTest = (params: {
 		crit = '40';
 		min = '-20';
 		max = '50';
-		returnObject.performanceData.push({
+		returnObject.performanceData?.push({
 			label,
 			value,
 			uom,
