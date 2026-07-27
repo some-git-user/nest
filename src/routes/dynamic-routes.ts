@@ -17,12 +17,13 @@ import {
 	recordStartupWarnings,
 } from '../lib/startup-warning-registry';
 import type {
+	HtmlTemplateString,
 	PluginExampleField,
 	PluginExampleFieldInputType,
 	PluginMeta,
 	PluginMetaUsage,
 	PluginRouteExample,
-} from '../types/plugin-meta';
+} from '../types/plugin';
 
 const router = express.Router();
 const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
@@ -47,7 +48,7 @@ export type {
 	PluginMeta,
 	PluginMetaUsage,
 	PluginRouteExample,
-} from '../types/plugin-meta';
+} from '../types/plugin';
 
 export const registeredPluginRouteExamples: Record<
 	string,
@@ -83,16 +84,6 @@ const getPluginMetaExamples = (pluginModule: unknown): PluginRouteExample[] => {
 	const parsedExamples: PluginRouteExample[] = [];
 	meta.examples.forEach((example, index) => {
 		const defaultLabel = `example ${index + 1}`;
-
-		if (typeof example === 'string' && example.startsWith('/')) {
-			parsedExamples.push({
-				kind: 'link',
-				label: defaultLabel,
-				method: 'GET',
-				href: example,
-			});
-			return;
-		}
 
 		if (!isRecord(example)) {
 			return;
@@ -173,16 +164,90 @@ const getPluginMetaUsage = (
 	return undefined;
 };
 
-const getPluginMetaHelp = (pluginModule: unknown): string | undefined => {
+const isValidHtml = (value: string): boolean => {
+	// HTML syntax validation - check for at least one valid HTML tag
+	// This catches cases where plain text is accidentally used instead of HTML
+	// Pattern handles quoted attributes with > characters inside
+	// Based on best practices guides from Stack Overflow and MDN
+	return /<(?:"[^"]*"['"]*|'[^']*'['"]*|[^'">])+>/.test(value);
+};
+
+const isHtmlTemplateString = (value: unknown): value is HtmlTemplateString => {
+	if (typeof value !== 'string') {
+		return false;
+	}
+
+	return isValidHtml(value);
+};
+
+export const isPluginMeta = (value: unknown): value is PluginMeta => {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+
+	const record = value as Record<string, unknown>;
+
+	// Validate usage field
+	if (!('usage' in record)) {
+		return false;
+	}
+
+	const usage = record.usage;
+	if (
+		typeof usage !== 'string' &&
+		!(typeof usage === 'object' && usage !== null)
+	) {
+		return false;
+	}
+
+	if (typeof usage === 'object') {
+		const usageRecord = usage as Record<string, unknown>;
+		if ('http' in usageRecord && typeof usageRecord.http !== 'string') {
+			return false;
+		}
+		if ('shell' in usageRecord && typeof usageRecord.shell !== 'string') {
+			return false;
+		}
+	}
+
+	// Validate help field - must be a string (HTML template)
+	if (!('help' in record)) {
+		return false;
+	}
+
+	if (!isHtmlTemplateString(record.help)) {
+		return false;
+	}
+
+	// Validate examples field
+	if (!('examples' in record)) {
+		return false;
+	}
+
+	if (!Array.isArray(record.examples)) {
+		return false;
+	}
+
+	return true;
+};
+
+const getPluginMetaHelp = (
+	pluginModule: unknown,
+): HtmlTemplateString | undefined => {
 	if (typeof pluginModule !== 'object' || pluginModule === null) {
 		return undefined;
 	}
+
 	const moduleRecord = pluginModule as Record<string, unknown>;
 	if (typeof moduleRecord.meta !== 'object' || moduleRecord.meta === null) {
 		return undefined;
 	}
-	const meta = moduleRecord.meta as PluginMeta;
-	return typeof meta.help === 'string' ? meta.help : undefined;
+
+	if (!isPluginMeta(moduleRecord.meta)) {
+		return undefined;
+	}
+
+	return moduleRecord.meta.help;
 };
 
 const logPluginUsage = (
@@ -190,11 +255,6 @@ const logPluginUsage = (
 	usage: PluginMetaUsage,
 	helpUrl: string,
 ): void => {
-	if (typeof usage === 'string') {
-		logger.info(`Usage for plugin ${pluginPath}: ${usage} | Help: ${helpUrl}`);
-		return;
-	}
-
 	if (usage.http) {
 		logger.info(
 			`HTTP usage for plugin ${pluginPath}: ${usage.http} | Help: ${helpUrl}`,
@@ -273,6 +333,41 @@ const isPluginFileSecurityAcceptable = (
 	return true;
 };
 
+/**
+ * Clears the plugin cache directory by recursively deleting all cached transpiled JavaScript files.
+ *
+ * SECURITY CRITICAL: This function must be called at application startup before loading any plugins.
+ * It eliminates the risk of executing tampered cached .js files by ensuring that:
+ * - All cached transpiled plugins are removed from disk
+ * - Fresh .js files are transpiled from verified .ts sources (whitelist-validated)
+ * - No stale or potentially compromised cache files persist across restarts
+ *
+ * This is a defense-in-depth measure that complements the SHA-256 hash verification
+ * of .ts plugin files in plugin-whitelist.txt.
+ *
+ * @example
+ * // Call at startup before plugin loading
+ * clearPluginCache();
+ * const pluginFiles = fs.readdirSync(pluginsDir);
+ *
+ * @see {@link resolveRuntimePluginPath} - Transpiles .ts files to .js after cache clearance
+ * @see {@link verifyPluginWhitelist} - Validates .ts file integrity against whitelist
+ */
+const clearPluginCache = (): void => {
+	if (!fs.existsSync(pluginCacheDir)) {
+		return;
+	}
+
+	try {
+		fs.rmSync(pluginCacheDir, {recursive: true, force: true});
+		logger.info(`Cleared plugin cache directory: ${pluginCacheDir}`);
+	} catch (err) {
+		logger.warn(
+			`Could not clear plugin cache directory ${pluginCacheDir}. Error: ${getErrorMessage(err)}`,
+		);
+	}
+};
+
 const resolveRuntimePluginPath = (
 	filePath: string,
 	fileName: string,
@@ -287,31 +382,6 @@ const resolveRuntimePluginPath = (
 		fileName.replace(/\.ts$/, '.js'),
 	);
 
-	let sourceMtimeMs = 0;
-	let cacheMtimeMs = -1;
-
-	try {
-		const sourceStat = fs.statSync(filePath);
-		sourceMtimeMs =
-			typeof sourceStat.mtimeMs === 'number' ? sourceStat.mtimeMs : 0;
-	} catch (err) {
-		warnWithError(`Could not stat plugin file ${filePath}`, err);
-		return undefined;
-	}
-
-	try {
-		const cacheStat = fs.statSync(jsCachePath);
-		cacheMtimeMs =
-			typeof cacheStat.mtimeMs === 'number' ? cacheStat.mtimeMs : -1;
-	} catch {
-		cacheMtimeMs = -1;
-	}
-
-	if (cacheMtimeMs >= sourceMtimeMs) {
-		logger.debug(`Using cached transpiled plugin: ${jsCachePath}`);
-		return jsCachePath;
-	}
-
 	try {
 		fs.mkdirSync(pluginCacheDir, {recursive: true});
 		const tsCode = fs.readFileSync(filePath, 'utf-8');
@@ -325,7 +395,31 @@ const resolveRuntimePluginPath = (
 			},
 		});
 
-		fs.writeFileSync(jsCachePath, result.outputText);
+		// Inline NagiosReturnCodes to avoid runtime import dependencies
+		// This replaces the import with the actual constant values at transpile time
+		let outputText = result.outputText;
+
+		// Remove the import statement for nagios module
+		outputText = outputText.replace(
+			/const nagios_1 = require\("([^"]*)"\);?\n?/g,
+			'',
+		);
+
+		// Inline the NagiosReturnCodes constant directly (transpiled as nagios_1.NagiosReturnCodes.X)
+		outputText = outputText.replace(
+			/nagios_1\.NagiosReturnCodes\.(OK|WARNING|CRITICAL|UNKNOWN)/g,
+			(match: string, code: string) => {
+				const values: Record<string, string> = {
+					OK: '0',
+					WARNING: '1',
+					CRITICAL: '2',
+					UNKNOWN: '3',
+				};
+				return values[code];
+			},
+		);
+
+		fs.writeFileSync(jsCachePath, outputText);
 		logger.info(`Transpiled TS plugin to cache: ${filePath} -> ${jsCachePath}`);
 		return jsCachePath;
 	} catch (err) {
@@ -335,6 +429,8 @@ const resolveRuntimePluginPath = (
 };
 
 logger.info(`Use plugins directory: ${pluginsDir}`);
+
+clearPluginCache();
 
 const pluginFiles = fs.readdirSync(pluginsDir).filter(isSupportedPluginFile);
 const tsPluginBaseNames = new Set(
