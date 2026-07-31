@@ -13,16 +13,6 @@ type StartupWarningClassifier = {
 const HELP_ROUTE_PREFIX = '/help/startup-warnings';
 
 const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
-	'middleware-disabled': {
-		id: 'middleware-disabled',
-		title: 'Security Middleware Disabled',
-		description:
-			'Core security middleware is disabled, so rate limiting and access-control checks are not active.',
-		handlingSteps: [
-			'Set ENABLE_SECURITY_MIDDLEWARE=true in your configuration.',
-			'Restart the service and verify startup warnings no longer include this item.',
-		],
-	},
 	'api-key-missing': {
 		id: 'api-key-missing',
 		title: 'API Key Not Configured',
@@ -181,10 +171,6 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 };
 
 const CLASSIFIERS: StartupWarningClassifier[] = [
-	{
-		id: 'middleware-disabled',
-		matcher: /ENABLE_SECURITY_MIDDLEWARE is disabled/i,
-	},
 	{id: 'api-key-missing', matcher: /API_KEY is not configured/i},
 	{id: 'allowed-ips-empty', matcher: /ALLOWED_IPS is not configured/i},
 	{

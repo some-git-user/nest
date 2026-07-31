@@ -16,7 +16,6 @@ export type AccessControlConfig = {
 
 export type RecommendedSecurityConfig = {
 	NODE_ENV?: string;
-	ENABLE_SECURITY_MIDDLEWARE?: boolean;
 	API_KEY?: string;
 	ALLOWED_IPS?: string;
 	RATE_LIMIT_WINDOW_MS?: number;
@@ -52,14 +51,6 @@ export const getRecommendedSecurityWarnings = (
 	config: RecommendedSecurityConfig,
 ): string[] => {
 	const warnings: string[] = [];
-
-	if (!config.ENABLE_SECURITY_MIDDLEWARE) {
-		warnings.push(
-			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
-		);
-		recordStartupWarnings(warnings);
-		return warnings;
-	}
 
 	if (String(config.API_KEY ?? '').trim().length === 0) {
 		warnings.push(

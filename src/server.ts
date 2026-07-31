@@ -178,23 +178,21 @@ app.use(
 );
 app.use(helmet());
 
-if (env.ENABLE_SECURITY_MIDDLEWARE) {
-	app.use(
-		rateLimit({
-			windowMs: env.RATE_LIMIT_WINDOW_MS || 60_000,
-			max: env.RATE_LIMIT_MAX || 120,
-			standardHeaders: true,
-			legacyHeaders: false,
-		}),
-	);
-	app.use(
-		createAccessControlMiddleware({
-			apiKey: env.API_KEY,
-			apiKeyHeader: env.API_KEY_HEADER,
-			allowedIps: env.ALLOWED_IPS,
-		}),
-	);
-}
+app.use(
+	rateLimit({
+		windowMs: env.RATE_LIMIT_WINDOW_MS || 60_000,
+		max: env.RATE_LIMIT_MAX || 120,
+		standardHeaders: true,
+		legacyHeaders: false,
+	}),
+);
+app.use(
+	createAccessControlMiddleware({
+		apiKey: env.API_KEY,
+		apiKeyHeader: env.API_KEY_HEADER,
+		allowedIps: env.ALLOWED_IPS,
+	}),
+);
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
 const startupWarnings = Array.from(
