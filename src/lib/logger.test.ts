@@ -118,6 +118,25 @@ describe('logger', () => {
 		);
 	});
 
+	it('falls back to console.error when file writes fail', () => {
+		const consoleErrorSpy = jest
+			.spyOn(console, 'error')
+			.mockImplementation(() => {});
+		jest.spyOn(console, 'warn').mockImplementation(() => {});
+		const {logger, appendFileSync} = loadLoggerWithMocks();
+		const writeError = new Error('disk full');
+		appendFileSync.mockImplementation(() => {
+			throw writeError;
+		});
+
+		logger.warn('warn-write-failure');
+
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			'[Logger] Failed to write log file:',
+			writeError,
+		);
+	});
+
 	it('formats non-string messages through toString and undefined fallback', () => {
 		const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 		const {logger} = loadLoggerWithMocks({

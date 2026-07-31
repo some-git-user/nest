@@ -1,8 +1,6 @@
 type EnvShape = {
 	TLS_CERT_PATH: string;
 	TLS_KEY_PATH: string;
-	TLS_CERT_COMMON_NAME: string;
-	TLS_CERT_DAYS: number;
 };
 
 const loadTlsModule = (options?: {
@@ -35,8 +33,6 @@ const loadTlsModule = (options?: {
 	const env: EnvShape = {
 		TLS_CERT_PATH: 'certs/nest-cert.pem',
 		TLS_KEY_PATH: 'certs/nest-key.pem',
-		TLS_CERT_COMMON_NAME: 'localhost',
-		TLS_CERT_DAYS: 365,
 		...options?.envOverrides,
 	};
 
@@ -114,8 +110,6 @@ describe('ensureTlsCertificate', () => {
 				envOverrides: {
 					TLS_CERT_PATH: certPath,
 					TLS_KEY_PATH: keyPath,
-					TLS_CERT_COMMON_NAME: 'nest.local',
-					TLS_CERT_DAYS: 30,
 				},
 				existingPaths: [certPath],
 			});
@@ -142,9 +136,9 @@ describe('ensureTlsCertificate', () => {
 				'-out',
 				certPath,
 				'-days',
-				'30',
+				'365',
 				'-subj',
-				'/CN=nest.local',
+				'/CN=localhost',
 			],
 			expect.objectContaining({encoding: 'utf8'}),
 		);

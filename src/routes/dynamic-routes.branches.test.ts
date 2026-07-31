@@ -184,7 +184,6 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			HOST: 'localhost',
 			PORT: 5000,
 			PLUGINS_DIR: 'plugins',
-			PLUGIN_WHITELIST_PATH: '',
 			LOG_FILE_PATH: 'logs/nest.log',
 		},
 	}));
@@ -826,7 +825,6 @@ describe('dynamic routes (branch coverage)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));

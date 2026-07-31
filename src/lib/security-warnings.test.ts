@@ -1,33 +1,10 @@
 import {getRecommendedSecurityWarnings} from './security';
 
 describe('getRecommendedSecurityWarnings', () => {
-	test('warns when security middleware is disabled in development', () => {
-		expect(
-			getRecommendedSecurityWarnings({
-				NODE_ENV: 'development',
-				ENABLE_SECURITY_MIDDLEWARE: false,
-			}),
-		).toEqual([
-			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
-		]);
-	});
-
-	test('warns when security middleware is disabled in production', () => {
-		expect(
-			getRecommendedSecurityWarnings({
-				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: false,
-			}),
-		).toEqual([
-			'Security recommendation: ENABLE_SECURITY_MIDDLEWARE is disabled.',
-		]);
-	});
-
 	test('warns when api key is missing in production', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: '',
 				ALLOWED_IPS: '127.0.0.1, ::1',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -42,7 +19,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -57,7 +33,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '127.0.0.1, ::1',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -70,7 +45,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
 				RATE_LIMIT_WINDOW_MS: 0,
@@ -85,7 +59,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -100,7 +73,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -114,7 +86,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				API_KEY: 'secret',
 				ALLOWED_IPS: '127.0.0.1,10.0.0.10',
 				RATE_LIMIT_WINDOW_MS: 60_000,
@@ -127,7 +98,6 @@ describe('getRecommendedSecurityWarnings', () => {
 		expect(
 			getRecommendedSecurityWarnings({
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 			}),
 		).toEqual([
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',

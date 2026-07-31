@@ -117,13 +117,25 @@ describe('server bootstrap', () => {
 				HOST: '127.0.0.1',
 				PORT: 5443,
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				RATE_LIMIT_WINDOW_MS: 60_000,
 				RATE_LIMIT_MAX: 120,
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
 				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -133,6 +145,9 @@ describe('server bootstrap', () => {
 			})),
 		}));
 		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
+		jest.doMock('./lib/startup-check', () => ({
+			validateStartup: jest.fn(),
+		}));
 		jest.doMock('./lib/security', () => ({
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
 			getRecommendedSecurityWarnings: jest.fn(() => [
@@ -587,13 +602,25 @@ describe('server bootstrap', () => {
 				HOST: '127.0.0.1',
 				PORT: 5443,
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: false,
 				RATE_LIMIT_WINDOW_MS: 60_000,
 				RATE_LIMIT_MAX: 120,
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
 				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -644,8 +671,8 @@ describe('server bootstrap', () => {
 		expect(expressFactory).toHaveBeenCalledTimes(1);
 		expect(use).toHaveBeenCalledWith('json-middleware');
 		expect(use).toHaveBeenCalledWith(helmetMiddleware);
-		expect(use).not.toHaveBeenCalledWith(rateLimitMiddleware);
-		expect(use).not.toHaveBeenCalledWith(accessControlMiddleware);
+		expect(use).toHaveBeenCalledWith(rateLimitMiddleware);
+		expect(use).toHaveBeenCalledWith(accessControlMiddleware);
 		expect(rootSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'text/html; charset=utf-8',
@@ -719,13 +746,25 @@ describe('server bootstrap', () => {
 				HOST: '127.0.0.1',
 				PORT: 5443,
 				NODE_ENV: 'production',
-				ENABLE_SECURITY_MIDDLEWARE: true,
 				RATE_LIMIT_WINDOW_MS: 0,
 				RATE_LIMIT_MAX: 0,
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
 				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
 		jest.doMock('./lib/tls', () => ({
@@ -736,6 +775,12 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('./lib/logger', () => ({
 			logger: {info: jest.fn(), warn: jest.fn(), error: jest.fn()},
+		}));
+		jest.doMock('./lib/startup-check', () => ({
+			validateStartup: jest.fn(),
+		}));
+		jest.doMock('./lib/startup-check', () => ({
+			validateStartup: jest.fn(),
 		}));
 		jest.doMock('./lib/security', () => ({
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),

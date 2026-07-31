@@ -34,12 +34,10 @@ describe('dynamic routes (plugins)', () => {
 		const pluginSource = 'export const checkTest = async () => ({})';
 		const pluginFiles = options.pluginFiles ?? ['check_test.ts'];
 		const pluginsDir = options.pluginsDir ?? 'plugins';
-		const whitelistPath = options.pluginWhitelistPath
-			? path.resolve(process.cwd(), options.pluginWhitelistPath)
-			: path.join(
-					path.resolve(process.cwd(), pluginsDir),
-					'plugin-whitelist.txt',
-				);
+		const whitelistPath = path.join(
+			path.resolve(process.cwd(), pluginsDir),
+			'plugin-whitelist.txt',
+		);
 		const approvedHash = crypto
 			.createHash('sha256')
 			.update(pluginSource)
@@ -204,7 +202,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: pluginsDir,
-				PLUGIN_WHITELIST_PATH: options.pluginWhitelistPath ?? '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1129,7 +1126,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1230,7 +1226,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1281,7 +1276,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1357,7 +1351,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1437,7 +1430,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
@@ -1534,7 +1526,6 @@ describe('dynamic routes (plugins)', () => {
 				HOST: 'localhost',
 				PORT: 5000,
 				PLUGINS_DIR: 'plugins',
-				PLUGIN_WHITELIST_PATH: '',
 				LOG_FILE_PATH: 'logs/nest.log',
 			},
 		}));
