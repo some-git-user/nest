@@ -121,16 +121,30 @@ export const verifyPluginWhitelist = ({
 	if (fs.existsSync(whitelistPath)) {
 		if (typeof process.getuid === 'function') {
 			const whitelistStat = fs.statSync(whitelistPath);
-			const validation = validateUnixFileSecurity(
-				whitelistStat,
-				process.getuid(),
-			);
+			const processUid = process.getuid();
+
+			// In development mode, accept either current user or root ownership
+			// This allows running with sudo for plugin testing without breaking regular dev mode
+			const expectedUid =
+				process.env.NODE_ENV === 'development' && processUid === 0
+					? whitelistStat.uid // Accept the actual file owner in dev mode
+					: processUid;
+
+			const validation = validateUnixFileSecurity(whitelistStat, expectedUid);
 
 			if (!validation.ok && validation.reason === 'owner-mismatch') {
-				warnings.push(
-					`Plugin trust warning: whitelist file ${displayWhitelistPath} has insecure ownership (uid ${validation.actualUid}); expected uid ${validation.expectedUid}. Refusing to trust whitelist entries.`,
-				);
-				return {approvedFiles, warnings};
+				// In development, allow root to access user-owned files
+				const isDevRootAccess =
+					process.env.NODE_ENV === 'development' &&
+					processUid === 0 &&
+					whitelistStat.uid !== 0;
+
+				if (!isDevRootAccess) {
+					warnings.push(
+						`Plugin trust warning: whitelist file ${displayWhitelistPath} has insecure ownership (uid ${validation.actualUid}); expected uid ${validation.expectedUid}. Refusing to trust whitelist entries.`,
+					);
+					return {approvedFiles, warnings};
+				}
 			}
 
 			if (!validation.ok && validation.reason === 'group-or-other-writable') {

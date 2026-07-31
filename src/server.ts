@@ -19,6 +19,7 @@ import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
 } from './lib/security';
+import {validateStartup} from './lib/startup-check';
 import {
 	getStartupWarningHelpTopic,
 	renderStartupWarningHelpHtml,
@@ -34,6 +35,8 @@ import dynamicRoutes, {
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
 import type {PluginRouteExample} from './types/plugin';
+
+validateStartup();
 
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
