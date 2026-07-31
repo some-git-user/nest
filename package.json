@@ -10,6 +10,7 @@
 		"build:deb": "npm run build:release && cd build_deb && ./make_deb.sh && ./make_plugins_deb.sh",
 		"start": "node dist/server.js",
 		"dev": "NODE_ENV=development nodemon -r tsconfig-paths/register src/server.ts --inspect",
+		"dev:root": "sudo env PATH=\"$(sudo bash -c 'echo $PATH'):$PATH\" npm run dev",
 		"format:check": "prettier --check .",
 		"format:fix": "prettier --write --list-different .",
 		"lint:check": "eslint . --report-unused-disable-directives --max-warnings 0",
