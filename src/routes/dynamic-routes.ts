@@ -30,14 +30,7 @@ const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
 const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
 const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
-const configuredPluginWhitelistPath = String(
-	env.PLUGIN_WHITELIST_PATH || '',
-).trim();
-const pluginWhitelistPath = path.resolve(
-	process.cwd(),
-	configuredPluginWhitelistPath ||
-		path.join(pluginsDir, 'plugin-whitelist.txt'),
-);
+const pluginWhitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
 
 export const pluginStartupWarnings: string[] = [];
 export const registeredPluginRoutes: string[] = [];

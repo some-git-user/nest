@@ -26,7 +26,6 @@ class Logger {
 				fs.mkdirSync(path.dirname(this.logfile), {recursive: true});
 				fs.appendFileSync(this.logfile, formatted + '\n', {encoding: 'utf8'});
 			} catch (err) {
-				// fallback: print error to console
 				console.error('[Logger] Failed to write log file:', err);
 			}
 		}

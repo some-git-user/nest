@@ -5,6 +5,10 @@ import {env} from '../config/env';
 import {logger} from './logger';
 import {recordStartupWarning} from './startup-warning-registry';
 
+// Static defaults for self-signed certificate generation
+const DEFAULT_CERT_COMMON_NAME = 'localhost';
+const DEFAULT_CERT_VALIDITY_DAYS = 365;
+
 const resolvePathFromCwd = (inputPath: string): string => {
 	if (path.isAbsolute(inputPath)) {
 		return inputPath;
@@ -102,8 +106,8 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 	createSelfSignedCert(
 		certPath,
 		keyPath,
-		env.TLS_CERT_COMMON_NAME,
-		env.TLS_CERT_DAYS,
+		DEFAULT_CERT_COMMON_NAME,
+		DEFAULT_CERT_VALIDITY_DAYS,
 	);
 
 	logger.info('Generated self-signed TLS certificate for HTTPS startup.');

@@ -1,4 +1,4 @@
-import {bool, cleanEnv, host, num, port, str} from 'envalid';
+import {cleanEnv, host, num, port, str} from 'envalid';
 import * as fs from 'fs';
 import * as path from 'path';
 import {validateUnixFileSecurity} from '../lib/file-security';
@@ -88,16 +88,12 @@ export const env = cleanEnv(process.env, {
 	PORT: port({default: 5000}),
 	TLS_CERT_PATH: str({default: 'certs/nest-cert.pem'}),
 	TLS_KEY_PATH: str({default: 'certs/nest-key.pem'}),
-	TLS_CERT_COMMON_NAME: str({default: 'localhost'}),
-	TLS_CERT_DAYS: num({default: 365}),
 	PLUGINS_DIR: str({default: 'plugins'}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
 	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes
-	ENABLE_SECURITY_MIDDLEWARE: bool({default: true}),
 	API_KEY_HEADER: str({default: 'x-api-key'}),
 	API_KEY: str({default: ''}),
 	ALLOWED_IPS: str({default: '127.0.0.1, ::1'}), // Loopback addresses by default for IPv4 and IPv6
-	PLUGIN_WHITELIST_PATH: str({default: ''}),
 	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
 	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
 });
