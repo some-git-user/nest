@@ -15,12 +15,12 @@ type NextcloudServerInfoParams = {
 	token?: string;
 	username?: string;
 	password?: string;
-	warningCpuLoad1m?: string;
-	criticalCpuLoad1m?: string;
-	warningFreeSpaceGiB?: string;
-	criticalFreeSpaceGiB?: string;
-	skipApps?: string;
-	skipUpdate?: string;
+	warningCpuLoad1m?: number;
+	criticalCpuLoad1m?: number;
+	warningFreeSpaceGiB?: number;
+	criticalFreeSpaceGiB?: number;
+	skipApps?: boolean;
+	skipUpdate?: boolean;
 };
 
 type NextcloudServerInfoResponse = {
@@ -89,12 +89,12 @@ export const meta: PluginMeta = {
 				{
 					name: 'skipApps',
 					label: 'Skip App Update Check',
-					defaultValue: 'true',
+					defaultValue: 'false',
 				},
 				{
 					name: 'skipUpdate',
 					label: 'Skip Core Update Check',
-					defaultValue: 'true',
+					defaultValue: 'false',
 				},
 			],
 		},
@@ -188,38 +188,6 @@ echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/p
 
 const usageMessage = (): string =>
 	`Usage: ${meta.usage.http}. Provide baseUrl plus either token or username/password.`;
-
-const parseBoolean = (
-	value: string | undefined,
-	defaultValue: boolean,
-): boolean => {
-	if (!value) {
-		return defaultValue;
-	}
-
-	const normalized = value.trim().toLowerCase();
-	if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-		return true;
-	}
-
-	if (['0', 'false', 'no', 'off'].includes(normalized)) {
-		return false;
-	}
-
-	return defaultValue;
-};
-
-const parseNumber = (
-	value: string | undefined,
-	defaultValue: number,
-): number => {
-	if (!value) {
-		return defaultValue;
-	}
-
-	const parsed = Number(value);
-	return Number.isFinite(parsed) ? parsed : defaultValue;
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null;
@@ -366,10 +334,27 @@ export const checkNextcloudServerinfo = async (
 		};
 	}
 
-	const warningCpuLoad1m = parseNumber(params.warningCpuLoad1m, 4);
-	const criticalCpuLoad1m = parseNumber(params.criticalCpuLoad1m, 8);
-	const warningFreeSpaceGiB = parseNumber(params.warningFreeSpaceGiB, 20);
-	const criticalFreeSpaceGiB = parseNumber(params.criticalFreeSpaceGiB, 10);
+	// Values already coerced by dynamic-routes.ts coerceParams()
+	const warningCpuLoad1m =
+		params.warningCpuLoad1m != null &&
+		Number.isFinite(Number(params.warningCpuLoad1m))
+			? Number(params.warningCpuLoad1m)
+			: 4;
+	const criticalCpuLoad1m =
+		params.criticalCpuLoad1m != null &&
+		Number.isFinite(Number(params.criticalCpuLoad1m))
+			? Number(params.criticalCpuLoad1m)
+			: 8;
+	const warningFreeSpaceGiB =
+		params.warningFreeSpaceGiB != null &&
+		Number.isFinite(Number(params.warningFreeSpaceGiB))
+			? Number(params.warningFreeSpaceGiB)
+			: 20;
+	const criticalFreeSpaceGiB =
+		params.criticalFreeSpaceGiB != null &&
+		Number.isFinite(Number(params.criticalFreeSpaceGiB))
+			? Number(params.criticalFreeSpaceGiB)
+			: 10;
 
 	if (criticalCpuLoad1m < warningCpuLoad1m) {
 		return {
@@ -387,8 +372,8 @@ export const checkNextcloudServerinfo = async (
 		};
 	}
 
-	const skipApps = parseBoolean(params.skipApps, true);
-	const skipUpdate = parseBoolean(params.skipUpdate, true);
+	const skipApps = params.skipApps ?? false;
+	const skipUpdate = params.skipUpdate ?? false;
 
 	let endpointUrl = '';
 	try {
