@@ -257,8 +257,8 @@ app.use((req: Request, res: Response) => {
 const tlsPaths = ensureTlsCertificate();
 const server = https.createServer(
 	{
-		cert: fs.readFileSync(tlsPaths.certPath),
-		key: fs.readFileSync(tlsPaths.keyPath),
+		cert: fs.readFileSync(tlsPaths.certPath, 'utf8'),
+		key: fs.readFileSync(tlsPaths.keyPath, 'utf8'),
 	},
 	app,
 );
