@@ -4,6 +4,10 @@
 
 Nest is a Node.js/Express HTTPS server that exposes Nagios-compatible checks with dynamic plugin support.
 
+## Why This Exists
+
+Unlike traditional Nagios setups built on Bash/Python/Ruby scripts, Nest uses TypeScript plugins so teams can leverage modern tooling, shared libraries, strong typing, and Jest tests in a single ecosystem.
+
 ## Quick Start
 
 ```bash
