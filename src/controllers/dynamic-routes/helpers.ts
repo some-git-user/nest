@@ -9,7 +9,7 @@ import {NagiosReturnCode, NagiosReturnCodes} from '../../types/nagios';
 import type {PluginReturn} from '../../types/plugin';
 
 export type PluginFunction = (params: {
-	[key: string]: string;
+	[key: string]: string | number | boolean;
 }) => Promise<unknown>;
 
 export const parseUrlParams = (url: string): {[key: string]: string} => {
@@ -25,6 +25,27 @@ export const parseUrlParams = (url: string): {[key: string]: string} => {
 	}
 
 	return paramsObj;
+};
+
+export const coerceParams = (params: {
+	[key: string]: string;
+}): {[key: string]: string | number | boolean} => {
+	const coerced: {[key: string]: string | number | boolean} = {};
+
+	for (const [key, value] of Object.entries(params)) {
+		// Boolean coercion (case-sensitive, exact match)
+		if (value === 'true') {
+			coerced[key] = true;
+		} else if (value === 'false') {
+			coerced[key] = false;
+		} else if (/^-?\d+\.?\d*$/.test(value) && value.trim() !== '') {
+			coerced[key] = Number(value);
+		} else {
+			coerced[key] = value;
+		}
+	}
+
+	return coerced;
 };
 
 export const getPluginFunction = (

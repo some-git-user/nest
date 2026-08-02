@@ -16,6 +16,7 @@ import type {HtmlTemplateString} from '../types/plugin';
 import {
 	buildInvalidCodeResponse,
 	clearPluginRequireCache,
+	coerceParams,
 	getPluginFunction,
 	isKnownNagiosCode,
 	normalizePluginResult,
@@ -196,10 +197,10 @@ export const createPluginRouteHandler = (
 			}
 
 			logger.debug(req.url);
-			const paramsObj = {
+			const paramsObj = coerceParams({
 				...parseUrlParams(req.url),
 				...parseBodyParams(req.body),
-			};
+			});
 
 			try {
 				const result = await pluginFunc(paramsObj);
