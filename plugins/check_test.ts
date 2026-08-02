@@ -93,31 +93,24 @@ export const meta: PluginMeta = {
 };
 
 export const checkTest = (params: {
-	nagiosReturnMessage: string;
-	nagiosReturnValue: NagiosReturnCode;
-	performanceData: boolean;
+	nagiosReturnMessage?: string;
+	nagiosReturnValue?: NagiosReturnCode;
+	performanceData?: boolean;
 }): PluginReturn => {
-	const {nagiosReturnMessage, nagiosReturnValue, performanceData} = params;
+	const {
+		nagiosReturnMessage,
+		nagiosReturnValue,
+		performanceData = false,
+	} = params;
 	console.log(
 		`Test plugin received: nagiosReturnMessage=${nagiosReturnMessage}, nagiosReturnValue=${nagiosReturnValue}, performanceData=${performanceData}`,
 	);
 
 	const returnObject: PluginReturn = {
-		message: nagiosReturnMessage,
-		code: nagiosReturnValue,
+		message: nagiosReturnMessage ?? `Usage: ${meta.usage?.http}`,
+		code: nagiosReturnValue ?? 3,
 		performanceData: [],
 	};
-
-	if (
-		!nagiosReturnMessage ||
-		nagiosReturnValue === undefined ||
-		nagiosReturnValue === null ||
-		performanceData === undefined ||
-		performanceData === null
-	) {
-		returnObject.message = `Usage: ${meta.usage?.http}`;
-		returnObject.code = 3;
-	}
 
 	if (performanceData) {
 		let label = 'WATER BOILER TEMP';
