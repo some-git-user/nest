@@ -1,4 +1,4 @@
-import type {NagiosPerformanceData} from './nagios';
+import type {NagiosPerformanceData, NagiosReturnCode} from './nagios';
 
 export type PluginExampleFieldInputType = 'text' | 'password' | 'url';
 
@@ -93,6 +93,6 @@ export type PluginRouteExample =
  */
 export type PluginReturn = {
 	message: string;
-	code: NagiosReturnCodes;
+	code: NagiosReturnCode;
 	performanceData?: NagiosPerformanceData[];
 };

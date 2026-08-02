@@ -30,7 +30,7 @@ const toDisplayPath = (filePath: string): string => {
 const normalizeHash = (hash: string): string => hash.toLowerCase();
 
 export const hashPluginFile = (filePath: string): string => {
-	const fileContent = fs.readFileSync(filePath);
+	const fileContent = fs.readFileSync(filePath, 'utf8');
 	return crypto.createHash('sha256').update(fileContent).digest('hex');
 };
 
@@ -133,18 +133,10 @@ export const verifyPluginWhitelist = ({
 			const validation = validateUnixFileSecurity(whitelistStat, expectedUid);
 
 			if (!validation.ok && validation.reason === 'owner-mismatch') {
-				// In development, allow root to access user-owned files
-				const isDevRootAccess =
-					process.env.NODE_ENV === 'development' &&
-					processUid === 0 &&
-					whitelistStat.uid !== 0;
-
-				if (!isDevRootAccess) {
-					warnings.push(
-						`Plugin trust warning: whitelist file ${displayWhitelistPath} has insecure ownership (uid ${validation.actualUid}); expected uid ${validation.expectedUid}. Refusing to trust whitelist entries.`,
-					);
-					return {approvedFiles, warnings};
-				}
+				warnings.push(
+					`Plugin trust warning: whitelist file ${displayWhitelistPath} has insecure ownership (uid ${validation.actualUid}); expected uid ${validation.expectedUid}. Refusing to trust whitelist entries.`,
+				);
+				return {approvedFiles, warnings};
 			}
 
 			if (!validation.ok && validation.reason === 'group-or-other-writable') {

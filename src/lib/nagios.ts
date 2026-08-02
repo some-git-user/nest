@@ -42,7 +42,7 @@ export const createNagiosReturnMessage = (
 		}
 
 		if (performanceData.every((perfData) => perfData)) {
-			nagiosReturnMessage.performanceData = performanceData
+			const formattedData = performanceData
 				.flatMap(
 					(perfData) =>
 						`${perfData.label ? `'${perfData.label}':` : ''}${
@@ -57,6 +57,10 @@ export const createNagiosReturnMessage = (
 				)
 				.join(' ')
 				.trimStart();
+
+			if (formattedData) {
+				nagiosReturnMessage.performanceData = formattedData;
+			}
 		} else {
 			logger.error(
 				`Error parsing performance data: ${JSON.stringify(performanceData)}`,
