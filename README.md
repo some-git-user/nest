@@ -164,7 +164,7 @@ npm run test:shell   # Shell script tests
 ## Shell Script Usage
 
 ```bash
-./script/check_nest.sh check-test nagiosReturnMessage=test nagiosReturnValue=0
+./scripts/check_nest.sh check-test nagiosReturnMessage=test nagiosReturnValue=0
 ```
 
 Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST_CA_CERT`, `NEST_API_KEY`, `NEST_API_KEY_HEADER`
