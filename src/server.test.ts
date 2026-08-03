@@ -509,8 +509,8 @@ describe('server bootstrap', () => {
 			'http-client-error',
 		);
 
-		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-cert.pem');
-		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-key.pem');
+		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-cert.pem', 'utf8');
+		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-key.pem', 'utf8');
 		expect(listen).toHaveBeenCalledWith(
 			5443,
 			'127.0.0.1',

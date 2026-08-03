@@ -49,6 +49,58 @@ describe('dynamic-routes helpers', () => {
 		expect(params).toEqual({message: 'Hello World'});
 	});
 
+	test('parseUrlParams handles boolean string values', () => {
+		const params = parseUrlParams('/check-test?flag=true&disabled=false');
+		expect(params).toEqual({flag: 'true', disabled: 'false'});
+	});
+
+	test('parseUrlParams handles numeric string values', () => {
+		const params = parseUrlParams(
+			'/check-test?count=42&price=19.99&negative=-5',
+		);
+		expect(params).toEqual({count: '42', price: '19.99', negative: '-5'});
+	});
+
+	test('coerceParams converts string "true" to boolean true', () => {
+		const {coerceParams} = require('./helpers');
+		const result = coerceParams({flag: 'true'});
+		expect(result).toEqual({flag: true});
+	});
+
+	test('coerceParams converts string "false" to boolean false', () => {
+		const {coerceParams} = require('./helpers');
+		const result = coerceParams({flag: 'false'});
+		expect(result).toEqual({flag: false});
+	});
+
+	test('coerceParams converts numeric strings to numbers', () => {
+		const {coerceParams} = require('./helpers');
+		const result = coerceParams({count: '42', price: '19.99', negative: '-5'});
+		expect(result).toEqual({count: 42, price: 19.99, negative: -5});
+	});
+
+	test('coerceParams keeps non-numeric strings as strings', () => {
+		const {coerceParams} = require('./helpers');
+		const result = coerceParams({name: 'test', empty: ''});
+		expect(result).toEqual({name: 'test', empty: ''});
+	});
+
+	test('coerceParams handles mixed parameter types', () => {
+		const {coerceParams} = require('./helpers');
+		const result = coerceParams({
+			flag: 'true',
+			count: '42',
+			name: 'test',
+			price: '19.99',
+		});
+		expect(result).toEqual({
+			flag: true,
+			count: 42,
+			name: 'test',
+			price: 19.99,
+		});
+	});
+
 	test('getPluginFunction prefers exports named check* and returns undefined otherwise', () => {
 		const helperFn = () => Promise.resolve({Accept: 'application/json'});
 		const checkFn = () => Promise.resolve({message: 'ok', code: 0});

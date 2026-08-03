@@ -1,3 +1,4 @@
+import {NagiosReturnCodes} from '../src/types/nagios';
 import {
 	buildHeaders,
 	checkNextcloudServerinfo,
@@ -234,7 +235,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const fetchCall = getFetchUrlAndHeaders();
 
 		expect(fetchCall.url).toBe(
-			'https://cloud.example.com/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=true&skipUpdate=true',
+			'https://cloud.example.com/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=false&skipUpdate=false',
 		);
 		expect(fetchCall.headers).toEqual(
 			expect.objectContaining({
@@ -265,7 +266,77 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const fetchCall = getFetchUrlAndHeaders();
 
 		expect(fetchCall.url).toBe(
-			'https://cloud.example.com/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=true&skipUpdate=true',
+			'https://cloud.example.com/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=false&skipUpdate=false',
+		);
+	});
+
+	test('handles invalid numeric parameters by using defaults', async () => {
+		mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+			warningCpuLoad1m: NaN,
+			criticalCpuLoad1m: Infinity,
+		});
+
+		expect(result.code).toBe(0);
+		expect(result.message).toContain('Nextcloud 30.0.0.1 OK');
+		expect(result.performanceData).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({label: 'cpu_load_1m', warn: '4', crit: '8'}),
+			]),
+		);
+	});
+
+	test('handles missing optional parameters by using defaults', async () => {
+		mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(0);
+		expect(result.message).toContain('Nextcloud 30.0.0.1 OK');
+		expect(result.performanceData).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({label: 'cpu_load_1m', warn: '4', crit: '8'}),
+				expect.objectContaining({label: 'free_space_gib'}),
+			]),
+		);
+	});
+
+	test('uses default value when parameter is null', async () => {
+		mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+			warningCpuLoad1m: null as unknown as number,
+		});
+
+		expect(result.code).toBe(0);
+		expect(result.performanceData).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({label: 'cpu_load_1m', warn: '4'}),
+			]),
+		);
+	});
+
+	test('returns UNKNOWN when criticalCpuLoad1m is less than warningCpuLoad1m', async () => {
+		mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+			warningCpuLoad1m: 8,
+			criticalCpuLoad1m: 4,
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
+		expect(result.message).toContain(
+			'criticalCpuLoad1m must be greater than or equal to warningCpuLoad1m',
 		);
 	});
 
@@ -278,11 +349,13 @@ describe('checkNextcloudServerinfo plugin', () => {
 			baseUrl: 'https://cloud.example.com/nextcloud',
 			username: 'admin',
 			password: 'app-password',
+			skipApps: false,
+			skipUpdate: false,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
 		expect(fetchCall.url).toBe(
-			'https://cloud.example.com/nextcloud/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=true&skipUpdate=true',
+			'https://cloud.example.com/nextcloud/ocs/v2.php/apps/serverinfo/api/v1/info?format=json&skipApps=false&skipUpdate=false',
 		);
 		expect(fetchCall.headers).toEqual(
 			expect.objectContaining({
@@ -307,8 +380,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipApps: 'false',
-			skipUpdate: 'false',
+			skipApps: false,
+			skipUpdate: false,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
@@ -358,8 +431,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: '8',
-			criticalCpuLoad1m: '4',
+			warningCpuLoad1m: 8,
+			criticalCpuLoad1m: 4,
 		});
 
 		expect(result.code).toBe(3);
@@ -372,8 +445,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			criticalFreeSpaceGiB: '50',
-			warningFreeSpaceGiB: '20',
+			criticalFreeSpaceGiB: 50,
+			warningFreeSpaceGiB: 20,
 		});
 
 		expect(result.code).toBe(3);
@@ -402,7 +475,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningFreeSpaceGiB: '20',
+			warningFreeSpaceGiB: 20,
 		});
 
 		expect(result.code).toBe(1);
@@ -420,7 +493,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: '4',
+			warningCpuLoad1m: 4,
 		});
 
 		expect(result.code).toBe(1);
@@ -438,7 +511,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			criticalCpuLoad1m: '8',
+			criticalCpuLoad1m: 8,
 		});
 
 		expect(result.code).toBe(2);
@@ -770,8 +843,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipApps: '0',
-			skipUpdate: 'false',
+			skipApps: false,
+			skipUpdate: false,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
@@ -785,13 +858,12 @@ describe('checkNextcloudServerinfo plugin', () => {
 		await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipApps: 'invalid',
-			skipUpdate: 'maybe',
+			skipApps: false,
+			skipUpdate: false,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
-		// Invalid values default to true
-		expect(fetchCall.url).toContain('skipApps=true&skipUpdate=true');
+		expect(fetchCall.url).toContain('skipApps=false&skipUpdate=false');
 	});
 
 	test('parses parseNumber with string values', async () => {
@@ -801,16 +873,16 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: '3.5',
-			criticalCpuLoad1m: '7.2',
+			warningCpuLoad1m: 3.5,
+			criticalCpuLoad1m: 7.2,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
-		expect(fetchCall.url).toContain('skipApps=true');
+		expect(fetchCall.url).toContain('skipApps=false');
 		expect(result.code).toBe(0);
 	});
 
-	test('uses default threshold when parseNumber receives non-finite numeric string', async () => {
+	test('uses default threshold when parameter receives non-finite number', async () => {
 		const response: HealthyResponse = buildHealthyResponse();
 		response.ocs.data.nextcloud.system.cpuload = [4.2, 1.5, 1];
 		mockFetch(response);
@@ -818,8 +890,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: 'Infinity',
-			criticalCpuLoad1m: '8',
+			warningCpuLoad1m: NaN,
+			criticalCpuLoad1m: 8,
 		});
 
 		expect(result.code).toBe(1);
@@ -837,10 +909,10 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: '5',
-			criticalCpuLoad1m: '10',
-			warningFreeSpaceGiB: '10',
-			criticalFreeSpaceGiB: '5',
+			warningCpuLoad1m: 5,
+			criticalCpuLoad1m: 10,
+			warningFreeSpaceGiB: 10,
+			criticalFreeSpaceGiB: 5,
 		});
 
 		expect(result.code).toBe(0);
@@ -854,8 +926,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipApps: 'true',
-			skipUpdate: 'true',
+			skipApps: true,
+			skipUpdate: true,
 		});
 
 		expect(result.performanceData).not.toEqual(
@@ -945,7 +1017,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipUpdate: 'false',
+			skipUpdate: false,
 		});
 
 		expect(result.code).toBe(0);
@@ -960,7 +1032,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipUpdate: 'false',
+			skipUpdate: false,
 		});
 
 		expect(result.code).toBe(2);
@@ -975,7 +1047,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipUpdate: 'false',
+			skipUpdate: false,
 		});
 
 		expect(result.code).toBe(0);
@@ -990,7 +1062,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipUpdate: 'false',
+			skipUpdate: false,
 		});
 
 		expect(result.code).toBe(2);
@@ -1004,8 +1076,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			skipApps: 'yes',
-			skipUpdate: 'on',
+			skipApps: true,
+			skipUpdate: true,
 		});
 		const fetchCall = getFetchUrlAndHeaders();
 
@@ -1145,8 +1217,8 @@ describe('checkNextcloudServerinfo plugin', () => {
 		const result = await checkNextcloudServerinfo({
 			baseUrl: 'https://cloud.example.com',
 			token: 'monitoring-token',
-			warningCpuLoad1m: '4',
-			warningFreeSpaceGiB: '20',
+			warningCpuLoad1m: 4,
+			warningFreeSpaceGiB: 20,
 		});
 
 		expect(result.code).toBe(1);

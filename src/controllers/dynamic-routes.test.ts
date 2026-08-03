@@ -39,14 +39,51 @@ jest.mock('../lib/logger', () => ({
 	},
 }));
 
-jest.mock('./dynamic-routes/helpers', () => ({
-	clearPluginRequireCache: jest.fn(),
-	getPluginFunction: jest.fn(),
-	isKnownNagiosCode: jest.fn(),
-	normalizePluginResult: jest.fn(),
-	parseUrlParams: jest.fn(),
-	buildInvalidCodeResponse: jest.fn(),
-}));
+const mockCoerceParams = jest.fn((params: {[key: string]: string}) => {
+	const coerced: {[key: string]: string | number | boolean} = {};
+	for (const [key, value] of Object.entries(params)) {
+		if (value === 'true') {
+			coerced[key] = true;
+		} else if (value === 'false') {
+			coerced[key] = false;
+		} else if (/^-?\d+\.?\d*$/.test(value) && value.trim() !== '') {
+			coerced[key] = Number(value);
+		} else {
+			coerced[key] = value;
+		}
+	}
+	return coerced;
+});
+
+jest.mock('./dynamic-routes/helpers', () => {
+	const mockCoerceParams = jest.fn((params: {[key: string]: string}) => {
+		const coerced: {[key: string]: string | number | boolean} = {};
+		for (const [key, value] of Object.entries(params)) {
+			if (value === 'true') {
+				coerced[key] = true;
+			} else if (value === 'false') {
+				coerced[key] = false;
+			} else if (/^-?\d+\.?\d*$/.test(value) && value.trim() !== '') {
+				coerced[key] = Number(value);
+			} else {
+				coerced[key] = value;
+			}
+		}
+		return coerced;
+	});
+
+	return {
+		__esModule: true,
+		clearPluginRequireCache: jest.fn(),
+		getPluginFunction: jest.fn(),
+		isKnownNagiosCode: jest.fn(),
+		normalizePluginResult: jest.fn(),
+		parseUrlParams: jest.fn(),
+		coerceParams: mockCoerceParams,
+		buildInvalidCodeResponse: jest.fn(),
+		mockCoerceParams,
+	};
+});
 
 const createMockRes = (): MockResponse => {
 	const statusMock = jest.fn().mockReturnThis();
@@ -210,7 +247,10 @@ describe('createPluginRouteHandler', () => {
 
 	test('merges POST body params with URL params before executing plugin', async () => {
 		const pluginFunc = jest
-			.fn<Promise<{message: string; code: number}>, [{[key: string]: string}]>()
+			.fn<
+				Promise<{message: string; code: number}>,
+				[{[key: string]: string | number | boolean}]
+			>()
 			.mockResolvedValue({message: 'ok', code: 0});
 		const requireFn = jest.fn().mockReturnValue({check: pluginFunc});
 		(createRequire as unknown as jest.Mock).mockReturnValue(requireFn);
@@ -238,13 +278,14 @@ describe('createPluginRouteHandler', () => {
 
 		await handler(req as Request, res);
 
+		// Verify pluginFunc received coerced values
 		expect(pluginFunc).toHaveBeenCalledWith(
 			expect.objectContaining({
-				fromQuery: '1',
+				fromQuery: 1,
 				baseUrl: 'https://cloud.example.com',
 				token: 'secret',
-				retries: '2',
-				enabled: 'true',
+				retries: 2,
+				enabled: true,
 			}),
 		);
 		const firstCallArg: unknown = pluginFunc.mock.calls[0]?.[0];

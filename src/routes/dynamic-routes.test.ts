@@ -307,7 +307,7 @@ describe('dynamic routes (plugins)', () => {
 		expect(res.status).toBe(200);
 		expect(res.body).toHaveProperty('message', 'plain');
 		expect(res.body).toHaveProperty('code', 1);
-		expect(res.body).toHaveProperty('performanceData', '');
+		expect(res.body).not.toHaveProperty('performanceData');
 	});
 
 	test('check-test plugin normalizes invalid plugin code to UNKNOWN', async () => {

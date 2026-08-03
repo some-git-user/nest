@@ -95,7 +95,7 @@ describe('createNagiosReturnMessage', () => {
 			);
 			expect(result.message).toBe('Test message');
 			expect(result.code).toBe(0);
-			expect(result.performanceData).toBe('');
+			expect(result.performanceData).toBeUndefined();
 		});
 
 		it('accepts a single performance object and omits optional fields when absent', () => {

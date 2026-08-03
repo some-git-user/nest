@@ -372,4 +372,45 @@ describe('plugin whitelist verification', () => {
 		expect(result.warnings[0]).toContain('insecure permissions');
 		expect(result.warnings[0]).toContain('Refusing to trust whitelist entries');
 	});
+
+	test('accepts user-owned whitelist file when running as root in development mode', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-plugin-whitelist-dev-root-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const approvedFilePath = path.join(pluginsDir, 'approved.ts');
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		fs.writeFileSync(approvedFilePath, 'export const approved = true;');
+
+		const approvedHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(approvedFilePath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `approved.ts ${approvedHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+		fs.chownSync(whitelistPath, 1000, 1000); // File owned by uid 1000
+
+		const originalEnv = process.env.NODE_ENV;
+		const originalUid = process.getuid;
+
+		process.env.NODE_ENV = 'development';
+		process.getuid = () => 0 as unknown as number; // Process running as root
+
+		const result = verifyPluginWhitelist({
+			pluginsDir,
+			pluginFiles: ['approved.ts'],
+			whitelistPath,
+		});
+
+		process.env.NODE_ENV = originalEnv;
+		process.getuid = originalUid;
+
+		// In dev mode with root, user-owned whitelist files are accepted
+		expect(result.approvedFiles.size).toBe(1);
+		expect(result.warnings).toHaveLength(0);
+	});
 });
