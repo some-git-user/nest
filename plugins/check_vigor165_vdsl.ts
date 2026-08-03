@@ -401,7 +401,9 @@ const runSshCommand = async (
 			settled = true;
 			clearTimeout(timeoutHandle);
 			callback();
-			client.end();
+			if (typeof client.end === 'function') {
+				client.end();
+			}
 		};
 
 		const timeoutHandle = setTimeout(() => {

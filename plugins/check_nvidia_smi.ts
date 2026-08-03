@@ -1,5 +1,6 @@
 import {execFile} from 'child_process';
 import {promisify} from 'util';
+import type {NagiosReturnCode} from '../src/types/nagios';
 import {NagiosReturnCodes} from '../src/types/nagios';
 import type {
 	HtmlTemplateString,
@@ -865,7 +866,7 @@ export const checkNvidiaSmi = async (
 				evaluation.issues.length > 0
 					? `${getStatusText(evaluation.status)}: NVIDIA ${driverText} detected with ${analysis.metrics.length} GPU(s); ${evaluation.issues.join('; ')}`
 					: `OK: NVIDIA ${driverText} detected with ${analysis.metrics.length} GPU(s); ${summary}`,
-			code: evaluation.status,
+			code: evaluation.status as NagiosReturnCode,
 			performanceData: buildPerformanceData(analysis.metrics, thresholds),
 		};
 	} catch (error) {

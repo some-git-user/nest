@@ -2,7 +2,7 @@ import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 import {logger} from './logger';
 
-type NagiosReturnMessage = {
+export type NagiosReturnMessage = {
 	message: string;
 	code: NagiosReturnCode;
 	performanceData?: string;
