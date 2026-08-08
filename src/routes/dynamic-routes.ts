@@ -11,6 +11,7 @@ import {
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
+import {commandToRoutePath} from '../lib/plugin-utils';
 import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
 import {
 	recordStartupWarning,
@@ -282,15 +283,6 @@ const isSupportedPluginFile = (file: string): boolean => {
 	return file.endsWith('.ts') || file.endsWith('.js');
 };
 
-const buildPluginRoutePath = (file: string): string => {
-	const normalizedPathSegment = path
-		.basename(file, path.extname(file))
-		.replace(/[^a-zA-Z0-9]/g, '-')
-		.toLowerCase();
-
-	return `${pluginRoutePrefix}/${normalizedPathSegment}`;
-};
-
 const buildPluginHelpUrl = (kebabCasePath: string): string => {
 	return `https://${env.HOST}:${env.PORT}${kebabCasePath}?help`;
 };
@@ -482,7 +474,9 @@ effectivePluginFiles.forEach((file) => {
 		return;
 	}
 
-	const kebabCasePath = buildPluginRoutePath(file);
+	const kebabCasePath = commandToRoutePath(
+		path.basename(file, path.extname(file)),
+	);
 	const helpUrl = buildPluginHelpUrl(kebabCasePath);
 	const existingFilePath = routePathToFilePath.get(kebabCasePath);
 	if (existingFilePath) {
