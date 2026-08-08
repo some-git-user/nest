@@ -83,7 +83,7 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 	const apiKeyHeader = String(config.apiKeyHeader ?? 'x-api-key').toLowerCase();
 	const allowedIps = getAllowedIpsOrDefault(config.allowedIps);
 
-	return (req: Request, res: Response, next: NextFunction) => {
+	return (req: Request, res: Response, next: NextFunction): void | Response => {
 		if (expectedApiKey.length > 0) {
 			const rawHeader = req.headers[apiKeyHeader];
 			const headerKey = Array.isArray(rawHeader)

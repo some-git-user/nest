@@ -46,7 +46,7 @@ li{margin:.35rem 0}
 </html>`);
 };
 
-export const getAppInfo = (req: Request, res: Response) => {
+export const getAppInfo = (req: Request, res: Response): Response => {
 	if ('help' in req.query) {
 		applyHelpPageSecurityHeaders(res);
 		res.setHeader('Content-Type', 'text/html; charset=utf-8');

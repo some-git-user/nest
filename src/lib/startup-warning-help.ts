@@ -136,6 +136,18 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Restart the service to load the now-approved plugin.',
 		],
 	},
+	'config-not-whitelisted': {
+		id: 'config-not-whitelisted',
+		title: 'Config File Not Whitelisted',
+		description:
+			'The config file is new or not listed in the whitelist file, so the service refuses to trust it.',
+		handlingSteps: [
+			'Review the config file contents and ensure it is correctly formatted.',
+			'Calculate the SHA-256 hash: sha256sum plugins/configs/local-presets.conf',
+			'Add the hash to plugin-whitelist.txt: configs/local-presets.conf <hash>',
+			'Restart the service to load the now-approved config file.',
+		],
+	},
 	'plugin-insecure-permissions': {
 		id: 'plugin-insecure-permissions',
 		title: 'Plugin File Permissions Are Insecure',
@@ -144,6 +156,18 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 		handlingSteps: [
 			'Set restrictive permissions on the plugin file so only the service owner can modify it.',
 			'Confirm the file is not group-writable or world-writable with ls -l.',
+			'Restart the service after fixing the file permissions.',
+		],
+	},
+	'config-insecure-permissions': {
+		id: 'config-insecure-permissions',
+		title: 'Config File Permissions Are Insecure',
+		description:
+			'The config file is writable by group or other users, so the service refuses to trust it.',
+		handlingSteps: [
+			'Set restrictive permissions on the config file so only the service owner can modify it.',
+			'Use chmod 640 or chmod 600 to remove group/world write access.',
+			'Example: chmod 640 plugins/configs/local-presets.conf',
 			'Restart the service after fixing the file permissions.',
 		],
 	},
@@ -203,7 +227,18 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		id: 'plugin-hash-failed',
 		matcher: /could not hash .*skipping plugin registration/i,
 	},
-	{id: 'plugin-not-whitelisted', matcher: /is new or not whitelisted/i},
+	{
+		id: 'config-not-whitelisted',
+		matcher: /Config warning: .* is new or not whitelisted/i,
+	},
+	{
+		id: 'plugin-not-whitelisted',
+		matcher: /Plugin trust warning: .* is new or not whitelisted/i,
+	},
+	{
+		id: 'config-insecure-permissions',
+		matcher: /Config warning: .* has insecure permissions/i,
+	},
 	{
 		id: 'plugin-insecure-permissions',
 		matcher: /Skipping plugin .* due to insecure permissions/i,

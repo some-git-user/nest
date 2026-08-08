@@ -7,7 +7,7 @@ import {cronTimeZone} from '../../lib/cron/scheduler';
 import {getErrorMessage} from '../error-message';
 import {logger} from '../logger';
 
-export const scheduleCleanupLogs = () => {
+export const scheduleCleanupLogs = (): void => {
 	cron.schedule(
 		'* * * * *', // run every minute
 		() => {

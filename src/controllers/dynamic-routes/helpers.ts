@@ -1,5 +1,6 @@
 import {getErrorMessage} from '../../lib/error-message';
 import {
+	type NagiosReturnMessage,
 	createNagiosReturnMessage,
 	isPerformanceData,
 	isPerformanceDataArray,
@@ -79,7 +80,7 @@ export const clearPluginRequireCache = (
 	requireFn: NodeJS.Require,
 	jsFilePath: string,
 	onWarn: (message: string) => void,
-) => {
+): void => {
 	try {
 		const resolved = requireFn.resolve(jsFilePath);
 		delete require.cache[resolved];
@@ -162,7 +163,7 @@ export const buildInvalidCodeResponse = (
 	kebabCasePath: string,
 	host: string,
 	port: number,
-) => {
+): {errorMessage: string; nagiosReturn: NagiosReturnMessage} => {
 	const isCodeString = typeof code === 'string';
 	const isCodeNumber = typeof code === 'number';
 	const errorMessage = `Invalid return code "${isCodeNumber || isCodeString ? code : `unkown code`}" for plugin ${jsFilePath}: https://${host}:${port}${kebabCasePath}`;

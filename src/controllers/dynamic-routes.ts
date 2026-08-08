@@ -167,7 +167,7 @@ export const createPluginRouteHandler = (
 	jsFilePath: string,
 	kebabCasePath: string,
 	helpContext: PluginHelpContext = {},
-) => {
+): ((req: Request, res: Response) => Promise<Response | undefined>) => {
 	return async (req: Request, res: Response) => {
 		if ('help' in (req.query ?? {})) {
 			const html = buildPluginHelpHtml(helpContext);
