@@ -53,14 +53,47 @@ Config loading order: `--configPath` > `NEST_CONFIG_FILE` > `/etc/nest/nest.conf
 
 ### Routes
 
-| Method | Path                | Purpose           |
-| ------ | ------------------- | ----------------- |
-| `GET`  | `/`                 | Route overview    |
-| `GET`  | `/nagios`           | App metrics check |
-| `GET`  | `/nagios/honey-pot` | Honeypot status   |
-| `GET`  | `/plugins/<name>`   | Plugin check      |
+| Method | Path                | Purpose             |
+| ------ | ------------------- | ------------------- |
+| `GET`  | `/`                 | Route overview      |
+| `GET`  | `/nagios`           | App metrics check   |
+| `GET`  | `/nagios/honey-pot` | Honeypot status     |
+| `GET`  | `/plugins/<name>`   | Plugin check        |
+| `POST` | `/local-config`     | Local config preset |
 
 Add `?help` to any route for documentation. Unknown routes return 404 (Nagios code=3).
+
+### Local Config Presets
+
+The `/local-config` endpoint allows executing pre-configured plugin presets stored on the Nest server. This is useful for Nagios servers that want to use server-side config presets instead of passing all parameters in the request.
+
+**Request:**
+
+```bash
+curl -X POST https://localhost:5000/local-config \
+  -H "Content-Type: application/json" \
+  -d '{"localConfig": "test_perfdata"}'
+```
+
+**Response:**
+
+```json
+{
+	"message": "Test message",
+	"code": 0,
+	"performanceData": "cpu=50%%"
+}
+```
+
+**Config File Format:**
+Config presets are stored in `plugins/configs/local-presets.conf`:
+
+```
+test_perfdata=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=true
+debian_eol_warning=check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30
+```
+
+See `plugins/configs/local-presets.conf.example` for setup instructions and security considerations.
 
 ## Plugin Development
 
