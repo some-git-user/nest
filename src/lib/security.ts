@@ -5,6 +5,7 @@ import {
 	parseBasicAuthPassword,
 } from './browser-auth';
 import {sendNagiosUnknownError} from './http-nagios';
+import {HttpStatusCodes} from './http-status-codes';
 import {getClientIpFromRequest, normalizeIp} from './request-ip';
 import {recordStartupWarnings} from './startup-warning-registry';
 
@@ -106,7 +107,7 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 				}
 				return sendNagiosUnknownError(
 					res,
-					401,
+					HttpStatusCodes.UNAUTHORIZED,
 					'Unauthorized: invalid API key',
 				);
 			}
@@ -116,7 +117,7 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 		if (!allowedIps.has(requesterIp)) {
 			return sendNagiosUnknownError(
 				res,
-				403,
+				HttpStatusCodes.FORBIDDEN,
 				`Forbidden: IP ${requesterIp} is not allowed`,
 			);
 		}
