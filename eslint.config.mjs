@@ -27,6 +27,10 @@ const enforceGetErrorMessage = (
 	)
 ).default;
 
+const noSrcImports = (
+	await import(path.join(__dirname, 'eslint-rules/no-src-imports.mjs'))
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -108,17 +112,16 @@ export default [
 		},
 	},
 	{
-		files: ['**/*.ts', '**/*.tsx'], // Apply to all TypeScript files
+		files: ['src/**/*.ts', 'src/**/*.tsx'], // Apply only to src folder
 		plugins: {
 			custom: {
 				rules: {
 					'enforce-get-error-message': enforceGetErrorMessage,
-					'enforce-plugin-meta-type': enforcePluginMetaType,
 				},
 			},
 		},
 		rules: {
-			// Enforce use of shared getErrorMessage() function
+			// Enforce use of shared getErrorMessage() function (src only)
 			'custom/enforce-get-error-message': 'error',
 			// Only require explicit return types on exported functions (module boundaries)
 			// This allows internal helper functions to use type inference
@@ -138,9 +141,19 @@ export default [
 	},
 	{
 		files: ['plugins/**/*.ts'],
+		plugins: {
+			custom: {
+				rules: {
+					'enforce-plugin-meta-type': enforcePluginMetaType,
+					'no-src-imports': noSrcImports,
+				},
+			},
+		},
 		rules: {
 			// Custom rule to enforce explicit PluginMeta type on exported meta variables
 			'custom/enforce-plugin-meta-type': 'error',
+			// Prevent plugins from importing from src folder
+			'custom/no-src-imports': 'error',
 		},
 	},
 ];
