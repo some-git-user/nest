@@ -19,6 +19,7 @@ print_help() {
         cat <<EOF
 Usage:
     $0 <command> [param1=value1 param2=value2 ...]
+    $0 --local-config <key>
 
 Description:
         Calls a Nest endpoint and prints Nagios-compatible output.
@@ -32,6 +33,7 @@ Examples:
     NEST_HOST=192.168.1.10 NEST_API_KEY=topsecret $0 check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30
     NEST_HOST=192.168.1.10 NEST_API_KEY=topsecret $0 nagios/honey-pot
     NEST_HOST=192.168.1.10 NEST_API_KEY=topsecret $0 /nagios
+    $0 --local-config test_perfdata
 
 Environment variables:
     NEST_SCHEME           Request scheme (default: https)
@@ -54,6 +56,7 @@ Notes:
     - Parameters must be passed as key=value.
     - Duplicate parameter keys keep the last value.
     - Use --help or -h to print this help.
+    - Use --local-config <key> to call a plugin using a server-side config preset.
 EOF
 }
 
@@ -200,32 +203,89 @@ if [[ "$command_name" == "--help" || "$command_name" == "-h" || "$command_name" 
     exit 1
 fi
 
+# Check for --local-config argument
+if [[ "$command_name" == "--local-config" ]]; then
+    if [[ ${#command_parameters[@]} -eq 0 ]]; then
+        echo "Error: --local-config requires a config key argument" >&2
+        exit 3
+    fi
+    local_config_key="${command_parameters[0]}"
+    
+    # Send only the config key to the server using reserved route
+    # Route: POST /local-config (not under /plugins/ to avoid dynamic route conflicts)
+    command_name="/local-config"
+    command_parameters=("localConfig=$local_config_key")
+    is_local_config=true
+fi
+
 # Build URL
 url=$(build_url "$command_name")
 
-# Build parameters for curl
-build_parameters "${command_parameters[@]}"
-
-# Make GET request and store response in variable
-curl_args=(-sS -G)
-
-if [[ "$NEST_SCHEME" == "https" ]]; then
-    if [[ -n "$NEST_CA_CERT" ]]; then
-        curl_args+=(--cacert "$NEST_CA_CERT")
-    elif [[ "$NEST_TLS_INSECURE" == "true" ]]; then
-        curl_args+=(--insecure)
+# Make GET/POST request and store response in variable
+if [[ "$is_local_config" == "true" ]]; then
+    # POST request for local-config with JSON body
+    curl_args=(-sS)
+    
+    if [[ "$NEST_SCHEME" == "https" ]]; then
+        if [[ -n "$NEST_CA_CERT" ]]; then
+            curl_args+=(--cacert "$NEST_CA_CERT")
+        elif [[ "$NEST_TLS_INSECURE" == "true" ]]; then
+            curl_args+=(--insecure)
+        fi
     fi
+    
+    if [[ -n "$NEST_API_KEY" ]]; then
+        curl_args+=(-H "$NEST_API_KEY_HEADER: $NEST_API_KEY")
+    fi
+    
+    # Build JSON body directly from command_parameters
+    json_body="{"
+    first=true
+    for param in "${command_parameters[@]}"; do
+        # Extract key and value from key=value format
+        key="${param%%=*}"
+        value="${param#*=}"
+        if [[ "$first" == "true" ]]; then
+            first=false
+        else
+            json_body+=","
+        fi
+        json_body+="\"$key\":\"$value\""
+    done
+    json_body+="}"
+    
+    curl_args+=(-H "Content-Type: application/json" -d "$json_body")
+    
+    curl_stderr_file=$(mktemp)
+    response=$(curl "${curl_args[@]}" "$url" 2>"$curl_stderr_file")
+    curl_status=$?
+    curl_stderr=$(tr '\n' ' ' < "$curl_stderr_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    rm -f "$curl_stderr_file"
+else
+    # GET request for regular plugin calls
+    # Build parameters for curl
+    build_parameters "${command_parameters[@]}"
+    
+    curl_args=(-sS -G)
+    
+    if [[ "$NEST_SCHEME" == "https" ]]; then
+        if [[ -n "$NEST_CA_CERT" ]]; then
+            curl_args+=(--cacert "$NEST_CA_CERT")
+        elif [[ "$NEST_TLS_INSECURE" == "true" ]]; then
+            curl_args+=(--insecure)
+        fi
+    fi
+    
+    if [[ -n "$NEST_API_KEY" ]]; then
+        curl_args+=(-H "$NEST_API_KEY_HEADER: $NEST_API_KEY")
+    fi
+    
+    curl_stderr_file=$(mktemp)
+    response=$(curl "${curl_args[@]}" "${parameters[@]}" "$url" 2>"$curl_stderr_file")
+    curl_status=$?
+    curl_stderr=$(tr '\n' ' ' < "$curl_stderr_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    rm -f "$curl_stderr_file"
 fi
-
-if [[ -n "$NEST_API_KEY" ]]; then
-    curl_args+=(-H "$NEST_API_KEY_HEADER: $NEST_API_KEY")
-fi
-
-curl_stderr_file=$(mktemp)
-response=$(curl "${curl_args[@]}" "${parameters[@]}" "$url" 2>"$curl_stderr_file")
-curl_status=$?
-curl_stderr=$(tr '\n' ' ' < "$curl_stderr_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
-rm -f "$curl_stderr_file"
 
 # Stop early if curl failed
 if [[ $curl_status -ne 0 ]]; then

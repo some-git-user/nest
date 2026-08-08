@@ -3,6 +3,8 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import helmet from 'helmet';
 import https from 'https';
+// Verify config files against whitelist
+import path from 'path';
 import {env} from './config/env';
 import {runScheduler} from './lib/cron/scheduler';
 import {getErrorMessage} from './lib/error-message';
@@ -14,7 +16,15 @@ import {
 } from './lib/help-page';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
 import {sendNagiosUnknownError} from './lib/http-nagios';
+import {HttpStatusCodes} from './lib/http-status-codes';
+import {
+	hasRuntimeValidationFailed,
+	loadConfigAtStartup,
+	parseConfigFile,
+	setWhitelistCache,
+} from './lib/local-config';
 import {logger} from './lib/logger';
+import {verifyConfigFiles} from './lib/plugin-whitelist';
 import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
@@ -25,7 +35,10 @@ import {
 	renderStartupWarningHelpHtml,
 	renderStartupWarningListItems,
 } from './lib/startup-warning-help';
-import {getStartupWarnings} from './lib/startup-warning-registry';
+import {
+	getStartupWarnings,
+	recordStartupWarnings,
+} from './lib/startup-warning-registry';
 import {ensureTlsCertificate} from './lib/tls';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
@@ -34,6 +47,7 @@ import dynamicRoutes, {
 	registeredPluginRoutes,
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
+import localConfig from './routes/local-config';
 import type {PluginRouteExample} from './types/plugin';
 
 validateStartup();
@@ -58,6 +72,11 @@ const buildOverviewPageHtml = (
 	warnings: string[],
 	pluginRoutes: string[],
 	pluginRouteExamples?: Record<string, PluginRouteExample[]>,
+	localConfigPresets?: Map<
+		string,
+		{command: string; params: Record<string, string>}
+	>,
+	runtimeValidationFailed?: boolean,
 ): string => {
 	const baseUrl = `https://${host}:${port}`;
 	const staticRoutes = [
@@ -71,6 +90,18 @@ const buildOverviewPageHtml = (
 				`<li><a href="${routeInfo.path}">${routeInfo.path}</a> - <a href="${routeInfo.helpPath}">help</a></li>`,
 		)
 		.join('');
+
+	// Local Config Presets section - hidden if runtime validation failed
+	const localConfigItems = runtimeValidationFailed
+		? ''
+		: localConfigPresets && localConfigPresets.size > 0
+			? Array.from(localConfigPresets.keys())
+					.map((key) => {
+						const routePath = `/local-config?config=${escapeHtml(key)}`;
+						return `<li><a href="${routePath}">${routePath}</a></li>`;
+					})
+					.join('')
+			: '';
 	const examplesByRoute = pluginRouteExamples ?? {};
 	const pluginRouteItems = pluginRoutes
 		.map((routePath) => {
@@ -158,8 +189,7 @@ li{margin:.35rem 0}
 <p>Base URL: <code>${baseUrl}</code></p>
 ${warningsHtml}
 <h2>Built-in Routes</h2>
-<ul>${staticRouteItems}</ul>
-<h2>Plugin Routes</h2>
+<ul>${staticRouteItems}</ul>${localConfigItems ? `<h2>Local Config Presets</h2><ul>${localConfigItems}</ul>` : ''}<h2>Plugin Routes</h2>
 <ul>${pluginRouteItems || '<li>No plugins found</li>'}</ul>
 </body>
 </html>`;
@@ -180,8 +210,8 @@ app.use(helmet());
 
 app.use(
 	rateLimit({
-		windowMs: env.RATE_LIMIT_WINDOW_MS || 60_000,
-		max: env.RATE_LIMIT_MAX || 120,
+		windowMs: env.RATE_LIMIT_WINDOW_MS,
+		max: env.RATE_LIMIT_MAX,
 		standardHeaders: true,
 		legacyHeaders: false,
 	}),
@@ -195,11 +225,33 @@ app.use(
 );
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
+
+const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
+const pluginWhitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+const configFiles = ['configs/local-presets.conf'];
+
+const configVerification = verifyConfigFiles({
+	pluginsDir,
+	configFiles,
+	whitelistPath: pluginWhitelistPath,
+});
+recordStartupWarnings(configVerification.warnings);
+for (const warning of configVerification.warnings) {
+	logger.warn(warning);
+}
+
+// Cache whitelist entries for runtime verification
+setWhitelistCache(configVerification.whitelistEntries);
+
+// Load config once at startup (hash validation integrated)
+loadConfigAtStartup();
+
 const startupWarnings = Array.from(
 	new Set([
 		...getStartupWarnings(),
 		...pluginStartupWarnings,
 		...securityWarnings,
+		...configVerification.warnings,
 	]),
 );
 for (const warning of securityWarnings) {
@@ -208,7 +260,7 @@ for (const warning of securityWarnings) {
 
 // route files
 app.get('/favicon.ico', (_req: Request, res: Response) => {
-	return res.status(204).end();
+	return res.status(HttpStatusCodes.NO_CONTENT).end();
 });
 app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
@@ -224,7 +276,7 @@ app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
 	if (!topic) {
 		return sendNagiosUnknownError(
 			res,
-			404,
+			HttpStatusCodes.NOT_FOUND,
 			`Warning help topic not found: ${warningId}`,
 		);
 	}
@@ -235,6 +287,10 @@ app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
 });
 app.get('/', (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'text/html; charset=utf-8');
+	// Check validation status first to avoid throwing
+	const validationFailed = hasRuntimeValidationFailed();
+	// Only parse config if validation succeeded
+	const localConfigPresets = validationFailed ? new Map() : parseConfigFile();
 	return res.send(
 		buildOverviewPageHtml(
 			env.HOST,
@@ -242,16 +298,23 @@ app.get('/', (_req: Request, res: Response) => {
 			startupWarnings,
 			registeredPluginRoutes,
 			registeredPluginRouteExamples,
+			localConfigPresets,
+			validationFailed,
 		),
 	);
 });
 app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);
 app.use('/nagios/honey-pot', honeyPot);
+app.use('/local-config', localConfig);
 // 404 handler for unknown routes
 app.use((req: Request, res: Response) => {
 	recordHoneypotSignal(req, 'unknown-route');
-	return sendNagiosUnknownError(res, 404, `Route not found: ${req.url}`);
+	return sendNagiosUnknownError(
+		res,
+		HttpStatusCodes.NOT_FOUND,
+		`Route not found: ${req.url}`,
+	);
 });
 
 const tlsPaths = ensureTlsCertificate();
