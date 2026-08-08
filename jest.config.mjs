@@ -10,6 +10,7 @@ export default {
 			statements: 100,
 		},
 	},
+	coverageReporters: ['text', 'lcov', 'html'],
 	testMatch: [
 		'**/__tests__/**/*.+(ts|tsx|js)',
 		'**/?(*.)+(spec|test).+(ts|tsx|js)',

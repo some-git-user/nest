@@ -21,6 +21,12 @@ const enforcePluginMetaType = (
 	)
 ).default;
 
+const enforceGetErrorMessage = (
+	await import(
+		path.join(__dirname, 'eslint-rules/enforce-get-error-message.mjs')
+	)
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -102,15 +108,18 @@ export default [
 		},
 	},
 	{
-		files: ['plugins/**/*.ts'], // Apply to plugins folder TypeScript files only
+		files: ['**/*.ts', '**/*.tsx'], // Apply to all TypeScript files
 		plugins: {
 			custom: {
 				rules: {
+					'enforce-get-error-message': enforceGetErrorMessage,
 					'enforce-plugin-meta-type': enforcePluginMetaType,
 				},
 			},
 		},
 		rules: {
+			// Enforce use of shared getErrorMessage() function
+			'custom/enforce-get-error-message': 'error',
 			// Only require explicit return types on exported functions (module boundaries)
 			// This allows internal helper functions to use type inference
 			'@typescript-eslint/explicit-module-boundary-types': [
@@ -125,6 +134,11 @@ export default [
 			// Disable the overly strict explicit-function-return-type rule
 			'@typescript-eslint/explicit-function-return-type': 'off',
 			'@typescript-eslint/typedef': 'warn',
+		},
+	},
+	{
+		files: ['plugins/**/*.ts'],
+		rules: {
 			// Custom rule to enforce explicit PluginMeta type on exported meta variables
 			'custom/enforce-plugin-meta-type': 'error',
 		},

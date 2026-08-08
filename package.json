@@ -26,7 +26,8 @@
 		"find-untested": "tsx scripts/find-untested-files.mts",
 		"typescript-app:check": "npx tsc --noEmit --project tsconfig.json",
 		"typescript-plugins:check": "npx tsc --noEmit --project tsconfig.plugins.json",
-		"validate": "npm run lint:check && npm run format:check && npm run typescript-app:check && npm run typescript-plugins:check && npm run test:ci && npm run build && npm run find-untested",
+		"typescript-tests:check": "npx tsc --noEmit --project tsconfig.jest.json",
+		"validate": "npm run lint:check && npm run format:check && npm run typescript-app:check && npm run typescript-plugins:check && npm run typescript-tests:check && npm run test:coverage && npm run build && npm run find-untested",
 		"prepare": "node .husky/install.mjs"
 	},
 	"repository": {
