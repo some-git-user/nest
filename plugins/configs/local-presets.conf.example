@@ -1,0 +1,25 @@
+# Local Config Presets for Nest Server
+# Location: plugins/configs/local-presets.conf
+# Format: <key>=<command> <param1>=<value1> <param2>=<value2> ...
+# Lines starting with # are comments
+# Empty lines are ignored
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to: plugins/configs/local-presets.conf
+# 2. Edit the config entries as needed
+# 3. Set file permissions: chmod 644 plugins/configs/local-presets.conf
+# 4. Calculate SHA-256 hash: sha256sum plugins/configs/local-presets.conf
+# 5. Add hash to plugins/plugin-whitelist.txt:
+#    local-presets.conf <sha256-hash-from-step-4>
+# 6. Restart Nest server
+# 7. Verify hash in Web UI at /help/startup-warnings/config-not-whitelisted (if hash mismatch or not whitelisted)
+#
+# SECURITY: The actual config file (local-presets.conf) must be added to
+#           plugins/plugin-whitelist.txt with SHA-256 hash. This example file
+#           is NOT hashed and is only for reference.
+
+# Example: Test plugin with basic message
+test=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=false
+
+# Example: Test plugin with performance data
+test_perfdata=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=true

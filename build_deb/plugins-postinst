@@ -25,4 +25,22 @@ for f in "$STAGING_DIR"/*.ts; do
     cp "$f" "$PLUGINS_DIR/"
 done
 
+# Create configs directory and copy config files
+mkdir -p "$PLUGINS_DIR/configs"
+for f in "$STAGING_DIR/configs/"*; do
+    [ -f "$f" ] || continue
+    cp "$f" "$PLUGINS_DIR/configs/"
+done
+
+# If local-presets.conf doesn't exist, create it from example
+if [ ! -f "$PLUGINS_DIR/configs/local-presets.conf" ]; then
+    if [ -f "$PLUGINS_DIR/configs/local-presets.conf.example" ]; then
+        cp "$PLUGINS_DIR/configs/local-presets.conf.example" "$PLUGINS_DIR/configs/local-presets.conf"
+        chmod 640 "$PLUGINS_DIR/configs/local-presets.conf"
+        echo "Created local-presets.conf from example."
+        echo "Edit the file and add its SHA-256 hash to plugin-whitelist.txt."
+    fi
+fi
+
 echo "Plugins installed to $PLUGINS_DIR"
+echo "Config files installed to $PLUGINS_DIR/configs"

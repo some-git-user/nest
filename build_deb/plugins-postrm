@@ -12,6 +12,6 @@ if [ "$1" = "remove" ]; then
 
     if [ -n "$PLUGINS_DIR" ]; then
         echo "WARNING: nest-plugins has been removed, but plugin files were NOT deleted from $PLUGINS_DIR."
-        echo "         This directory may also contain user-added plugins. Remove manually if desired."
+        echo "         This directory may also contain user-added plugins and configs. Remove manually if desired."
     fi
 fi

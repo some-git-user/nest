@@ -19,6 +19,11 @@ PLUGIN_FILES=(
     check_nextcloud_serverinfo.ts
 )
 
+# Config files to package
+CONFIG_FILES=(
+    local-presets.conf.example
+)
+
 # Validate sources
 for f in "${PLUGIN_FILES[@]}"; do
     if [ ! -f "$PLUGINS_SRC/$f" ]; then
@@ -27,15 +32,28 @@ for f in "${PLUGIN_FILES[@]}"; do
     fi
 done
 
+# Validate config sources
+for f in "${CONFIG_FILES[@]}"; do
+    if [ ! -f "$PLUGINS_SRC/configs/$f" ]; then
+        echo "Config source not found: $PLUGINS_SRC/configs/$f" >&2
+        exit 1
+    fi
+done
+
 # Cleanup
 rm -rf "$BUILD_DIR"
 rm -rf "$BUILD_DEB"
 mkdir -p "$BUILD_DIR/DEBIAN"
-mkdir -p "$BUILD_DIR/usr/share/nest-plugins"
+mkdir -p "$BUILD_DIR/usr/share/nest-plugins/configs"
 
 # Stage plugin files
 for f in "${PLUGIN_FILES[@]}"; do
     cp "$PLUGINS_SRC/$f" "$BUILD_DIR/usr/share/nest-plugins/$f"
+done
+
+# Stage config files
+for f in "${CONFIG_FILES[@]}"; do
+    cp "$PLUGINS_SRC/configs/$f" "$BUILD_DIR/usr/share/nest-plugins/configs/$f"
 done
 
 # Copy maintainer scripts
@@ -46,6 +64,7 @@ cp plugins-postrm   "$BUILD_DIR/DEBIAN/postrm"
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 chmod 755 "$BUILD_DIR/DEBIAN/postrm"
 chmod 644 "$BUILD_DIR/usr/share/nest-plugins/"*.ts
+chmod 644 "$BUILD_DIR/usr/share/nest-plugins/configs/"*
 
 # Create control file
 # Depends on the main nest package to ensure /etc/nest/nest.conf is present.
