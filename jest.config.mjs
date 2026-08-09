@@ -1,6 +1,9 @@
 export default {
 	roots: ['<rootDir>/src', '<rootDir>/plugins'],
-	coveragePathIgnorePatterns: ['<rootDir>/plugins/plugin-cache/'],
+	coveragePathIgnorePatterns: [
+		'<rootDir>/plugins/plugin-cache/',
+		'<rootDir>/src/test/',
+	],
 	moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 	coverageThreshold: {
 		global: {
@@ -19,4 +22,7 @@ export default {
 		'^.+\\.(ts|tsx)$': 'ts-jest',
 	},
 	testEnvironment: 'node',
+	moduleNameMapper: {
+		'^sanitize-html$': '<rootDir>/src/test/mocks/sanitize-html.ts',
+	},
 };
