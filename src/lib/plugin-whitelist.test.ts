@@ -396,7 +396,14 @@ describe('plugin whitelist verification', () => {
 
 		fs.writeFileSync(whitelistPath, `approved.ts ${approvedHash}`);
 		fs.chmodSync(whitelistPath, 0o600);
-		fs.chownSync(whitelistPath, 1000, 1000); // File owned by uid 1000
+		try {
+			fs.chownSync(whitelistPath, 1000, 1000); // File owned by uid 1000
+		} catch (error) {
+			// Skip chown if not permitted (e.g., in CI environments)
+			if ((error as NodeJS.ErrnoException).code !== 'EPERM') {
+				throw error;
+			}
+		}
 
 		const originalEnv = process.env.NODE_ENV;
 		const originalUid = process.getuid;
