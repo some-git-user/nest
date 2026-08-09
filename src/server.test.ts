@@ -1,3 +1,24 @@
+import {HttpStatusCodes} from './lib/http-status-codes';
+
+// Mock typescript before any imports
+jest.mock('typescript', () => ({
+	__esModule: true,
+	default: {
+		ModuleKind: {CommonJS: 1},
+		ScriptTarget: {ESNext: 99},
+		transpileModule: jest.fn(() => ({
+			outputText:
+				'export const check = async () => ({code: 0, message: "OK"});',
+		})),
+	},
+}));
+
+jest.mock('./lib/startup-warning-registry', () => ({
+	__esModule: true,
+	recordStartupWarnings: jest.fn(),
+	getStartupWarnings: jest.fn(() => []),
+}));
+
 describe('server bootstrap', () => {
 	type FaviconHandler = (
 		_req: unknown,
@@ -63,10 +84,25 @@ describe('server bootstrap', () => {
 		});
 		const on = jest.fn();
 		const createServer = jest.fn(() => ({listen, close, on}));
-		const readFileSync = jest
+		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce('CERT_CONTENT')
-			.mockReturnValueOnce('KEY_CONTENT');
+			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
+			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
+			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
+		const statSync = jest
+			.fn()
+			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
+			if (filePath.includes('nest-cert.pem')) {
+				return 'CERT_CONTENT';
+			}
+			if (filePath.includes('nest-key.pem')) {
+				return 'KEY_CONTENT';
+			}
+			return 'WHITELIST_CONTENT';
+		});
 		const readdirSync = jest.fn(() => [
 			'check_test.ts',
 			'check_test.js',
@@ -91,7 +127,13 @@ describe('server bootstrap', () => {
 
 		jest.doMock('express', () => ({
 			__esModule: true,
-			default: expressFactory,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
@@ -103,9 +145,18 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
-			default: {readFileSync, readdirSync},
+			default: {
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
+			},
 			readFileSync,
 			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
 		}));
 		jest.doMock('https', () => ({
 			__esModule: true,
@@ -135,6 +186,9 @@ describe('server bootstrap', () => {
 				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
 				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
 				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
 				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
@@ -217,6 +271,13 @@ describe('server bootstrap', () => {
 				message: 'not-found',
 				code: 3,
 			})),
+		}));
+		jest.doMock('./lib/local-config', () => ({
+			__esModule: true,
+			parseConfigFile: jest.fn(() => new Map()),
+			setWhitelistCache: jest.fn(),
+			hasRuntimeValidationFailed: jest.fn(() => false),
+			loadConfigAtStartup: jest.fn(),
 		}));
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -365,7 +426,7 @@ describe('server bootstrap', () => {
 		expect(warn).toHaveBeenCalledWith(
 			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
 		);
-		expect(faviconStatus).toHaveBeenCalledWith(204);
+		expect(faviconStatus).toHaveBeenCalledWith(HttpStatusCodes.NO_CONTENT);
 		expect(faviconEnd).toHaveBeenCalledTimes(1);
 		expect(guardScriptSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
@@ -391,7 +452,9 @@ describe('server bootstrap', () => {
 		expect(warningHelpSend).toHaveBeenCalledWith(
 			expect.stringContaining('How To Handle'),
 		);
-		expect(warningHelpUnknownStatus).toHaveBeenCalledWith(404);
+		expect(warningHelpUnknownStatus).toHaveBeenCalledWith(
+			HttpStatusCodes.NOT_FOUND,
+		);
 		expect(warningHelpUnknownSend).toHaveBeenCalledWith({
 			message: 'not-found',
 			code: 3,
@@ -457,7 +520,7 @@ describe('server bootstrap', () => {
 				'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1)',
 			),
 		);
-		expect(status).toHaveBeenCalledWith(404);
+		expect(status).toHaveBeenCalledWith(HttpStatusCodes.NOT_FOUND);
 		expect(send).toHaveBeenCalledWith({message: 'not-found', code: 3});
 		expect(recordHoneypotSignal).toHaveBeenCalledWith(
 			{url: '/missing'},
@@ -564,10 +627,19 @@ describe('server bootstrap', () => {
 		);
 		const on = jest.fn();
 		const createServer = jest.fn(() => ({listen, close: jest.fn(), on}));
+		const existsSync = jest
+			.fn()
+			.mockReturnValueOnce(true) // verifyConfigFiles checks whitelist exists
+			.mockReturnValueOnce(true) // verifyConfigFiles checks config exists
+			.mockReturnValueOnce(false) // TLS checks cert exists (false to trigger read)
+			.mockReturnValueOnce(false); // TLS checks key exists (false to trigger read)
+		const statSync = jest.fn(() => ({mode: 0o100644}));
 		const readFileSync = jest
 			.fn()
-			.mockReturnValueOnce('CERT_CONTENT')
-			.mockReturnValueOnce('KEY_CONTENT');
+			.mockReturnValueOnce('WHITELIST_CONTENT') // verifyConfigFiles reads whitelist
+			.mockReturnValueOnce('CONFIG_CONTENT') // verifyConfigFiles reads config file
+			.mockReturnValueOnce('CERT_CONTENT') // TLS cert
+			.mockReturnValueOnce('KEY_CONTENT'); // TLS key
 		const readdirSync = jest.fn(() => []);
 		const info = jest.fn();
 		const warn = jest.fn();
@@ -576,7 +648,13 @@ describe('server bootstrap', () => {
 
 		jest.doMock('express', () => ({
 			__esModule: true,
-			default: expressFactory,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
@@ -588,9 +666,18 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
-			default: {readFileSync, readdirSync},
+			default: {
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
+			},
 			readFileSync,
 			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
 		}));
 		jest.doMock('https', () => ({
 			__esModule: true,
@@ -620,6 +707,9 @@ describe('server bootstrap', () => {
 				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
 				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
 				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
 				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
@@ -683,7 +773,7 @@ describe('server bootstrap', () => {
 		expect(scheduler).toHaveBeenCalledTimes(1);
 	});
 
-	it('uses default rate-limit values when env values are non-positive', () => {
+	it('renders local config presets section when parseConfigFile returns non-empty map', () => {
 		jest.resetModules();
 
 		const use = jest.fn();
@@ -698,22 +788,59 @@ describe('server bootstrap', () => {
 			jest.fn(() => app),
 			{json, urlencoded},
 		);
-		const rateLimit = jest.fn(() => rateLimitMiddleware);
 		const listen = jest.fn(
 			(port: number, host: string, callback?: () => void) => {
 				callback?.();
 				return {close: jest.fn()};
 			},
 		);
-		const createServer = jest.fn(() => ({
-			listen,
-			close: jest.fn(),
-			on: jest.fn(),
-		}));
+		const close = jest.fn((callback?: () => void) => {
+			callback?.();
+		});
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close, on}));
+		const existsSync = jest
+			.fn()
+			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
+			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
+			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
+		const statSync = jest
+			.fn()
+			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
+			if (filePath.includes('nest-cert.pem')) {
+				return 'CERT_CONTENT';
+			}
+			if (filePath.includes('nest-key.pem')) {
+				return 'KEY_CONTENT';
+			}
+			if (filePath.includes('plugin-whitelist.txt')) {
+				return 'WHITELIST_CONTENT';
+			}
+			return 'CONFIG_CONTENT';
+		});
+		const readdirSync = jest.fn(() => []);
+		const info = jest.fn();
+		const warn = jest.fn();
+		const error = jest.fn();
+		const scheduler = jest.fn();
+		const parseConfigFileMock = jest.fn(() => {
+			const map = new Map();
+			map.set('test-preset', {command: 'check-test', params: {}});
+			return map;
+		});
 
 		jest.doMock('express', () => ({
 			__esModule: true,
-			default: expressFactory,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
 		}));
 		jest.doMock('helmet', () => ({
 			__esModule: true,
@@ -721,20 +848,22 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
-			default: rateLimit,
+			default: jest.fn(() => rateLimitMiddleware),
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			default: {
-				readFileSync: jest
-					.fn()
-					.mockReturnValueOnce('CERT_CONTENT')
-					.mockReturnValueOnce('KEY_CONTENT'),
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
 			},
-			readFileSync: jest
-				.fn()
-				.mockReturnValueOnce('CERT_CONTENT')
-				.mockReturnValueOnce('KEY_CONTENT'),
+			readFileSync,
+			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
 		}));
 		jest.doMock('https', () => ({
 			__esModule: true,
@@ -746,8 +875,8 @@ describe('server bootstrap', () => {
 				HOST: '127.0.0.1',
 				PORT: 5443,
 				NODE_ENV: 'production',
-				RATE_LIMIT_WINDOW_MS: 0,
-				RATE_LIMIT_MAX: 0,
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
 				API_KEY: '',
 				API_KEY_HEADER: 'x-api-key',
 				ALLOWED_IPS: '127.0.0.1',
@@ -764,6 +893,9 @@ describe('server bootstrap', () => {
 				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
 				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
 				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
 				cwd: jest.fn(() => '/tmp/nest'),
 			},
 		}));
@@ -773,20 +905,18 @@ describe('server bootstrap', () => {
 				keyPath: '/tmp/nest-key.pem',
 			})),
 		}));
-		jest.doMock('./lib/logger', () => ({
-			logger: {info: jest.fn(), warn: jest.fn(), error: jest.fn()},
-		}));
-		jest.doMock('./lib/startup-check', () => ({
-			validateStartup: jest.fn(),
-		}));
+		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
 		jest.doMock('./lib/startup-check', () => ({
 			validateStartup: jest.fn(),
 		}));
 		jest.doMock('./lib/security', () => ({
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
-			getRecommendedSecurityWarnings: jest.fn(() => []),
+			getRecommendedSecurityWarnings: jest.fn(() => [
+				'Security recommendation: API_KEY is not configured',
+				'Security recommendation: ALLOWED_IPS is limited to loopback addresses',
+			]),
 		}));
-		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: jest.fn()}));
+		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
 		jest.doMock('./routes/app-info', () => ({
 			__esModule: true,
 			default: 'appInfoRouter',
@@ -800,20 +930,227 @@ describe('server bootstrap', () => {
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [],
 			registeredPluginRoutes: [],
+			registeredPluginRouteExamples: {},
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
 			recordNetworkProbeSignal: jest.fn(),
 		}));
+		jest.doMock('./lib/local-config', () => ({
+			__esModule: true,
+			parseConfigFile: parseConfigFileMock,
+			setWhitelistCache: jest.fn(),
+			hasRuntimeValidationFailed: jest.fn(() => false),
+			loadConfigAtStartup: jest.fn(),
+		}));
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		require('./server');
 
-		expect(rateLimit).toHaveBeenCalledWith(
-			expect.objectContaining({
-				windowMs: 60_000,
-				max: 120,
+		const getCalls = get.mock.calls as GetRouteCall[];
+		const rootCall = getCalls.find(([route]) => route === '/');
+		expect(rootCall).toBeDefined();
+		const [, rootHandler] = rootCall as [string, RootHandler];
+		const rootSetHeader = jest.fn();
+		const rootSend = jest.fn();
+		rootHandler(
+			{},
+			{setHeader: rootSetHeader, send: rootSend, locals: {cspNonce: 'test'}},
+		);
+
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('Local Config Presets'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/local-config?config=test-preset'),
+		);
+	});
+
+	it('hides local config presets section when runtime validation has failed', () => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get};
+		const helmetMiddleware = 'helmet-middleware';
+		const rateLimitMiddleware = 'rate-limit-middleware';
+		const accessControlMiddleware = 'access-control-middleware';
+		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{json, urlencoded},
+		);
+		const listen = jest.fn(
+			(port: number, host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const close = jest.fn((callback?: () => void) => {
+			callback?.();
+		});
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close, on}));
+		const existsSync = jest
+			.fn()
+			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
+			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
+			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
+		const statSync = jest
+			.fn()
+			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
+			if (filePath.includes('nest-cert.pem')) {
+				return 'CERT_CONTENT';
+			}
+			if (filePath.includes('nest-key.pem')) {
+				return 'KEY_CONTENT';
+			}
+			if (filePath.includes('plugin-whitelist.txt')) {
+				return 'WHITELIST_CONTENT';
+			}
+			return 'CONFIG_CONTENT';
+		});
+		const readdirSync = jest.fn(() => []);
+		const info = jest.fn();
+		const warn = jest.fn();
+		const error = jest.fn();
+		const scheduler = jest.fn();
+		const parseConfigFileMock = jest.fn(() => {
+			const map = new Map();
+			map.set('test-preset', {command: 'check-test', params: {}});
+			return map;
+		});
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
 			}),
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn((_config?: unknown) => helmetMiddleware),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => rateLimitMiddleware),
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
+			},
+			readFileSync,
+			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'production',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
+				cwd: jest.fn(() => '/tmp/nest'),
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
+		jest.doMock('./lib/startup-check', () => ({
+			validateStartup: jest.fn(),
+		}));
+		jest.doMock('./lib/security', () => ({
+			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
+		jest.doMock('./routes/app-info', () => ({
+			__esModule: true,
+			default: 'appInfoRouter',
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: 'honeyPotRouter',
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			__esModule: true,
+			default: 'dynamicRoutesRouter',
+			pluginStartupWarnings: [],
+			registeredPluginRoutes: [],
+			registeredPluginRouteExamples: {},
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+		}));
+		jest.doMock('./lib/local-config', () => ({
+			__esModule: true,
+			parseConfigFile: parseConfigFileMock,
+			setWhitelistCache: jest.fn(),
+			hasRuntimeValidationFailed: jest.fn(() => true), // Runtime validation failed
+			loadConfigAtStartup: jest.fn(),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		const getCalls = get.mock.calls as GetRouteCall[];
+		const rootCall = getCalls.find(([route]) => route === '/');
+		expect(rootCall).toBeDefined();
+		const [, rootHandler] = rootCall as [string, RootHandler];
+		const rootSetHeader = jest.fn();
+		const rootSend = jest.fn();
+		rootHandler(
+			{},
+			{setHeader: rootSetHeader, send: rootSend, locals: {cspNonce: 'test'}},
+		);
+
+		// Should NOT contain Local Config Presets section when validation failed
+		expect(rootSend).not.toHaveBeenCalledWith(
+			expect.stringContaining('Local Config Presets'),
 		);
 	});
 });
@@ -876,5 +1213,230 @@ describe('form submission filtering', () => {
 		expect(result).toContain('warningUtilizationPercent=75');
 		expect(result).not.toContain('expectedGpuCount=');
 		expect(result).not.toContain('criticalTempC=');
+	});
+
+	it('renders overview page without warnings when getStartupWarnings returns empty array', () => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get};
+		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{json, urlencoded},
+		);
+		const listen = jest.fn(
+			(port: number, host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const close = jest.fn((callback?: () => void) => {
+			callback?.();
+		});
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close, on}));
+		const existsSync = jest
+			.fn()
+			.mockReturnValueOnce(true) // whitelist exists
+			.mockReturnValueOnce(true) // config file exists
+			.mockReturnValueOnce(false) // TLS cert
+			.mockReturnValueOnce(false); // TLS key
+		const statSync = jest
+			.fn()
+			.mockReturnValueOnce({mode: 0o100644}) // whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}); // config stat
+		const readFileSync = jest.fn((filePath: string) => {
+			if (filePath.includes('nest-cert.pem')) {
+				return 'CERT_CONTENT';
+			}
+			if (filePath.includes('nest-key.pem')) {
+				return 'KEY_CONTENT';
+			}
+			return 'WHITELIST_CONTENT';
+		});
+		const readdirSync = jest.fn(() => ['check_test.ts', 'check_test.js']);
+		const info = jest.fn();
+		const warn = jest.fn();
+		const error = jest.fn();
+		const eventHandlers = new Map<string, (err: {message: string}) => void>();
+		const processOnSpy = jest.spyOn(process, 'on').mockImplementation(((
+			event: string,
+			handler: (err: {message: string}) => void,
+		) => {
+			eventHandlers.set(event, handler);
+			return process;
+		}) as typeof process.on);
+		const processExitSpy = jest
+			.spyOn(process, 'exit')
+			.mockImplementation((() => undefined) as never);
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'helmet-middleware'),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'rate-limit-middleware'),
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
+			},
+			readFileSync,
+			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'production',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
+				cwd: jest.fn(() => '/tmp/nest'),
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({logger: {info, warn, error}}));
+		jest.doMock('./lib/startup-check', () => ({
+			validateStartup: jest.fn(),
+		}));
+		jest.doMock('./lib/startup-warning-registry', () => ({
+			recordStartupWarnings: jest.fn(),
+			getStartupWarnings: jest.fn(() => []), // Empty warnings!
+		}));
+		jest.doMock('./lib/startup-warning-help', () => ({
+			getStartupWarningHelpTopic: jest.fn(() => null),
+			renderStartupWarningHelpHtml: jest.fn(() => ''),
+			renderStartupWarningListItems: jest.fn(),
+		}));
+		jest.doMock('./lib/security', () => ({
+			validateFileSecurity: jest.fn(() => ({
+				ok: true,
+				reason: 'secure',
+				actualUid: 1000,
+				expectedUid: 1000,
+			})),
+			createAccessControlMiddleware: jest.fn(() => jest.fn()),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/plugin-whitelist', () => ({
+			verifyPluginWhitelist: jest.fn(() => ({
+				approvedFiles: new Map([['check_test.ts', 'hash123']]),
+				warnings: [],
+			})),
+			verifyConfigFiles: jest.fn(() => ({
+				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
+				warnings: [],
+			})),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({
+			scheduleCleanup: jest.fn(),
+			runScheduler: jest.fn(),
+		}));
+		jest.doMock('./routes/app-info', () => ({
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			default: {handle: jest.fn()},
+			registeredPluginRoutes: ['check_test'],
+			registeredPluginRouteExamples: {},
+			pluginStartupWarnings: [],
+		}));
+		jest.doMock('./routes/local-config', () => ({
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+		}));
+		jest.doMock('./lib/nagios', () => ({
+			createNagiosReturnMessage: jest.fn(() => ({
+				message: 'not-found',
+				code: 3,
+			})),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		const getCalls = get.mock.calls as [string, unknown][];
+		const rootCall = getCalls.find(([route]) => route === '/');
+		expect(rootCall).toBeDefined();
+
+		const [, rootHandler] = rootCall as [string, unknown];
+		const rootSetHeader = jest.fn();
+		const rootSend = jest.fn();
+		const rootLocals = {cspNonce: 'test-nonce'};
+
+		(rootHandler as (req: unknown, res: unknown) => void)(
+			{},
+			{setHeader: rootSetHeader, send: rootSend, locals: rootLocals},
+		);
+
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('Nest Route Overview'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.not.stringContaining('Startup Warnings'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.not.stringContaining('<section class="warnings">'),
+		);
+
+		processOnSpy.mockRestore();
+		processExitSpy.mockRestore();
 	});
 });

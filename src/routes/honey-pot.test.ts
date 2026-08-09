@@ -5,6 +5,7 @@ import {
 	recordNetworkProbeSignal,
 	resetHoneypotSignals,
 } from '../lib/honey-pot';
+import {HttpStatusCodes} from '../lib/http-status-codes';
 import honeyPot from './honey-pot';
 
 type NagiosBody = {
@@ -23,7 +24,7 @@ describe('/nagios/honey-pot route', () => {
 		app.use('/nagios/honey-pot', honeyPot);
 		app.use((req, res) => {
 			recordHoneypotSignal(req, 'unknown-route');
-			res.status(404).send({message: 'not-found'});
+			res.status(HttpStatusCodes.NOT_FOUND).send({message: 'not-found'});
 		});
 	});
 
@@ -35,7 +36,7 @@ describe('/nagios/honey-pot route', () => {
 		const res = await request(app).get('/nagios/honey-pot');
 		const body = res.body as NagiosBody;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(0);
 		expect(String(body.message)).toContain('OK - probes=0 suspicious=0');
 		expect(String(body.message)).toContain('scan_ips=0 max_paths_per_ip=0');
@@ -49,7 +50,7 @@ describe('/nagios/honey-pot route', () => {
 		const res = await request(app).get('/nagios/honey-pot');
 		const body = res.body as NagiosBody;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(1);
 		expect(String(body.message)).toContain('WARNING - probes=1 suspicious=0');
 	});
@@ -62,7 +63,7 @@ describe('/nagios/honey-pot route', () => {
 		const res = await request(app).get('/nagios/honey-pot');
 		const body = res.body as NagiosBody;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(2);
 		expect(String(body.message)).toContain('CRITICAL - probes=3 suspicious=3');
 	});
@@ -84,7 +85,7 @@ describe('/nagios/honey-pot route', () => {
 		});
 		const body = res.body as NagiosBody;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(1);
 		expect(String(body.message)).toContain('scan_ips=1');
 		expect(String(body.message)).toContain('max_paths_per_ip=6');
@@ -105,7 +106,7 @@ describe('/nagios/honey-pot route', () => {
 		const res = await request(app).get('/nagios/honey-pot');
 		const body = res.body as NagiosBody;
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(2);
 		expect(String(body.message)).toContain('port_scan_ips=1');
 		expect(String(body.message)).toContain('protocol_errors=3');
@@ -120,7 +121,7 @@ describe('/nagios/honey-pot route', () => {
 	test('returns HTML help page when ?help is provided', async () => {
 		const res = await request(app).get('/nagios/honey-pot').query({help: ''});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.headers['content-type']).toMatch(/text\/html/);
 		expect(res.headers['content-security-policy']).toContain(
 			"default-src 'none'",

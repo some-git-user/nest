@@ -222,4 +222,24 @@ describe('env config loading', () => {
 
 		expect(process.env.HOST).toBe('prod-host');
 	});
+
+	it('loads RATE_LIMIT_WINDOW_MS and RATE_LIMIT_MAX from config file', () => {
+		const configPath = '/tmp/rate-limit-test.conf';
+		const {readFileSyncMock} = loadEnvModule({
+			argv: ['node', 'server.js', '--configPath', configPath],
+			env: {
+				NODE_ENV: 'production',
+				RATE_LIMIT_WINDOW_MS: undefined,
+				RATE_LIMIT_MAX: undefined,
+			},
+			existsSyncImpl: (filePath) => filePath === configPath,
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600}),
+			fileContent:
+				'HOST=test.local\nPORT=5443\nRATE_LIMIT_WINDOW_MS=30000\nRATE_LIMIT_MAX=60\nTLS_CERT_PATH=certs/test-cert.pem\nTLS_KEY_PATH=certs/test-key.pem\n',
+		});
+
+		expect(readFileSyncMock).toHaveBeenCalledWith(configPath, 'utf8');
+		expect(process.env.RATE_LIMIT_WINDOW_MS).toBe('30000');
+		expect(process.env.RATE_LIMIT_MAX).toBe('60');
+	});
 });

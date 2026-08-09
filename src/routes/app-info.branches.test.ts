@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import {HttpStatusCodes} from '../lib/http-status-codes';
 
 type NagiosBody = {
 	message: string;
@@ -51,7 +52,7 @@ describe('app-info route (branch coverage)', () => {
 
 		const res = await request(app).get('/nagios');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(String(body.message)).toContain('cpu%=0.00');
 		expect(String(body.message)).toContain('mem%=0.00');
@@ -99,7 +100,7 @@ describe('app-info route (branch coverage)', () => {
 
 		const res = await request(app).get('/nagios');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(String(body.message)).toContain('cpu%=0.00');
 		expect(String(body.message)).toContain('mem%=0.00');
 	});

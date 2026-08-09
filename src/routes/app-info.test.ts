@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import {HttpStatusCodes} from '../lib/http-status-codes';
 import appInfo from './app-info';
 
 describe('/nagios route', () => {
@@ -19,7 +20,7 @@ describe('/nagios route', () => {
 	test('returns Nagios JSON with performanceData and OK/WARNING/CRITICAL codes', async () => {
 		const res = await request(app).get('/nagios');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('message');
 		expect(body).toHaveProperty('code');
 		expect([0, 1, 2, 3]).toContain(body.code);
@@ -32,7 +33,7 @@ describe('/nagios route', () => {
 			.get('/nagios')
 			.query({cpuWarn: '0', cpuCrit: '1000', memWarn: '1000', memCrit: '1000'});
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(1);
 	});
 
@@ -42,13 +43,13 @@ describe('/nagios route', () => {
 			.get('/nagios')
 			.query({cpuWarn: '0', cpuCrit: '0', memWarn: '1000', memCrit: '1000'});
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body.code).toBe(2);
 	});
 
 	test('returns HTML help page when ?help is provided', async () => {
 		const res = await request(app).get('/nagios').query({help: ''});
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.headers['content-type']).toMatch(/text\/html/);
 		expect(res.headers['content-security-policy']).toContain(
 			"default-src 'none'",

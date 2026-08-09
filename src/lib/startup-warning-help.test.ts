@@ -31,6 +31,18 @@ describe('startup warning help', () => {
 				'Plugin trust warning: whitelist file plugins/plugin-whitelist.txt has insecure permissions; it must not be writable by group or others. Refusing to trust whitelist entries.',
 			),
 		).toBe('whitelist-insecure-permissions');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'Config warning: plugins/configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
+			),
+		).toBe('config-insecure-permissions');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'Config warning: plugins/configs/local-presets.conf is new or not whitelisted. Current sha256: abc123. Add "configs/local-presets.conf abc123" to plugins/plugin-whitelist.txt.',
+			),
+		).toBe('config-not-whitelisted');
 	});
 
 	test('falls back to unknown topic for unmatched warning text', () => {
@@ -44,6 +56,8 @@ describe('startup warning help', () => {
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
 			'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc.',
 			'Skipping plugin /opt/nest-plugins/check_nvidia_smi.ts due to insecure permissions: plugin files must not be writable by group or others.',
+			'Config warning: plugins/configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
+			'Config warning: plugins/configs/local-presets.conf is new or not whitelisted. Current sha256: abc123. Add "configs/local-presets.conf abc123" to plugins/plugin-whitelist.txt.',
 		]);
 
 		expect(html).toContain('/help/startup-warnings/api-key-missing');
@@ -51,6 +65,10 @@ describe('startup warning help', () => {
 		expect(html).toContain(
 			'/help/startup-warnings/plugin-insecure-permissions',
 		);
+		expect(html).toContain(
+			'/help/startup-warnings/config-insecure-permissions',
+		);
+		expect(html).toContain('/help/startup-warnings/config-not-whitelisted');
 		expect(html).toContain('How to resolve this warning');
 	});
 

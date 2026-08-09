@@ -1,5 +1,6 @@
 import {Response} from 'express';
 import {sendNagiosUnknownError} from './http-nagios';
+import {HttpStatusCodes} from './http-status-codes';
 
 describe('sendNagiosUnknownError', () => {
 	test('sets status and sends Nagios UNKNOWN response body', () => {
@@ -10,9 +11,13 @@ describe('sendNagiosUnknownError', () => {
 			send: sendMock,
 		} as unknown as Response;
 
-		const result = sendNagiosUnknownError(res, 403, 'Forbidden');
+		const result = sendNagiosUnknownError(
+			res,
+			HttpStatusCodes.FORBIDDEN,
+			'Forbidden',
+		);
 
-		expect(statusMock).toHaveBeenCalledWith(403);
+		expect(statusMock).toHaveBeenCalledWith(HttpStatusCodes.FORBIDDEN);
 		expect(sendMock).toHaveBeenCalledWith({
 			message: 'Forbidden',
 			code: 3,

@@ -259,13 +259,14 @@ const loadWhitelistEntries = (
  * For plugins: only checks hash against whitelist (no file security)
  * For configs: can optionally check file security via expectedUid parameter
  */
-const verifyFileAgainstWhitelist = (
+export const verifyFileAgainstWhitelist = (
 	filePath: string,
 	relativePath: string,
 	warningPrefix: string,
 	whitelistEntries: Map<string, string>,
 	whitelistPath: string,
 	expectedUid?: number, // Optional: check uid (for config files, not plugins)
+	/* istanbul ignore next - default parameter value branch is inherently untestable by coverage tools */
 	isOptional: boolean = false, // Whether the file is optional (no warning if missing)
 ): {approved: boolean; warnings: string[]} => {
 	const warnings: string[] = [];

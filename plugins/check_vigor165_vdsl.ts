@@ -176,7 +176,7 @@ const usageMessage = (): string =>
 
 const round = (value: number, digits: number): string => value.toFixed(digits);
 
-const parsePositiveNumber = (
+export const parsePositiveNumber = (
 	value: string | undefined,
 	defaultValue: number,
 ): number => {
@@ -192,7 +192,7 @@ const parsePositiveNumber = (
 	return parsed;
 };
 
-const parsePercent = (
+export const parsePercent = (
 	value: string | undefined,
 	defaultValue: number,
 ): number => {
@@ -208,7 +208,7 @@ const parsePercent = (
 	return parsed;
 };
 
-const parseCsvList = <T extends string>(
+export const parseCsvList = <T extends string>(
 	value: string | undefined,
 	fallback: readonly T[],
 ): T[] => {
@@ -224,7 +224,7 @@ const parseCsvList = <T extends string>(
 	return parsed.length > 0 ? parsed : [...fallback];
 };
 
-const readRegexNumber = (
+export const readRegexNumber = (
 	text: string,
 	patterns: RegExp[],
 ): number | undefined => {
@@ -243,7 +243,7 @@ const readRegexNumber = (
 	return undefined;
 };
 
-const readRegexValue = (
+export const readRegexValue = (
 	text: string,
 	patterns: RegExp[],
 ): string | undefined => {
@@ -257,7 +257,7 @@ const readRegexValue = (
 	return undefined;
 };
 
-const normalizeRateToMbps = (value: number): number => {
+export const normalizeRateToMbps = (value: number): number => {
 	if (value >= 1_000_000) {
 		return value / 1_000_000;
 	}

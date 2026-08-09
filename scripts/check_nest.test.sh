@@ -94,6 +94,19 @@ assert_not_contains() {
     fi
 }
 
+assert_file_contains() {
+    local needle="$1"
+    local haystack_file="$2"
+    local message="$3"
+
+    if ! grep -Fq -- "$needle" "$haystack_file"; then
+        printf 'FAIL: %s\nMissing substring: %s\n' "$message" "$needle" >&2
+        printf 'Captured lines:\n' >&2
+        cat "$haystack_file" >&2
+        exit 1
+    fi
+}
+
 assert_output_contains() {
     local needle="$1"
     local output="$2"
@@ -182,5 +195,19 @@ assert_equals "3" "$RUN_STATUS" "maps invalid JSON to UNKNOWN"
 run_check env MOCK_CURL_MODE=fail "$TARGET_SCRIPT" check-test nagiosReturnMessage=test nagiosReturnValue=0
 assert_equals "Error: curl command failed (exit 7). Response: ''" "$RUN_OUTPUT" "reports curl failures"
 assert_equals "1" "$RUN_STATUS" "maps curl failures to a plugin error"
+
+# Test --local-config feature
+run_check env MOCK_RESPONSE="VALID_JSON:perfdata-test|0|cpu=50%%" "$TARGET_SCRIPT" --local-config test_perfdata
+assert_equals "perfdata-test | code=0 cpu=50%%" "$RUN_OUTPUT" "supports --local-config with config key"
+assert_equals "0" "$RUN_STATUS" "returns success for --local-config"
+assert_contains "-d" "$TMP_DIR/curl_args" "sends data body for --local-config"
+assert_file_contains "localConfig" "$TMP_DIR/curl_args" "passes config key as localConfig parameter"
+assert_contains "https://localhost:5000/local-config" "$TMP_DIR/curl_args" "uses /local-config endpoint for --local-config"
+assert_contains "Content-Type: application/json" "$TMP_DIR/curl_args" "sets Content-Type header for --local-config"
+
+# Test --local-config without argument
+run_check "$TARGET_SCRIPT" --local-config
+assert_output_contains "Error: --local-config requires a config key argument" "$RUN_OUTPUT" "requires argument for --local-config"
+assert_equals "3" "$RUN_STATUS" "returns error status for missing --local-config argument"
 
 printf 'check_nest.sh tests passed\n'

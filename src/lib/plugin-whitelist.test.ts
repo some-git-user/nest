@@ -2,7 +2,12 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import {parsePluginWhitelist, verifyPluginWhitelist} from './plugin-whitelist';
+import {
+	parsePluginWhitelist,
+	verifyConfigFiles,
+	verifyFileAgainstWhitelist,
+	verifyPluginWhitelist,
+} from './plugin-whitelist';
 
 describe('plugin whitelist verification', () => {
 	test('parses filename-hash entries and ignores comments', () => {
@@ -156,7 +161,7 @@ describe('plugin whitelist verification', () => {
 		expect(result.warnings[1]).toContain('is new or not whitelisted');
 	});
 
-	test('warns when a plugin cannot be hashed', () => {
+	test('warns when a plugin file is missing', () => {
 		const tempDir = fs.mkdtempSync(
 			path.join(os.tmpdir(), 'nest-plugin-whitelist-'),
 		);
@@ -178,8 +183,7 @@ describe('plugin whitelist verification', () => {
 
 		expect(result.approvedFiles.size).toBe(0);
 		expect(result.warnings).toHaveLength(1);
-		expect(result.warnings[0]).toContain('could not hash');
-		expect(result.warnings[0]).toContain('Skipping plugin registration');
+		expect(result.warnings[0]).toContain('is missing');
 	});
 
 	test('warns when whitelist file cannot be created', () => {
@@ -412,5 +416,683 @@ describe('plugin whitelist verification', () => {
 		// In dev mode with root, user-owned whitelist files are accepted
 		expect(result.approvedFiles.size).toBe(1);
 		expect(result.warnings).toHaveLength(0);
+	});
+
+	test('passes security checks when whitelist ownership matches process uid', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-plugin-whitelist-success-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const approvedFilePath = path.join(pluginsDir, 'approved.ts');
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		fs.writeFileSync(approvedFilePath, 'export const approved = true;');
+
+		const approvedHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(approvedFilePath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `approved.ts ${approvedHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		if (typeof process.getuid !== 'function') {
+			return;
+		}
+		const realUid = process.getuid();
+
+		// Make whitelist file owned by the same uid as the process
+		fs.chownSync(whitelistPath, realUid, realUid);
+
+		const result = verifyPluginWhitelist({
+			pluginsDir,
+			pluginFiles: ['approved.ts'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(1);
+		expect(result.approvedFiles.has('approved.ts')).toBe(true);
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test('refuses plugins when whitelist ownership does not match process uid', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-plugin-whitelist-owner-mismatch-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const approvedFilePath = path.join(pluginsDir, 'approved.ts');
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		fs.writeFileSync(approvedFilePath, 'export const approved = true;');
+
+		const approvedHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(approvedFilePath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `approved.ts ${approvedHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		if (typeof process.getuid !== 'function') {
+			return;
+		}
+		const realUid = process.getuid();
+		const mockUid = realUid + 1;
+
+		// Mock statSync to return different uid for whitelist file
+		const originalStatSync = fs.statSync;
+		const statSyncSpy = jest
+			.spyOn(fs, 'statSync')
+			.mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+				const stat = originalStatSync.call(fs, filePath as fs.PathLike) as
+					| fs.Stats
+					| fs.BigIntStats;
+				if (String(filePath).endsWith('plugin-whitelist.txt')) {
+					return {
+						...(stat as fs.Stats),
+						uid: mockUid,
+					} as fs.Stats;
+				}
+				return stat;
+			});
+
+		const getUidSpy = jest
+			.spyOn(process, 'getuid' as never)
+			.mockReturnValue(realUid as never);
+
+		const result = verifyPluginWhitelist({
+			pluginsDir,
+			pluginFiles: ['approved.ts'],
+			whitelistPath,
+		});
+
+		statSyncSpy.mockRestore();
+		getUidSpy.mockRestore();
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('insecure ownership');
+		expect(result.warnings[0]).toContain('Refusing to trust whitelist entries');
+	});
+
+	test('returns empty entries when whitelist file is missing', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-plugin-whitelist-missing-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		// parsePluginWhitelist takes content, not file path
+		// When file is missing, caller passes empty string
+		const result = parsePluginWhitelist('', whitelistPath);
+
+		expect(result.entries.size).toBe(0);
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test('skips security check when process.getuid is unavailable', () => {
+		jest.resetModules();
+
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-plugin-whitelist-nogetuid-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const approvedFilePath = path.join(pluginsDir, 'approved.ts');
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		fs.writeFileSync(approvedFilePath, 'export const approved = true;');
+		fs.chmodSync(approvedFilePath, 0o600);
+
+		const approvedHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(approvedFilePath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `approved.ts ${approvedHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		// Remove getuid to simulate environment without it
+		const originalGetuid = process.getuid;
+		Object.defineProperty(process, 'getuid', {
+			value: undefined,
+			writable: true,
+			configurable: true,
+		});
+
+		// Re-import after mocking
+		const {verifyPluginWhitelist} = require('./plugin-whitelist');
+
+		const result = verifyPluginWhitelist({
+			pluginsDir,
+			pluginFiles: ['approved.ts'],
+			whitelistPath,
+		});
+
+		// Restore getuid
+		if (originalGetuid) {
+			Object.defineProperty(process, 'getuid', {
+				value: originalGetuid,
+				writable: true,
+				configurable: true,
+			});
+		}
+
+		// Should still work without getuid - skips security check
+		expect(result.approvedFiles.size).toBe(1);
+		expect(result.approvedFiles.has('approved.ts')).toBe(true);
+	});
+});
+
+describe('verifyConfigFiles', () => {
+	test('approves matching config files and warns on missing whitelist', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		const configHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(configPath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `local-presets.conf ${configHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles).toEqual(new Set(['local-presets.conf']));
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test('warns when whitelist file is missing', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('is missing');
+	});
+
+	test('does not warn when config file is missing (optional)', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(
+			whitelistPath,
+			'missing.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['missing.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings.length).toBe(0);
+	});
+
+	test('warns when config file hash changed', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		fs.writeFileSync(
+			whitelistPath,
+			'local-presets.conf 2222222222222222222222222222222222222222222222222222222222222222',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('hash changed');
+	});
+
+	test('warns when config file is new or not whitelisted', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		fs.writeFileSync(whitelistPath, '# filename sha256\n');
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('is new or not whitelisted');
+	});
+
+	test('warns when config file cannot be hashed', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		fs.writeFileSync(
+			whitelistPath,
+			'local-presets.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const originalReadFileSync = fs.readFileSync;
+		const readFileSyncSpy = jest
+			.spyOn(fs, 'readFileSync')
+			.mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+				if (String(filePath).endsWith('.conf')) {
+					throw new Error('read error');
+				}
+				return originalReadFileSync.call(fs, filePath, 'utf8');
+			});
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+		readFileSyncSpy.mockRestore();
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('could not hash');
+	});
+
+	test('refuses config files when whitelist owner does not match process uid', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.writeFileSync(
+			whitelistPath,
+			'local-presets.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		if (typeof process.getuid !== 'function') {
+			return;
+		}
+		const getUidSpy = jest
+			.spyOn(process, 'getuid' as never)
+			.mockReturnValue((process.getuid() + 1) as never);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+		getUidSpy.mockRestore();
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('insecure ownership');
+	});
+
+	test('refuses config files when whitelist is group writable', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+		fs.writeFileSync(
+			whitelistPath,
+			'local-presets.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o660);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('insecure permissions');
+	});
+
+	test('refuses config file with insecure ownership', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+
+		const configHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(configPath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `local-presets.conf ${configHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		if (typeof process.getuid !== 'function') {
+			return;
+		}
+		const realUid = process.getuid();
+		const mockUid = realUid + 1;
+
+		// Mock statSync so whitelist is owned by mockUid (passes whitelist check)
+		// but config file is owned by realUid (fails config check)
+		const originalStatSync = fs.statSync;
+		const statSyncSpy = jest
+			.spyOn(fs, 'statSync')
+			.mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+				const stat = originalStatSync.call(fs, filePath as fs.PathLike) as
+					| fs.Stats
+					| fs.BigIntStats;
+				if (String(filePath).endsWith('config-whitelist.txt')) {
+					return {
+						...(stat as fs.Stats),
+						uid: mockUid,
+					} as fs.Stats;
+				}
+				if (String(filePath).endsWith('.conf')) {
+					return {
+						...(stat as fs.Stats),
+						uid: realUid,
+					} as fs.Stats;
+				}
+				return stat;
+			});
+
+		const getUidSpy = jest
+			.spyOn(process, 'getuid' as never)
+			.mockReturnValue(mockUid as never);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+		getUidSpy.mockRestore();
+		statSyncSpy.mockRestore();
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('insecure ownership');
+	});
+
+	test('refuses config file with insecure permissions', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-config-whitelist-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+		fs.writeFileSync(configPath, 'key = value');
+
+		const configHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(configPath))
+			.digest('hex');
+
+		fs.writeFileSync(whitelistPath, `local-presets.conf ${configHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		// Make config file group-writable
+		fs.chmodSync(configPath, 0o660);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings[0]).toContain('insecure permissions');
+		expect(result.warnings[0]).toMatch(/\(0660\)/);
+	});
+
+	test('returns early with empty approvedFiles when whitelist has security error', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-verify-config-security-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		const configDir = path.join(pluginsDir, 'configs');
+		fs.mkdirSync(configDir, {recursive: true});
+
+		const configPath = path.join(configDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+
+		// Create config file
+		fs.writeFileSync(configPath, 'test=check-test');
+
+		// Create whitelist with wrong ownership
+		fs.writeFileSync(
+			whitelistPath,
+			'local-presets.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		if (typeof process.getuid !== 'function') {
+			return;
+		}
+		const getUidSpy = jest
+			.spyOn(process, 'getuid' as never)
+			.mockReturnValue((process.getuid() + 1) as never);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+		getUidSpy.mockRestore();
+
+		expect(result.approvedFiles.size).toBe(0);
+		expect(result.warnings).toHaveLength(1);
+		expect(result.warnings[0]).toContain('insecure ownership');
+		expect(result.warnings[0]).toContain('Refusing to trust whitelist entries');
+	});
+
+	test('approves config files when whitelist passes security checks', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-verify-config-success-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+
+		// Create config file
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		// Create whitelist with correct hash
+		const configHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(configPath))
+			.digest('hex');
+		fs.writeFileSync(whitelistPath, `local-presets.conf ${configHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		expect(result.approvedFiles.size).toBe(1);
+		expect(result.approvedFiles.has('local-presets.conf')).toBe(true);
+		expect(result.warnings).toHaveLength(0);
+	});
+
+	test('continues processing when whitelist has no security errors', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-verify-config-noerrors-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const configPath = path.join(pluginsDir, 'local-presets.conf');
+		const whitelistPath = path.join(pluginsDir, 'config-whitelist.txt');
+
+		// Create config file
+		fs.writeFileSync(configPath, 'key = value');
+		fs.chmodSync(configPath, 0o600);
+
+		// Create whitelist with correct hash and proper permissions
+		const configHash = crypto
+			.createHash('sha256')
+			.update(fs.readFileSync(configPath))
+			.digest('hex');
+		fs.writeFileSync(whitelistPath, `local-presets.conf ${configHash}`);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		// This test ensures hasSecurityError === false branch is covered
+		// by verifying that processing continues normally when there are no security warnings
+		const result = verifyConfigFiles({
+			pluginsDir,
+			configFiles: ['local-presets.conf'],
+			whitelistPath,
+		});
+
+		// Should approve the config file (not return early)
+		expect(result.approvedFiles.size).toBe(1);
+		expect(result.approvedFiles.has('local-presets.conf')).toBe(true);
+	});
+
+	test('verifyFileAgainstWhitelist with isOptional=true does not warn when file is missing', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-verify-file-optional-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+		fs.writeFileSync(
+			whitelistPath,
+			'missing.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const whitelistEntries = new Map([
+			[
+				'missing.conf',
+				'1111111111111111111111111111111111111111111111111111111111111111',
+			],
+		]);
+
+		const result = verifyFileAgainstWhitelist(
+			path.join(pluginsDir, 'missing.conf'),
+			'missing.conf',
+			'Test warning',
+			whitelistEntries,
+			whitelistPath,
+			undefined,
+			true, // isOptional = true
+		);
+
+		expect(result.approved).toBe(false);
+		expect(result.warnings.length).toBe(0);
+	});
+
+	test('verifyFileAgainstWhitelist with isOptional=false warns when file is missing', () => {
+		const tempDir = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'nest-verify-file-required-'),
+		);
+		const pluginsDir = path.join(tempDir, 'plugins');
+		fs.mkdirSync(pluginsDir, {recursive: true});
+
+		const whitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
+		fs.writeFileSync(
+			whitelistPath,
+			'missing.conf 1111111111111111111111111111111111111111111111111111111111111111',
+		);
+		fs.chmodSync(whitelistPath, 0o600);
+
+		const whitelistEntries = new Map([
+			[
+				'missing.conf',
+				'1111111111111111111111111111111111111111111111111111111111111111',
+			],
+		]);
+
+		const result = verifyFileAgainstWhitelist(
+			path.join(pluginsDir, 'missing.conf'),
+			'missing.conf',
+			'Test warning',
+			whitelistEntries,
+			whitelistPath,
+			undefined,
+			false, // isOptional = false
+		);
+
+		expect(result.approved).toBe(false);
+		expect(result.warnings.length).toBe(1);
+		expect(result.warnings[0]).toContain('is missing');
 	});
 });

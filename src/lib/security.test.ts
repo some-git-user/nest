@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import {HttpStatusCodes} from './http-status-codes';
 import {createAccessControlMiddleware} from './security';
 
 type NagiosBody = {message?: string};
@@ -10,14 +11,16 @@ describe('security middleware', () => {
 	) => {
 		const app = express();
 		app.use(middleware);
-		app.get('/ok', (_req, res) => res.status(200).send({ok: true}));
+		app.get('/ok', (_req, res) =>
+			res.status(HttpStatusCodes.OK).send({ok: true}),
+		);
 		return app;
 	};
 
 	test('allows loopback request when allowedIps is not configured', async () => {
 		const app = makeApp(createAccessControlMiddleware({}));
 		const res = await request(app).get('/ok');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	test('denies non-loopback request when allowedIps is not configured', async () => {
@@ -26,7 +29,7 @@ describe('security middleware', () => {
 			.get('/ok')
 			.set('x-forwarded-for', '198.51.100.10');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 		expect(String(body.message)).toContain('not allowed');
 	});
 
@@ -39,7 +42,7 @@ describe('security middleware', () => {
 		);
 		const res = await request(app).get('/ok');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 		expect(String(body.message)).toContain('Unauthorized');
 	});
 
@@ -51,7 +54,7 @@ describe('security middleware', () => {
 			}),
 		);
 		const res = await request(app).get('/ok').set('x-nest-auth', 'secret');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	test('denies request from IP not in allowlist', async () => {
@@ -62,7 +65,7 @@ describe('security middleware', () => {
 			.get('/ok')
 			.set('x-forwarded-for', '127.0.0.1');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 		expect(String(body.message)).toContain('not allowed');
 	});
 
@@ -73,7 +76,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '203.0.113.10, 198.51.100.20');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	test('normalizes IPv4-mapped IPv6 addresses for allowlist comparison', async () => {
@@ -83,7 +86,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '::ffff:127.0.0.1');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	test('accepts API key when header value is provided as an array', () => {
@@ -141,7 +144,7 @@ describe('security middleware', () => {
 		middleware(req as never, res as never, next);
 
 		expect(next).not.toHaveBeenCalled();
-		expect(status).toHaveBeenCalledWith(401);
+		expect(status).toHaveBeenCalledWith(HttpStatusCodes.UNAUTHORIZED);
 		expect(send).toHaveBeenCalled();
 	});
 
@@ -155,7 +158,7 @@ describe('security middleware', () => {
 			}),
 		);
 		const res = await request(app).get('/ok').set('x-api-key', 'secret');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 	});
 
 	test('rejects a key that is a suffix of the expected key', async () => {
@@ -166,7 +169,7 @@ describe('security middleware', () => {
 			}),
 		);
 		const res = await request(app).get('/ok').set('x-api-key', 'full');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 	});
 
 	test('rejects key that differs only by character case', async () => {
@@ -177,7 +180,7 @@ describe('security middleware', () => {
 			}),
 		);
 		const res = await request(app).get('/ok').set('x-api-key', 'secret');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 	});
 
 	// ──────────────── Both IP allowlist + API key configured ────────────────
@@ -194,7 +197,7 @@ describe('security middleware', () => {
 			.get('/ok')
 			.set('x-forwarded-for', '127.0.0.1')
 			.set('x-api-key', 'wrong-key');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 	});
 
 	test('blocks request when API key is correct but IP is not in allowlist', async () => {
@@ -209,7 +212,7 @@ describe('security middleware', () => {
 			.get('/ok')
 			.set('x-forwarded-for', '198.51.100.1')
 			.set('x-api-key', 'correct-key');
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 	});
 
 	test('allows request when both API key and IP check pass', async () => {
@@ -224,7 +227,7 @@ describe('security middleware', () => {
 			.get('/ok')
 			.set('x-forwarded-for', '10.0.0.1')
 			.set('x-api-key', 'correct-key');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── IP allowlist with spoofed forwarded-for chain ────────────────
@@ -237,7 +240,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '198.51.100.99, 10.0.0.1');
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 	});
 
 	test('rejects IPv4-mapped IPv6 address not in allowlist', async () => {
@@ -247,7 +250,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '::ffff:10.0.0.1');
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 	});
 
 	test('allows IPv4-mapped IPv6 address that normalizes to an allowlisted IP', async () => {
@@ -257,7 +260,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '::ffff:10.0.0.1');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── Whitespace-only allowlist entries are dropped ────────────────
@@ -270,12 +273,12 @@ describe('security middleware', () => {
 		const blocked = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '127.0.0.1');
-		expect(blocked.status).toBe(403);
+		expect(blocked.status).toBe(HttpStatusCodes.FORBIDDEN);
 
 		const allowed = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '10.0.0.1');
-		expect(allowed.status).toBe(200);
+		expect(allowed.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── HTTP Basic Auth ────────────────
@@ -291,7 +294,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('Authorization', `Basic ${credentials}`);
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── WWW-Authenticate header for browser requests ────────────────
@@ -306,7 +309,7 @@ describe('security middleware', () => {
 		const res = await request(app)
 			.get('/ok')
 			.set('Accept', 'text/html,application/xhtml+xml');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 		expect(res.headers['www-authenticate']).toContain('Basic');
 	});
 
@@ -318,7 +321,7 @@ describe('security middleware', () => {
 			}),
 		);
 		const res = await request(app).get('/ok').set('Accept', 'application/json');
-		expect(res.status).toBe(401);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 		expect(res.headers['www-authenticate']).toBeUndefined();
 	});
 });

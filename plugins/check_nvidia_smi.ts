@@ -904,7 +904,7 @@ export const checkNvidiaSmi = async (
 
 		return {
 			message: `UNKNOWN: failed to execute nvidia-smi: ${
-				error instanceof Error ? error.message : 'unexpected error'
+				error instanceof Error ? error.message : String(error)
 			}`,
 			code: NagiosReturnCodes.UNKNOWN,
 		};

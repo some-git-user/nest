@@ -1,8 +1,11 @@
 import crypto from 'crypto';
 import express from 'express';
 import request from 'supertest';
+import {HttpStatusCodes} from '../lib/http-status-codes';
 
 type PluginModule = unknown;
+
+let router: express.Router | undefined;
 
 type RouterLoadOptions = {
 	pluginModule?: PluginModule;
@@ -144,19 +147,64 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	jest.doMock('fs', () => ({
 		__esModule: true,
 		default: {
-			existsSync: (fsPath: string) =>
-				fsPath === whitelistPath && whitelistExists,
-			readdirSync: () => pluginFiles,
-			readFileSync: (fsPath: string) =>
-				fsPath === whitelistPath ? whitelistContent : pluginSource,
+			existsSync: (fsPath: string) => {
+				if (fsPath === whitelistPath) {
+					return whitelistExists;
+				}
+				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
+					return true;
+				}
+				if (fsPath.includes('plugin-cache')) {
+					return (options.cacheMtimeMs ?? 0) >= 0;
+				}
+				return false;
+			},
+			readdirSync: (fsPath: string) => {
+				if (fsPath.includes('plugin-cache')) {
+					return [];
+				}
+				return pluginFiles;
+			},
+			readFileSync: (fsPath: string) => {
+				if (fsPath === whitelistPath) {
+					return whitelistContent;
+				}
+				if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
+					return pluginSource;
+				}
+				return '';
+			},
 			writeFileSync: () => undefined,
 			mkdirSync: () => undefined,
 			statSync: statSyncMock,
 		},
-		existsSync: (fsPath: string) => fsPath === whitelistPath && whitelistExists,
-		readdirSync: () => pluginFiles,
-		readFileSync: (fsPath: string) =>
-			fsPath === whitelistPath ? whitelistContent : pluginSource,
+		existsSync: (fsPath: string) => {
+			if (fsPath === whitelistPath) {
+				return whitelistExists;
+			}
+			if (pluginFiles.some((file) => fsPath.endsWith(file))) {
+				return true;
+			}
+			if (fsPath.includes('plugin-cache')) {
+				return (options.cacheMtimeMs ?? 0) >= 0;
+			}
+			return false;
+		},
+		readdirSync: (fsPath: string) => {
+			if (fsPath.includes('plugin-cache')) {
+				return [];
+			}
+			return pluginFiles;
+		},
+		readFileSync: (fsPath: string) => {
+			if (fsPath === whitelistPath) {
+				return whitelistContent;
+			}
+			if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
+				return pluginSource;
+			}
+			return '';
+		},
 		writeFileSync: () => undefined,
 		mkdirSync: () => undefined,
 		statSync: statSyncMock,
@@ -192,14 +240,11 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		logger,
 	}));
 
-	let router: express.Router;
-	jest.isolateModules(() => {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const routesModule = require('./dynamic-routes') as {
-			default: express.Router;
-		};
-		router = routesModule.default;
-	});
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	const routesModule = require('./dynamic-routes') as {
+		default: express.Router;
+	};
+	router = routesModule.default as express.Router;
 
 	if (options.omitProcessGetuid) {
 		Object.defineProperty(process, 'getuid', {
@@ -231,7 +276,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(500);
+		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
 		expect(body).toHaveProperty('code', 3);
 		expect(String(body.message)).toContain('did not return a valid object');
 	});
@@ -245,7 +290,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(500);
+		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
 		expect(body).toHaveProperty('code', 3);
 		expect(String(body.message)).toContain('failed: boom');
 	});
@@ -259,7 +304,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(String(body.message)).toContain('did not return a message');
 	});
@@ -278,7 +323,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('message', 'ok');
 		expect(body).toHaveProperty('code', 0);
 		expect(body).not.toHaveProperty('performanceData');
@@ -292,7 +337,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(500);
+		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
 		expect(body).toHaveProperty('code', 3);
 		expect(String(body.message)).toContain('Error loading plugin');
 	});
@@ -307,7 +352,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('message', 'ok');
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.warn).toHaveBeenCalledWith(
@@ -331,7 +376,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('HTTP usage for plugin'),
@@ -353,7 +398,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.info).not.toHaveBeenCalledWith(
 			expect.stringContaining('Usage for plugin'),
@@ -367,7 +412,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(500);
+		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
 		expect(body).toHaveProperty('code', 3);
 		expect(String(body.message)).toContain('must export a function');
 	});
@@ -382,7 +427,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('Loaded JS plugin without transpilation'),
@@ -399,7 +444,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.debug).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -418,7 +463,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -434,7 +479,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 	});
 
 	test('skips plugin when ownership does not match process uid', async () => {
@@ -445,7 +490,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('insecure ownership'),
 		);
@@ -458,7 +503,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('is new or not whitelisted'),
 		);
@@ -475,7 +520,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('hash changed'),
 		);
@@ -490,7 +535,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('insecure permissions'),
 		);
@@ -507,7 +552,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('code', 0);
 	});
 
@@ -518,7 +563,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Could not transpile plugin'),
 		);
@@ -535,7 +580,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 	});
 
@@ -552,7 +597,7 @@ describe('dynamic routes (branch coverage)', () => {
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('Transpiled TS plugin to cache'),
@@ -566,7 +611,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(404);
+		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: transpile-string-error'),
 		);
@@ -579,7 +624,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(500);
+		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: metadata-string-error'),
 		);
@@ -598,7 +643,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('HTTP usage for plugin'),
 		);
@@ -623,7 +668,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('Shell usage for plugin'),
 		);
@@ -646,7 +691,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(logger.info).toHaveBeenCalledWith(
 			expect.stringContaining('HTTP usage for plugin'),
 		);
@@ -671,7 +716,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake?help');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.headers['content-type']).toMatch(/text\/html/);
 		expect(res.text).toContain('<h1>Fake Plugin Help</h1>');
 		expect(res.text).toContain('No real functionality.');
@@ -690,7 +735,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake?help');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.headers['content-type']).toMatch(/text\/html/);
 		expect(res.text).toContain('check_fake');
 		expect(res.text).toContain('/plugins/check-fake?x=&lt;val&gt;');
@@ -710,7 +755,7 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake?help');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.headers['content-type']).toMatch(/text\/html/);
 		expect(res.text).toContain(
 			'No extended help is available for this plugin.',
@@ -753,10 +798,15 @@ describe('dynamic routes (branch coverage)', () => {
 		};
 		requireFn.resolve = (modulePath: string) => modulePath;
 
+		const pluginModule = {
+			checkFake: () => ({code: 3}),
+		};
+
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			default: {
-				existsSync: (fsPath: string) => fsPath === whitelistPath,
+				existsSync: (fsPath: string) =>
+					fsPath === whitelistPath || fsPath.endsWith('check_fake.ts'),
 				readdirSync: () => pluginFiles,
 				readFileSync: (fsPath: string) =>
 					fsPath === whitelistPath ? whitelistContent : pluginSource,
@@ -779,7 +829,8 @@ describe('dynamic routes (branch coverage)', () => {
 					};
 				},
 			},
-			existsSync: (fsPath: string) => fsPath === whitelistPath,
+			existsSync: (fsPath: string) =>
+				fsPath === whitelistPath || fsPath.endsWith('check_fake.ts'),
 			readdirSync: () => pluginFiles,
 			readFileSync: (fsPath: string) =>
 				fsPath === whitelistPath ? whitelistContent : pluginSource,
@@ -835,21 +886,18 @@ describe('dynamic routes (branch coverage)', () => {
 
 		jest.spyOn(process, 'getuid').mockReturnValue(1000);
 
-		let router: express.Router;
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const routesModule = require('./dynamic-routes') as {
-				default: express.Router;
-			};
-			router = routesModule.default;
-		});
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const routesModule = require('./dynamic-routes') as {
+			default: express.Router;
+		};
+		router = routesModule.default;
 
 		const app = express();
 		app.use(express.json());
 		app.use('/', router!);
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('code', 3);
 	});
 });

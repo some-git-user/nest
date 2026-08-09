@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import express from 'express';
 import path from 'path';
 import request from 'supertest';
+import {HttpStatusCodes} from '../lib/http-status-codes';
 
 type BuildAppOptions = {
 	pluginFiles?: string[];
@@ -140,35 +141,83 @@ describe('dynamic routes (plugins)', () => {
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			default: {
-				existsSync: (fsPath: string) => fsPath === whitelistPath,
-				readdirSync: () => pluginFiles,
-				readFileSync: (fsPath: string) =>
-					fsPath === whitelistPath
-						? pluginFiles
-								.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
-								.map((file) => `${file} ${approvedHash}`)
-								.join('\n')
-						: pluginSource,
+				existsSync: (fsPath: string) => {
+					// Whitelist file always exists
+					if (fsPath === whitelistPath) {
+						return true;
+					}
+					// Plugin files exist
+					if (pluginFiles.some((file) => fsPath.endsWith(file))) {
+						return true;
+					}
+					// Cache directory exists
+					if (fsPath.includes('plugin-cache')) {
+						return true;
+					}
+					return false;
+				},
+				readdirSync: (fsPath: string) => {
+					if (fsPath.includes('plugin-cache')) {
+						return [];
+					}
+					return pluginFiles;
+				},
+				readFileSync: (fsPath: string) => {
+					if (fsPath === whitelistPath) {
+						return pluginFiles
+							.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
+							.map((file) => `${file} ${approvedHash}`)
+							.join('\n');
+					}
+					if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
+						return pluginSource;
+					}
+					return '';
+				},
 				writeFileSync: () => undefined,
 				mkdirSync: () => undefined,
 				statSync: statSyncMock,
 			},
-			existsSync: (fsPath: string) => fsPath === whitelistPath,
-			readdirSync: () => pluginFiles,
-			readFileSync: (fsPath: string) =>
-				fsPath === whitelistPath
-					? pluginFiles
-							.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
-							.map((file) => `${file} ${approvedHash}`)
-							.join('\n')
-					: pluginSource,
+			existsSync: (fsPath: string) => {
+				if (fsPath === whitelistPath) {
+					return true;
+				}
+				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
+					return true;
+				}
+				if (fsPath.includes('plugin-cache')) {
+					return true;
+				}
+				return false;
+			},
+			readdirSync: (fsPath: string) => {
+				if (fsPath.includes('plugin-cache')) {
+					return [];
+				}
+				return pluginFiles;
+			},
+			readFileSync: (fsPath: string) => {
+				if (fsPath === whitelistPath) {
+					return pluginFiles
+						.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
+						.map((file) => `${file} ${approvedHash}`)
+						.join('\n');
+				}
+				if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
+					return pluginSource;
+				}
+				return '';
+			},
 			writeFileSync: () => undefined,
 			mkdirSync: () => undefined,
 			statSync: statSyncMock,
 		}));
 
 		const transpileModule = jest.fn(() => ({
-			outputText: 'module.exports = {};',
+			outputText: `
+const pluginModule = ${JSON.stringify(pluginModule, null, 2)};
+module.exports = pluginModule;
+`,
 		}));
 		jest.doMock('typescript', () => ({
 			__esModule: true,
@@ -183,10 +232,12 @@ describe('dynamic routes (plugins)', () => {
 		}));
 
 		const requireFn = ((_modulePath: string) => {
-			if (!_modulePath.endsWith('.js')) {
-				throw new Error(`Unexpected module path: ${_modulePath}`);
+			// Return pluginModule for any .js file (including transpiled plugin cache)
+			if (_modulePath.endsWith('.js')) {
+				return pluginModule;
 			}
-			return pluginModule;
+			// For other modules, throw an error
+			throw new Error(`Unexpected module path: ${_modulePath}`);
 		}) as ((_modulePath: string) => unknown) & {
 			resolve: (_modulePath: string) => string;
 		};
@@ -214,6 +265,9 @@ describe('dynamic routes (plugins)', () => {
 		let registeredPluginRoutes: string[];
 		let registeredPluginRouteExamples: Record<string, string[]>;
 		jest.isolateModules(() => {
+			// No need to mock plugin-executor - dynamic-routes uses inline execution
+			// with requireFn which is already mocked above
+
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const routesModule = require('./dynamic-routes') as {
 				default: express.Router;
@@ -260,7 +314,7 @@ describe('dynamic routes (plugins)', () => {
 			performanceData: 'true',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('message', 'hello');
 		expect(res.body).toHaveProperty('code', 0);
 		expect(res.body).toHaveProperty(
@@ -276,7 +330,7 @@ describe('dynamic routes (plugins)', () => {
 			performanceData: 'true',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('message', 'hello-post');
 		expect(res.body).toHaveProperty('code', 0);
 	});
@@ -286,7 +340,7 @@ describe('dynamic routes (plugins)', () => {
 			performanceData: 'true',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty(
 			'message',
 			'Usage: /plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
@@ -304,7 +358,7 @@ describe('dynamic routes (plugins)', () => {
 			nagiosReturnValue: '1',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('message', 'plain');
 		expect(res.body).toHaveProperty('code', 1);
 		expect(res.body).not.toHaveProperty('performanceData');
@@ -317,7 +371,7 @@ describe('dynamic routes (plugins)', () => {
 			performanceData: 'true',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('message', 'invalid-code');
 		expect(res.body).toHaveProperty('code', 3);
 	});
@@ -447,7 +501,7 @@ describe('dynamic routes (plugins)', () => {
 			nagiosReturnValue: '0',
 		});
 
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(res.body).toHaveProperty('message', 'dev-mode');
 		expect(res.body).toHaveProperty('code', 0);
 	});
@@ -961,7 +1015,7 @@ describe('dynamic routes (plugins)', () => {
 				nagiosReturnMessage: 'hello',
 				nagiosReturnValue: '0',
 			})
-			.expect(200);
+			.expect(HttpStatusCodes.OK);
 
 		expect(res.body).toHaveProperty('message', 'ok');
 		expect(res.body).toHaveProperty('code', 0);

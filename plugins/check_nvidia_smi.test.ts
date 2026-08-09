@@ -752,7 +752,7 @@ describe('checkNvidiaSmi plugin', () => {
 		});
 
 		expect(result.code).toBe(3);
-		expect(result.message).toContain('unexpected error');
+		expect(result.message).toContain('[object Object]');
 	});
 
 	test('handles error objects with stderr but no string stdout', async () => {
