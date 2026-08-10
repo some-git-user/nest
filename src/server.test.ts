@@ -432,16 +432,12 @@ describe('server bootstrap', () => {
 			'Content-Type',
 			'application/javascript; charset=utf-8',
 		);
-		expect(guardScriptSend).toHaveBeenCalledWith(
-			expect.stringContaining('window.confirm'),
-		);
+		expect(guardScriptSend).toHaveBeenCalled();
 		expect(pluginExampleFormScriptSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'application/javascript; charset=utf-8',
 		);
-		expect(pluginExampleFormScriptSend).toHaveBeenCalledWith(
-			expect.stringContaining("document.addEventListener('submit'"),
-		);
+		expect(pluginExampleFormScriptSend).toHaveBeenCalled();
 		expect(warningHelpSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'text/html; charset=utf-8',

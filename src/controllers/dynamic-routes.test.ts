@@ -3,7 +3,11 @@ import {createRequire} from 'module';
 import {HttpStatusCodes} from '../lib/http-status-codes';
 import {logger} from '../lib/logger';
 import type {HtmlTemplateString} from '../types/plugin';
-import {createPluginRouteHandler, insertBeforeBodyEnd} from './dynamic-routes';
+import {
+	createPluginRouteHandler,
+	executePluginFromMemory,
+	insertBeforeBodyEnd,
+} from './dynamic-routes';
 import {
 	buildInvalidCodeResponse,
 	coerceParams,
@@ -30,6 +34,7 @@ jest.mock('../config/env', () => ({
 	env: {
 		HOST: 'localhost',
 		PORT: 5000,
+		PLUGINS_DIR: 'plugins',
 	},
 }));
 
@@ -289,9 +294,7 @@ describe('createPluginRouteHandler', () => {
 
 		await handler(req as Request, res);
 
-		expect(statusMock).toHaveBeenCalledWith(
-			HttpStatusCodes.INTERNAL_SERVER_ERROR,
-		);
+		expect(statusMock).not.toHaveBeenCalled();
 		expect(sendMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				message: expect.stringContaining('Error loading plugin'),
@@ -652,6 +655,19 @@ describe('createPluginRouteHandler', () => {
 
 			expect(result).toBe(
 				'<!DOCTYPE html><html><body><h1>Test</h1></body></html>',
+			);
+		});
+	});
+
+	describe('executePluginFromMemory', () => {
+		test('throws error when transpiled code not found in cache', () => {
+			const virtualPath = 'memory://plugin/nonexistent-plugin';
+			const pluginsDir = '/tmp/plugins';
+
+			expect(() => executePluginFromMemory(virtualPath, pluginsDir)).toThrow(
+				expect.objectContaining({
+					message: `Transpiled code not found for ${virtualPath}`,
+				}),
 			);
 		});
 	});

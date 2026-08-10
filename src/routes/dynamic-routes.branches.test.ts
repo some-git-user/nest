@@ -3,6 +3,48 @@ import express from 'express';
 import request from 'supertest';
 import {HttpStatusCodes} from '../lib/http-status-codes';
 
+// Mock vm module with inline factory - manual mock in __mocks__/ not being loaded
+let currentPluginModule: unknown = undefined;
+let currentRequireError: unknown = undefined;
+const mockSetPluginModule = jest.fn((pluginModule: unknown) => {
+	currentPluginModule = pluginModule;
+});
+const mockResetPluginModule = jest.fn(() => {
+	currentPluginModule = undefined;
+	currentRequireError = undefined;
+});
+const mockCreateContext = jest.fn((contextObject?: unknown) => contextObject);
+const mockRunInContext = jest.fn((code: string, context: unknown) => {
+	// Simplified mock - will be overridden in test setup if needed
+	if (!context) return;
+	const ctx = context as {
+		module?: {exports: Record<string, unknown>};
+		exports: Record<string, unknown>;
+	};
+	if (!ctx.module) {
+		ctx.module = {exports: {}};
+		ctx.exports = ctx.module.exports;
+	}
+	// Throw requireError if set (for testing error handling)
+	if (currentRequireError) {
+		throw currentRequireError;
+	}
+	// Return the current plugin module if available
+	if (currentPluginModule && typeof currentPluginModule === 'object') {
+		ctx.module.exports = currentPluginModule as Record<string, unknown>;
+		ctx.exports = currentPluginModule as Record<string, unknown>;
+		return currentPluginModule;
+	}
+	return ctx.module.exports;
+});
+
+jest.mock('vm', () => ({
+	createContext: mockCreateContext,
+	runInContext: mockRunInContext,
+	setPluginModule: mockSetPluginModule,
+	resetPluginModule: mockResetPluginModule,
+}));
+
 type PluginModule = unknown;
 
 let router: express.Router | undefined;
@@ -46,6 +88,10 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	const pluginModule = options.pluginModule ?? {
 		checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 	};
+	// Set the require error in the vm mock before loading the module
+	if (options.requireError) {
+		currentRequireError = options.requireError;
+	}
 	const pluginFileIsFile = options.pluginFileIsFile ?? true;
 	const pluginFileUid = options.pluginFileUid ?? 1000;
 	const pluginFileMode = options.pluginFileMode ?? 0o100600;
@@ -93,19 +139,6 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			}
 		}
 
-		if (fsPath.includes('plugin-cache')) {
-			if (cacheMtimeMs < 0) {
-				throw new Error('cache not found');
-			}
-
-			return {
-				isFile: () => true,
-				mtimeMs: cacheMtimeMsRaw,
-				uid: pluginFileUid,
-				mode: pluginFileMode,
-			};
-		}
-
 		return {
 			isFile: () => pluginFileIsFile,
 			mtimeMs: sourceMtimeMsRaw,
@@ -125,9 +158,16 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		jest.spyOn(process, 'getuid').mockReturnValue(processUid);
 	}
 
+	const requireError = options.requireError;
+
 	const requireFn = ((modulePath: string) => {
-		if (options.requireError) {
-			throw options.requireError as Error;
+		// Throw requireError if set (for testing error handling)
+		if (requireError) {
+			throw requireError;
+		}
+		// Handle memory:// virtual paths used by vm execution
+		if (modulePath.startsWith('memory://')) {
+			return pluginModule;
 		}
 		if (!modulePath.endsWith('.js')) {
 			throw new Error(`Unexpected module path: ${modulePath}`);
@@ -154,15 +194,9 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 					return true;
 				}
-				if (fsPath.includes('plugin-cache')) {
-					return (options.cacheMtimeMs ?? 0) >= 0;
-				}
 				return false;
 			},
 			readdirSync: (fsPath: string) => {
-				if (fsPath.includes('plugin-cache')) {
-					return [];
-				}
 				return pluginFiles;
 			},
 			readFileSync: (fsPath: string) => {
@@ -185,15 +219,9 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 				return true;
 			}
-			if (fsPath.includes('plugin-cache')) {
-				return (options.cacheMtimeMs ?? 0) >= 0;
-			}
 			return false;
 		},
 		readdirSync: (fsPath: string) => {
-			if (fsPath.includes('plugin-cache')) {
-				return [];
-			}
 			return pluginFiles;
 		},
 		readFileSync: (fsPath: string) => {
@@ -225,6 +253,35 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	jest.doMock('module', () => ({
 		createRequire: () => requireFn,
 	}));
+
+	jest.doMock('module', () => ({
+		createRequire: () => requireFn,
+	}));
+
+	// Mock vm module before require('vm')
+	jest.doMock('vm', () => ({
+		createContext: mockCreateContext,
+		runInContext: mockRunInContext,
+		setPluginModule: mockSetPluginModule,
+		resetPluginModule: mockResetPluginModule,
+		runInContextMock: mockRunInContext,
+	}));
+
+	// Configure vm mock with plugin module for this test
+	const vm = require('vm');
+	vm.setPluginModule(pluginModule);
+
+	// Override runInContext to handle requireError - must be done BEFORE require('./dynamic-routes')
+	const originalRunInContext = vm.runInContextMock;
+	const runInContextWithRequireError = (code: string, context: unknown) => {
+		if (requireError) {
+			throw requireError as Error;
+		}
+		return originalRunInContext(code, context);
+	};
+
+	// Replace the runInContext implementation
+	vm.runInContextMock = runInContextWithRequireError;
 
 	jest.doMock('../config/env', () => ({
 		env: {
@@ -265,6 +322,7 @@ describe('dynamic routes (branch coverage)', () => {
 	afterEach(() => {
 		jest.restoreAllMocks();
 		jest.resetModules();
+		currentRequireError = undefined;
 	});
 
 	test('returns 500 when plugin returns a non-object result', async () => {
@@ -330,36 +388,17 @@ describe('dynamic routes (branch coverage)', () => {
 		expect(logger.warn).toHaveBeenCalled();
 	});
 
-	test('returns 500 when plugin cannot be loaded', async () => {
+	test('returns 200 with Nagios code 3 when plugin cannot be loaded', async () => {
 		const {app} = buildAppForPlugin({
 			requireError: new Error('load failure'),
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
 		const body = res.body as NagiosBody;
-		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
+		// Plugin load errors return HTTP 200 with Nagios UNKNOWN (code 3)
+		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 3);
 		expect(String(body.message)).toContain('Error loading plugin');
-	});
-
-	test('continues when cache resolve fails and logs warning', async () => {
-		const {app, logger} = buildAppForPlugin({
-			resolveError: new Error('resolve failure'),
-			pluginModule: {
-				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
-			},
-		});
-
-		const res = await request(app).get('/plugins/check-fake');
-		const body = res.body as NagiosBody;
-		expect(res.status).toBe(HttpStatusCodes.OK);
-		expect(body).toHaveProperty('message', 'ok');
-		expect(body).toHaveProperty('code', 0);
-		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining(
-				'Could not resolve plugin path for cache clearing',
-			),
-		);
 	});
 
 	test('logs plugin usage when metadata usage is a string', async () => {
@@ -418,7 +457,7 @@ describe('dynamic routes (branch coverage)', () => {
 	});
 
 	test('loads JS plugins without transpilation', async () => {
-		const {app, logger} = buildAppForPlugin({
+		const {app} = buildAppForPlugin({
 			pluginFiles: ['check_fake.js'],
 			pluginModule: {
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
@@ -429,9 +468,6 @@ describe('dynamic routes (branch coverage)', () => {
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
-		expect(logger.info).toHaveBeenCalledWith(
-			expect.stringContaining('Loaded JS plugin without transpilation'),
-		);
 	});
 
 	test('skips JS plugin when matching TS plugin exists', async () => {
@@ -585,7 +621,7 @@ describe('dynamic routes (branch coverage)', () => {
 	});
 
 	test('falls back to cache mtime -1 when mtime is not numeric', async () => {
-		const {app, logger} = buildAppForPlugin({
+		const {app} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
 			sourceMtimeMs: 10,
 			cacheMtimeMs: 1,
@@ -599,9 +635,6 @@ describe('dynamic routes (branch coverage)', () => {
 		const body = res.body as NagiosBody;
 		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(body).toHaveProperty('code', 0);
-		expect(logger.info).toHaveBeenCalledWith(
-			expect.stringContaining('Transpiled TS plugin to cache'),
-		);
 	});
 
 	test('stringifies non-Error transpile failures', async () => {
@@ -624,7 +657,10 @@ describe('dynamic routes (branch coverage)', () => {
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
-		expect(res.status).toBe(HttpStatusCodes.INTERNAL_SERVER_ERROR);
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(HttpStatusCodes.OK);
+		expect(body).toHaveProperty('code', 3);
+		expect(String(body.message)).toContain('Error loading plugin');
 		expect(logger.warn).toHaveBeenCalledWith(
 			expect.stringContaining('Error: metadata-string-error'),
 		);
@@ -789,15 +825,6 @@ describe('dynamic routes (branch coverage)', () => {
 			};
 		});
 
-		const requireFn = (() => {
-			return {
-				checkFake: () => ({code: 3}),
-			};
-		}) as (() => unknown) & {
-			resolve: (modulePath: string) => string;
-		};
-		requireFn.resolve = (modulePath: string) => modulePath;
-
 		const pluginModule = {
 			checkFake: () => ({code: 3}),
 		};
@@ -867,8 +894,23 @@ describe('dynamic routes (branch coverage)', () => {
 		}));
 
 		jest.doMock('module', () => ({
-			createRequire: () => requireFn,
+			createRequire: () => {
+				const requireFn = ((modulePath: string) => {
+					if (modulePath.startsWith('memory://')) {
+						return pluginModule;
+					}
+					return pluginModule;
+				}) as ((modulePath: string) => unknown) & {
+					resolve: (modulePath: string) => string;
+				};
+				requireFn.resolve = (modulePath: string) => modulePath;
+				return requireFn;
+			},
 		}));
+
+		// Configure vm mock with plugin module for this test
+		const vm = require('vm');
+		vm.setPluginModule(pluginModule);
 
 		jest.doMock('../config/env', () => ({
 			env: {

@@ -1,5 +1,7 @@
 import fs from 'fs';
 import {
+	_clearCheckWritableDirectoriesOverride,
+	_setCheckWritableDirectoriesForTesting,
 	checkWritableDirectories,
 	formatStartupErrors,
 	validateStartup,
@@ -13,6 +15,8 @@ describe('startup-check', () => {
 		fs.mkdirSync(testBaseDir, {recursive: true});
 		// Reset NODE_ENV for each test
 		delete process.env.NODE_ENV;
+		// Clear any test overrides
+		_clearCheckWritableDirectoriesOverride();
 	});
 
 	afterEach(() => {
@@ -22,16 +26,17 @@ describe('startup-check', () => {
 		} catch {
 			// Ignore cleanup errors
 		}
+		// Clear any test overrides
+		_clearCheckWritableDirectoriesOverride();
 	});
 
 	describe('checkWritableDirectories', () => {
 		it('returns directories with correct status', () => {
 			const checks = checkWritableDirectories();
 
-			expect(checks).toHaveLength(4);
+			expect(checks).toHaveLength(3);
 			expect(checks.map((c) => c.description)).toEqual([
 				'Log directory',
-				'Plugin cache directory',
 				'Coverage directory',
 				'Build output directory',
 			]);
@@ -56,11 +61,6 @@ describe('startup-check', () => {
 					description: 'Log directory',
 					isWritable: true,
 				},
-				{
-					path: '/tmp/test/plugins/plugin-cache',
-					description: 'Plugin cache directory',
-					isWritable: true,
-				},
 			];
 
 			const result = formatStartupErrors(mockChecks);
@@ -75,11 +75,6 @@ describe('startup-check', () => {
 					description: 'Log directory',
 					isWritable: false,
 				},
-				{
-					path: '/tmp/test/plugins/plugin-cache',
-					description: 'Plugin cache directory',
-					isWritable: false,
-				},
 			];
 
 			const result = formatStartupErrors(mockChecks);
@@ -87,8 +82,6 @@ describe('startup-check', () => {
 			expect(result).toContain('STARTUP ERROR: Insufficient file permissions');
 			expect(result).toContain('Log directory');
 			expect(result).toContain('/tmp/test/logs');
-			expect(result).toContain('Plugin cache directory');
-			expect(result).toContain('/tmp/test/plugins/plugin-cache');
 			expect(result).toContain('Option 1 - Fix ownership (recommended)');
 			expect(result).toContain('sudo chown -R $(whoami)');
 			expect(result).toContain('Option 2 - Fix permissions only');
@@ -200,6 +193,58 @@ describe('startup-check', () => {
 			// Should not throw because coverage is not critical in production
 			expect(() => validateStartup()).not.toThrow();
 
+			jest.restoreAllMocks();
+		});
+
+		it('throws error when Plugin directory is not writable in production', () => {
+			process.env.NODE_ENV = 'production';
+			const mockConsoleError = jest
+				.spyOn(console, 'error')
+				.mockImplementation();
+
+			// Use the test override function to mock checkWritableDirectories
+			_setCheckWritableDirectoriesForTesting(() => [
+				{
+					path: '/tmp/logs',
+					description: 'Log directory',
+					isWritable: false,
+				},
+			]);
+
+			expect(() => validateStartup()).toThrow(
+				'Startup failed: 1 critical directory/directories are not writable',
+			);
+			expect(mockConsoleError).toHaveBeenCalled();
+
+			_clearCheckWritableDirectoriesOverride();
+			jest.restoreAllMocks();
+		});
+
+		it('throws error when both Log and Plugin directories are not writable in production', () => {
+			process.env.NODE_ENV = 'production';
+			const mockConsoleError = jest
+				.spyOn(console, 'error')
+				.mockImplementation();
+
+			_setCheckWritableDirectoriesForTesting(() => [
+				{
+					path: '/tmp/logs',
+					description: 'Log directory',
+					isWritable: false,
+				},
+				{
+					path: '/tmp/plugins',
+					description: 'Plugin directory',
+					isWritable: false,
+				},
+			]);
+
+			expect(() => validateStartup()).toThrow(
+				'Startup failed: 2 critical directory/directories are not writable',
+			);
+			expect(mockConsoleError).toHaveBeenCalled();
+
+			_clearCheckWritableDirectoriesOverride();
 			jest.restoreAllMocks();
 		});
 	});

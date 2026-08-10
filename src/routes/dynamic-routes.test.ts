@@ -3,6 +3,39 @@ import express from 'express';
 import path from 'path';
 import request from 'supertest';
 import {HttpStatusCodes} from '../lib/http-status-codes';
+import {executePluginInMemory} from './dynamic-routes';
+
+// Mock vm module - will be set up in buildApp() using jest.doMock()
+let currentPluginModule: unknown = undefined;
+const mockSetPluginModule = jest.fn((pluginModule: unknown) => {
+	currentPluginModule = pluginModule;
+});
+const mockResetPluginModule = jest.fn(() => {
+	currentPluginModule = undefined;
+});
+const mockCreateContext = jest.fn((contextObject?: unknown) => contextObject);
+const mockRunInContext = jest.fn((code: string, context: unknown) => {
+	// Simplified mock - will be overridden in test setup if needed
+	if (!context) return {};
+	const ctx = context as {
+		module?: {exports: Record<string, unknown>};
+		exports: Record<string, unknown>;
+	};
+	if (!ctx.module) {
+		ctx.module = {exports: {}};
+		ctx.exports = ctx.module.exports;
+	}
+	// Return the current plugin module if available
+	if (currentPluginModule && typeof currentPluginModule === 'object') {
+		// Copy properties from currentPluginModule to ctx.module.exports
+		const pluginModule = currentPluginModule as Record<string, unknown>;
+		for (const key of Object.keys(pluginModule)) {
+			ctx.module.exports[key] = pluginModule[key];
+		}
+		ctx.exports = ctx.module.exports;
+	}
+	return ctx.module.exports;
+});
 
 type BuildAppOptions = {
 	pluginFiles?: string[];
@@ -150,16 +183,9 @@ describe('dynamic routes (plugins)', () => {
 					if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 						return true;
 					}
-					// Cache directory exists
-					if (fsPath.includes('plugin-cache')) {
-						return true;
-					}
 					return false;
 				},
 				readdirSync: (fsPath: string) => {
-					if (fsPath.includes('plugin-cache')) {
-						return [];
-					}
 					return pluginFiles;
 				},
 				readFileSync: (fsPath: string) => {
@@ -185,15 +211,9 @@ describe('dynamic routes (plugins)', () => {
 				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 					return true;
 				}
-				if (fsPath.includes('plugin-cache')) {
-					return true;
-				}
 				return false;
 			},
 			readdirSync: (fsPath: string) => {
-				if (fsPath.includes('plugin-cache')) {
-					return [];
-				}
 				return pluginFiles;
 			},
 			readFileSync: (fsPath: string) => {
@@ -232,12 +252,27 @@ module.exports = pluginModule;
 		}));
 
 		const requireFn = ((_modulePath: string) => {
-			// Return pluginModule for any .js file (including transpiled plugin cache)
-			if (_modulePath.endsWith('.js')) {
+			// Return the pluginModule for .js files (including transpiled plugin cache)
+			// Also handle memory:// virtual paths used by vm execution
+			if (_modulePath.endsWith('.js') || _modulePath.startsWith('memory://')) {
 				return pluginModule;
 			}
-			// For other modules, throw an error
-			throw new Error(`Unexpected module path: ${_modulePath}`);
+			// For other modules (like ../src/types/nagios), return appropriate mocks
+			if (_modulePath === '../src/types/nagios') {
+				return {
+					NagiosReturnCodes: {
+						OK: 0,
+						WARNING: 1,
+						CRITICAL: 2,
+						UNKNOWN: 3,
+					},
+				};
+			}
+			if (_modulePath === '../src/types/plugin') {
+				return {};
+			}
+			// For all other modules, use standard require
+			return jest.requireActual(_modulePath);
 		}) as ((_modulePath: string) => unknown) & {
 			resolve: (_modulePath: string) => string;
 		};
@@ -261,13 +296,27 @@ module.exports = pluginModule;
 			logger,
 		}));
 
+		// Mock vm module - must be called BEFORE isolateModules
+		// Use a factory that accesses the currentPluginModule variable from outer scope
+		jest.doMock('vm', () => ({
+			createContext: mockCreateContext,
+			runInContext: mockRunInContext,
+			setPluginModule: mockSetPluginModule,
+			resetPluginModule: mockResetPluginModule,
+		}));
+
 		let dynamicRoutes: express.Router;
 		let registeredPluginRoutes: string[];
 		let registeredPluginRouteExamples: Record<string, string[]>;
-		jest.isolateModules(() => {
-			// No need to mock plugin-executor - dynamic-routes uses inline execution
-			// with requireFn which is already mocked above
 
+		// Get vm mock OUTSIDE isolateModules to avoid require() isolation issue
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const vm = require('vm');
+
+		// Set the plugin module BEFORE loading dynamic-routes so it's available during plugin scanning
+		vm.setPluginModule(pluginModule);
+
+		jest.isolateModules(() => {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const routesModule = require('./dynamic-routes') as {
 				default: express.Router;
@@ -1224,77 +1273,6 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('clearPluginCache handles rmSync error', () => {
-		jest.resetModules();
-
-		const logger = {
-			info: jest.fn(),
-			warn: jest.fn(),
-			error: jest.fn(),
-			debug: jest.fn(),
-		};
-
-		const mockFs = {
-			__esModule: true,
-			default: {
-				existsSync: () => true,
-				rmSync: jest.fn(() => {
-					throw new Error('Permission denied');
-				}),
-				readdirSync: () => [],
-				readFileSync: () => '',
-				writeFileSync: () => undefined,
-				mkdirSync: () => undefined,
-				statSync: () => ({
-					isFile: () => true,
-					mtimeMs: 0,
-					uid: 1000,
-					mode: 0o100644,
-				}),
-			},
-			existsSync: () => true,
-			rmSync: jest.fn(() => {
-				throw new Error('Permission denied');
-			}),
-			readdirSync: () => [],
-			readFileSync: () => '',
-			writeFileSync: () => undefined,
-			mkdirSync: () => undefined,
-			statSync: () => ({
-				isFile: () => true,
-				mtimeMs: 0,
-				uid: 1000,
-				mode: 0o100644,
-			}),
-		};
-
-		jest.doMock('fs', () => mockFs);
-
-		jest.doMock('../lib/logger', () => ({
-			logger,
-		}));
-
-		jest.doMock('../config/env', () => ({
-			env: {
-				NODE_ENV: 'production',
-				HOST: 'localhost',
-				PORT: 5000,
-				PLUGINS_DIR: 'plugins',
-				LOG_FILE_PATH: 'logs/nest.log',
-			},
-		}));
-
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			require('./dynamic-routes');
-		});
-
-		// Verify the logger.warn was called for rmSync error
-		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining('Could not clear plugin cache directory'),
-		);
-	});
-
 	test('isPluginMeta rejects examples as non-array type', () => {
 		jest.resetModules();
 
@@ -1528,70 +1506,15 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('clearPluginCache logs success when cache is cleared', () => {
-		jest.resetModules();
+	describe('executePluginInMemory', () => {
+		test('throws error when transpiled code not found in cache', () => {
+			const virtualPath = 'memory://plugin/nonexistent-plugin';
 
-		const logger = {
-			info: jest.fn(),
-			warn: jest.fn(),
-			error: jest.fn(),
-			debug: jest.fn(),
-		};
-
-		const mockFs = {
-			__esModule: true,
-			default: {
-				existsSync: () => true,
-				rmSync: jest.fn(),
-				readdirSync: () => [],
-				readFileSync: () => '',
-				writeFileSync: () => undefined,
-				mkdirSync: () => undefined,
-				statSync: () => ({
-					isFile: () => true,
-					mtimeMs: 0,
-					uid: 1000,
-					mode: 0o100644,
+			expect(() => executePluginInMemory(virtualPath)).toThrow(
+				expect.objectContaining({
+					message: `Transpiled code not found for ${virtualPath}`,
 				}),
-			},
-			existsSync: () => true,
-			rmSync: jest.fn(),
-			readdirSync: () => [],
-			readFileSync: () => '',
-			writeFileSync: () => undefined,
-			mkdirSync: () => undefined,
-			statSync: () => ({
-				isFile: () => true,
-				mtimeMs: 0,
-				uid: 1000,
-				mode: 0o100644,
-			}),
-		};
-
-		jest.doMock('fs', () => mockFs);
-
-		jest.doMock('../lib/logger', () => ({
-			logger,
-		}));
-
-		jest.doMock('../config/env', () => ({
-			env: {
-				NODE_ENV: 'production',
-				HOST: 'localhost',
-				PORT: 5000,
-				PLUGINS_DIR: 'plugins',
-				LOG_FILE_PATH: 'logs/nest.log',
-			},
-		}));
-
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			require('./dynamic-routes');
+			);
 		});
-
-		// Verify the logger.info was called for successful cache clear
-		expect(logger.info).toHaveBeenCalledWith(
-			expect.stringContaining('Cleared plugin cache directory'),
-		);
 	});
 });
