@@ -1,4 +1,6 @@
 import {Response} from 'express';
+import fs from 'fs';
+import path from 'path';
 import sanitizeHtml, {type Attributes, type IOptions} from 'sanitize-html';
 
 export const EXTERNAL_LINK_WARNING_MESSAGE =
@@ -27,9 +29,8 @@ const isAbsoluteHttpUrl = (href: string): boolean => {
 };
 
 export const getExternalLinkGuardScriptContent = (): string => {
-	const messageLiteral = JSON.stringify(EXTERNAL_LINK_WARNING_MESSAGE);
-
-	return `(function(){const msg=${messageLiteral};document.addEventListener('click',function(event){const rawTarget=event.target;if(!(rawTarget instanceof Element)){return;}const anchor=rawTarget.closest('a');if(!(anchor instanceof HTMLAnchorElement)){return;}const rawHref=anchor.getAttribute('href');if(!rawHref||rawHref.startsWith('#')){return;}if(/^(mailto:|tel:|javascript:)/i.test(rawHref)){return;}let destination;try{destination=new URL(anchor.href,window.location.href);}catch{return;}if(destination.origin!==window.location.origin){const ok=window.confirm(msg+'\\n\\n'+destination.href);if(!ok){event.preventDefault();}}},true);})();`;
+	const filePath = path.join(__dirname, 'external-link-guard.js');
+	return fs.readFileSync(filePath, 'utf-8');
 };
 
 export const applyHelpPageSecurityHeaders = (res: Response): void => {

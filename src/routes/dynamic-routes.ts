@@ -3,10 +3,12 @@ import fs from 'fs';
 import {createRequire} from 'module';
 import path from 'path';
 import ts from 'typescript';
+import vm from 'vm';
 import {env} from '../config/env';
 import {
 	PluginHelpContext,
 	createPluginRouteHandler,
+	setTranspiledPlugin,
 } from '../controllers/dynamic-routes';
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
@@ -26,9 +28,19 @@ import type {
 	PluginRouteExample,
 } from '../types/plugin';
 
+// VM dependency injection for testability
+// This allows tests to mock vm.createContext and vm.runInContext
+// Using arrow functions to defer binding until runtime (so mocks work)
+export const vmApi = {
+	createContext: (contextObject?: unknown): vm.Context => {
+		return vm.createContext(contextObject as vm.Context | undefined);
+	},
+	runInContext: (code: string, context: vm.Context): unknown =>
+		vm.runInContext(code, context),
+};
+
 const router = express.Router();
 const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
-const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
 const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
 const pluginWhitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
@@ -60,7 +72,9 @@ const toInputType = (value: unknown): PluginExampleFieldInputType => {
 	return 'text';
 };
 
-const getPluginMetaExamples = (pluginModule: unknown): PluginRouteExample[] => {
+export const getPluginMetaExamples = (
+	pluginModule: unknown,
+): PluginRouteExample[] => {
 	if (typeof pluginModule !== 'object' || pluginModule === null) {
 		return [];
 	}
@@ -134,7 +148,7 @@ const getPluginMetaExamples = (pluginModule: unknown): PluginRouteExample[] => {
 	return parsedExamples;
 };
 
-const getPluginMetaUsage = (
+export const getPluginMetaUsage = (
 	pluginModule: unknown,
 ): PluginMetaUsage | undefined => {
 	if (typeof pluginModule !== 'object' || pluginModule === null) {
@@ -225,7 +239,7 @@ export const isPluginMeta = (value: unknown): value is PluginMeta => {
 	return true;
 };
 
-const getPluginMetaHelp = (
+export const getPluginMetaHelp = (
 	pluginModule: unknown,
 ): HtmlTemplateString | undefined => {
 	if (typeof pluginModule !== 'object' || pluginModule === null) {
@@ -318,57 +332,16 @@ const isPluginFileSecurityAcceptable = (
 	return true;
 };
 
-/**
- * Clears the plugin cache directory by recursively deleting all cached transpiled JavaScript files.
- *
- * SECURITY CRITICAL: This function must be called at application startup before loading any plugins.
- * It eliminates the risk of executing tampered cached .js files by ensuring that:
- * - All cached transpiled plugins are removed from disk
- * - Fresh .js files are transpiled from verified .ts sources (whitelist-validated)
- * - No stale or potentially compromised cache files persist across restarts
- *
- * This is a defense-in-depth measure that complements the SHA-256 hash verification
- * of .ts plugin files in plugin-whitelist.txt.
- *
- * @example
- * // Call at startup before plugin loading
- * clearPluginCache();
- * const pluginFiles = fs.readdirSync(pluginsDir);
- *
- * @see {@link resolveRuntimePluginPath} - Transpiles .ts files to .js after cache clearance
- * @see {@link verifyPluginWhitelist} - Validates .ts file integrity against whitelist
- */
-const clearPluginCache = (): void => {
-	if (!fs.existsSync(pluginCacheDir)) {
-		return;
-	}
+// In-memory storage for transpiled plugin code
+const transpiledPlugins = new Map<string, string>();
 
-	try {
-		fs.rmSync(pluginCacheDir, {recursive: true, force: true});
-		logger.info(`Cleared plugin cache directory: ${pluginCacheDir}`);
-	} catch (err) {
-		logger.warn(
-			`Could not clear plugin cache directory ${pluginCacheDir}. Error: ${getErrorMessage(err)}`,
-		);
-	}
-};
-
-const resolveRuntimePluginPath = (
+const transpilePluginInMemory = (
 	filePath: string,
 	fileName: string,
 ): string | undefined => {
-	if (fileName.endsWith('.js')) {
-		logger.info(`Loaded JS plugin without transpilation: ${filePath}`);
-		return filePath;
-	}
-
-	const jsCachePath = path.join(
-		pluginCacheDir,
-		fileName.replace(/\.ts$/, '.js'),
-	);
+	const virtualPath = `memory://plugin/${fileName}`;
 
 	try {
-		fs.mkdirSync(pluginCacheDir, {recursive: true});
 		const tsCode = fs.readFileSync(filePath, 'utf-8');
 		const result = ts.transpileModule(tsCode, {
 			compilerOptions: {
@@ -376,12 +349,10 @@ const resolveRuntimePluginPath = (
 				target: ts.ScriptTarget.ESNext,
 				esModuleInterop: true,
 				allowSyntheticDefaultImports: true,
-				outDir: path.dirname(jsCachePath),
 			},
 		});
 
 		// Inline NagiosReturnCodes to avoid runtime import dependencies
-		// This replaces the import with the actual constant values at transpile time
 		let outputText = result.outputText;
 
 		// Remove the import statement for nagios module
@@ -390,7 +361,7 @@ const resolveRuntimePluginPath = (
 			'',
 		);
 
-		// Inline the NagiosReturnCodes constant directly (transpiled as nagios_1.NagiosReturnCodes.X)
+		// Inline the NagiosReturnCodes constant directly
 		outputText = outputText.replace(
 			/nagios_1\.NagiosReturnCodes\.(OK|WARNING|CRITICAL|UNKNOWN)/g,
 			(match: string, code: string) => {
@@ -404,18 +375,74 @@ const resolveRuntimePluginPath = (
 			},
 		);
 
-		fs.writeFileSync(jsCachePath, outputText);
-		logger.info(`Transpiled TS plugin to cache: ${filePath} -> ${jsCachePath}`);
-		return jsCachePath;
+		// Store transpiled code in memory
+		transpiledPlugins.set(virtualPath, outputText);
+		// Also share with controller module for execution
+		setTranspiledPlugin(virtualPath, outputText);
+		logger.info(
+			`Transpiled TS plugin to memory: ${filePath} -> ${virtualPath}`,
+		);
+		return virtualPath;
 	} catch (err) {
 		warnWithError(`Could not transpile plugin ${filePath}`, err);
 		return undefined;
 	}
 };
 
+const resolveRuntimePluginPath = (
+	filePath: string,
+	fileName: string,
+): string | undefined => {
+	if (fileName.endsWith('.js')) {
+		logger.info(`Loaded JS plugin without transpilation: ${filePath}`);
+		return filePath;
+	}
+
+	// For TypeScript plugins, transpile in-memory and return virtual path
+	return transpilePluginInMemory(filePath, fileName);
+};
+
+export const executePluginInMemory = (virtualPath: string): unknown => {
+	const transpiledCode = transpiledPlugins.get(virtualPath);
+	if (!transpiledCode) {
+		throw new Error(`Transpiled code not found for ${virtualPath}`);
+	}
+
+	// Create vm context with proper module.exports and exports synchronization
+	// TypeScript transpiles to Object.defineProperty(exports, "__esModule", ...)
+	// so exports and module.exports must reference the SAME object
+	const moduleExports: Record<string, unknown> = {};
+	const context: vm.Context = vmApi.createContext({
+		...globalThis,
+		require: createRequire(__filename),
+		module: {exports: moduleExports},
+		exports: moduleExports, // Same reference as module.exports
+		__filename: virtualPath,
+		__dirname: pluginsDir,
+	});
+
+	// Execute transpiled code directly in vm context
+	// The code uses Object.defineProperty(exports, "__esModule", ...)
+	// which will work because exports and module.exports are the same object
+	vmApi.runInContext(transpiledCode, context);
+
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+	return context.module.exports as Record<string, unknown>;
+};
+
+const loadPluginModule = (runtimePluginPath: string): unknown => {
+	// For memory://plugin paths, execute via vm
+	if (runtimePluginPath.startsWith('memory://plugin/')) {
+		return executePluginInMemory(runtimePluginPath);
+	}
+
+	// For filesystem paths, use normal require
+	return requireFn(runtimePluginPath);
+};
+
 logger.info(`Use plugins directory: ${pluginsDir}`);
 
-clearPluginCache();
+// Transpiled code stored in memory only - no disk caching
 
 const pluginFiles = fs.readdirSync(pluginsDir).filter(isSupportedPluginFile);
 const tsPluginBaseNames = new Set(
@@ -493,7 +520,7 @@ effectivePluginFiles.forEach((file) => {
 	let helpContext: PluginHelpContext = {};
 	let pluginExamples: PluginRouteExample[] = [];
 	try {
-		const pluginModule: unknown = requireFn(runtimePluginPath);
+		const pluginModule: unknown = loadPluginModule(runtimePluginPath);
 		const usage = getPluginMetaUsage(pluginModule);
 		pluginExamples = getPluginMetaExamples(pluginModule);
 		let usageHttp: string | undefined;

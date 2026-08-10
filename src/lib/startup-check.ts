@@ -9,7 +9,76 @@ interface DirectoryCheck {
 	error?: string;
 }
 
-export function checkWritableDirectories(): DirectoryCheck[] {
+/**
+ * Test-only hook to override checkWritableDirectories implementation.
+ *
+ * This function allows tests to provide a custom implementation of checkWritableDirectories
+ * without fighting Jest's module mocking system. It implements a dependency injection
+ * pattern for testability while keeping the production code clean.
+ *
+ * IMPORTANT: This is for testing purposes only. Do not use in production code.
+ * Always call _clearCheckWritableDirectoriesOverride() in afterEach to prevent
+ * test pollution.
+ *
+ * @param fn - Custom implementation to use instead of the real checkWritableDirectories
+ * @example
+ * ```typescript
+ * beforeEach(() => {
+ *   _setCheckWritableDirectoriesForTesting(() => [
+ *     { path: '/tmp/logs', description: 'Log directory', isWritable: false }
+ *   ]);
+ * });
+ *
+ * afterEach(() => {
+ *   _clearCheckWritableDirectoriesOverride();
+ * });
+ * ```
+ */
+export function _setCheckWritableDirectoriesForTesting(
+	fn: () => Array<{path: string; description: string; isWritable: boolean}>,
+): void {
+	_checkWritableDirectoriesOverride = fn;
+}
+
+/**
+ * Clears the test override for checkWritableDirectories.
+ *
+ * This should be called in afterEach hooks to prevent test pollution and ensure
+ * subsequent tests use the real implementation.
+ *
+ * IMPORTANT: This is for testing purposes only. Do not use in production code.
+ *
+ * @example
+ * ```typescript
+ * afterEach(() => {
+ *   _clearCheckWritableDirectoriesOverride();
+ * });
+ * ```
+ */
+export function _clearCheckWritableDirectoriesOverride(): void {
+	_checkWritableDirectoriesOverride = undefined;
+}
+
+/**
+ * Internal override function for checkWritableDirectories (test-only).
+ *
+ * When set, this function will be called instead of the real implementation.
+ * Undefined in production.
+ */
+let _checkWritableDirectoriesOverride:
+	| (() => Array<{path: string; description: string; isWritable: boolean}>)
+	| undefined;
+
+export function checkWritableDirectories(): Array<{
+	path: string;
+	description: string;
+	isWritable: boolean;
+}> {
+	// Use override if set (for testing)
+	if (_checkWritableDirectoriesOverride) {
+		return _checkWritableDirectoriesOverride();
+	}
+
 	const checks: DirectoryCheck[] = [];
 
 	// Check log directory

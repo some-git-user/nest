@@ -1,5 +1,7 @@
 import {Request, Response} from 'express';
 import {createRequire} from 'module';
+import path from 'path';
+import vm from 'vm';
 import {env} from '../config/env';
 import {getErrorMessage} from '../lib/error-message';
 import {
@@ -11,6 +13,7 @@ import {
 import {sendNagiosUnknownError} from '../lib/http-nagios';
 import {logger} from '../lib/logger';
 import {createNagiosReturnMessage} from '../lib/nagios';
+import {vmApi} from '../routes/dynamic-routes';
 import {NagiosReturnCode, NagiosReturnCodes} from '../types/nagios';
 import type {HtmlTemplateString} from '../types/plugin';
 import {
@@ -29,6 +32,8 @@ export type PluginHelpContext = {
 	usageShell?: string;
 	pluginName?: string;
 };
+
+const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
 
 const escapeHtml = (str: string): string =>
 	str
@@ -163,6 +168,41 @@ const parseBodyParams = (body: unknown): {[key: string]: string} => {
 	return params;
 };
 
+// In-memory transpiled plugin code storage (shared with dynamic-routes.ts)
+// This is a module-level cache that stores transpiled code
+const transpiledPluginsMemory = new Map<string, string>();
+
+export const setTranspiledPlugin = (
+	virtualPath: string,
+	code: string,
+): void => {
+	transpiledPluginsMemory.set(virtualPath, code);
+};
+
+export const executePluginFromMemory = (
+	virtualPath: string,
+	pluginsDir: string,
+): unknown => {
+	const transpiledCode = transpiledPluginsMemory.get(virtualPath);
+	if (!transpiledCode) {
+		throw new Error(`Transpiled code not found for ${virtualPath}`);
+	}
+
+	const moduleExports: Record<string, unknown> = {};
+	const context: vm.Context = vmApi.createContext({
+		...globalThis,
+		require: createRequire(__filename),
+		module: {exports: moduleExports},
+		exports: moduleExports,
+		__filename: virtualPath,
+		__dirname: pluginsDir,
+	});
+
+	vmApi.runInContext(transpiledCode, context);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+	return context.module.exports as Record<string, unknown>;
+};
+
 export const createPluginRouteHandler = (
 	jsFilePath: string,
 	kebabCasePath: string,
@@ -182,9 +222,16 @@ export const createPluginRouteHandler = (
 			};
 
 			const requireFn = createRequire(__filename);
-			clearPluginRequireCache(requireFn, jsFilePath, warn);
+			let pluginModule: unknown;
 
-			const pluginModule: unknown = requireFn(jsFilePath);
+			// Check if this is a memory://plugin path
+			if (jsFilePath.startsWith('memory://plugin/')) {
+				pluginModule = executePluginFromMemory(jsFilePath, pluginsDir);
+			} else {
+				clearPluginRequireCache(requireFn, jsFilePath, warn);
+				pluginModule = requireFn(jsFilePath);
+			}
+
 			const pluginFunc = getPluginFunction(pluginModule);
 
 			if (!pluginFunc) {
@@ -268,10 +315,11 @@ export const createPluginRouteHandler = (
 		} catch (err) {
 			logger.error(err);
 			const errorMessage = getErrorMessage(err);
-			return sendNagiosUnknownError(
-				res,
-				500,
-				`Error loading plugin: ${jsFilePath}. Error: ${errorMessage}`,
+			return res.send(
+				createNagiosReturnMessage(
+					`Error loading plugin: ${jsFilePath}. Error: ${errorMessage}`,
+					NagiosReturnCodes.UNKNOWN,
+				),
 			);
 		}
 	};
