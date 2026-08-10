@@ -14,10 +14,12 @@ PLUGINS_SRC="../plugins"
 BUILD_DEB="nest-plugins-deb.deb"
 
 # Plugin files to package (source .ts files)
-PLUGIN_FILES=(
-    check_debian_eol.ts
-    check_nextcloud_serverinfo.ts
-)
+PLUGIN_FILES=()
+for f in "$PLUGINS_SRC"/*.ts; do
+    if [[ "$f" != *.test.ts ]]; then
+        PLUGIN_FILES+=("$(basename "$f")")
+    fi
+done
 
 # Config files to package
 CONFIG_FILES=(
