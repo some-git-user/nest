@@ -46,7 +46,6 @@ export default [
 		ignores: [
 			'dist/**',
 			'coverage/**',
-			'plugins/plugin-cache/**',
 			'node_modules/**',
 			'.github/**',
 			'plugins/*.js',
@@ -56,6 +55,7 @@ export default [
 			'**/*.test.tsx',
 			'**/*.spec.ts',
 			'**/*.spec.tsx',
+			'__mocks__/**',
 		],
 	},
 	js.configs.recommended, // ESLint recommended config for JavaScript

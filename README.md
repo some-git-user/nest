@@ -101,7 +101,7 @@ Plugins are auto-discovered from `PLUGINS_DIR` (`plugins/` by default).
 
 ### Supported files
 
-- `.ts` (transpiled at runtime, cached in `plugins/plugin-cache/`)
+- `.ts` (transpiled at runtime, executed in-memory via vm module)
 - `.js` (loaded directly)
 
 Ignored: `*.test.*`, `*.spec.*`, `*.d.ts`

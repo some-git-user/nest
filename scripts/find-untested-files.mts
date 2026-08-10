@@ -54,7 +54,7 @@ async function main(): Promise<void> {
 
 	console.log('🔍 Finding TypeScript files without test files...\n');
 
-	const excludePatterns = ['plugin-cache', 'node_modules', 'src/test'];
+	const excludePatterns = ['node_modules', 'src/test'];
 	const [pluginFiles, srcFiles] = await Promise.all([
 		findTsFiles(pluginsDir, excludePatterns),
 		findTsFiles(srcDir, excludePatterns),

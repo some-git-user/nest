@@ -21,15 +21,6 @@ export function checkWritableDirectories(): DirectoryCheck[] {
 		isWritable: canWriteToDirectory(logDir),
 	});
 
-	// Check plugin cache directory
-	const pluginsDir = env.PLUGINS_DIR;
-	const pluginCacheDir = path.join(pluginsDir, 'plugin-cache');
-	checks.push({
-		path: pluginCacheDir,
-		description: 'Plugin cache directory',
-		isWritable: canWriteToDirectory(pluginCacheDir),
-	});
-
 	// Check coverage directory (development only - for test coverage reports)
 	if (process.env.NODE_ENV !== 'production') {
 		const coverageDir = path.join(process.cwd(), 'coverage');
