@@ -206,7 +206,7 @@ describe('server bootstrap', () => {
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
 			getRecommendedSecurityWarnings: jest.fn(() => [
 				'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
-				'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
+				'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 			]),
 		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
@@ -424,7 +424,7 @@ describe('server bootstrap', () => {
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
 		);
 		expect(warn).toHaveBeenCalledWith(
-			'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1); configure trusted monitoring source IPs if remote access is required.',
+			'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 		);
 		expect(faviconStatus).toHaveBeenCalledWith(HttpStatusCodes.NO_CONTENT);
 		expect(faviconEnd).toHaveBeenCalledTimes(1);
@@ -513,7 +513,7 @@ describe('server bootstrap', () => {
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
-				'Security recommendation: ALLOWED_IPS is limited to loopback addresses (127.0.0.1, ::1)',
+				'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 			),
 		);
 		expect(status).toHaveBeenCalledWith(HttpStatusCodes.NOT_FOUND);
@@ -909,7 +909,7 @@ describe('server bootstrap', () => {
 			createAccessControlMiddleware: jest.fn(() => accessControlMiddleware),
 			getRecommendedSecurityWarnings: jest.fn(() => [
 				'Security recommendation: API_KEY is not configured',
-				'Security recommendation: ALLOWED_IPS is limited to loopback addresses',
+				'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 			]),
 		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));

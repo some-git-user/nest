@@ -105,4 +105,56 @@ describe('getRecommendedSecurityWarnings', () => {
 			'Security recommendation: rate limiting is effectively disabled because RATE_LIMIT_WINDOW_MS or RATE_LIMIT_MAX is not set to a positive value.',
 		]);
 	});
+
+	test('warns when ALLOWED_IPS contains wildcard mixed with specific IPs', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				API_KEY: 'secret',
+				ALLOWED_IPS: '127.0.0.1,*',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+			}),
+		).toEqual([
+			'Invalid ALLOWED_IPS configuration: cannot specify both wildcard (*) and specific IP addresses',
+		]);
+	});
+
+	test('warns when ALLOWED_IPS contains specific IPs mixed with wildcard', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				API_KEY: 'secret',
+				ALLOWED_IPS: '*,10.0.0.1',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+			}),
+		).toEqual([
+			'Invalid ALLOWED_IPS configuration: cannot specify both wildcard (*) and specific IP addresses',
+		]);
+	});
+
+	test('does not warn when ALLOWED_IPS is only wildcard', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				API_KEY: 'secret',
+				ALLOWED_IPS: '*',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+			}),
+		).toEqual([]);
+	});
+
+	test('does not warn when ALLOWED_IPS is wildcard with whitespace', () => {
+		expect(
+			getRecommendedSecurityWarnings({
+				NODE_ENV: 'production',
+				API_KEY: 'secret',
+				ALLOWED_IPS: ' * ',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+			}),
+		).toEqual([]);
+	});
 });

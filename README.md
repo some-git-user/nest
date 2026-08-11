@@ -29,21 +29,21 @@ npm run build:deb    # Debian packages (build_deb/)
 
 Create `.env` from `.env.example`:
 
-| Variable                  | Default               | Description                   |
-| ------------------------- | --------------------- | ----------------------------- |
-| `NODE_ENV`                | `development`         | `development` or `production` |
-| `HOST`                    | `localhost`           | Network interface to bind     |
-| `PORT`                    | `5000`                | HTTPS server port             |
-| `TLS_CERT_PATH`           | `certs/nest-cert.pem` | TLS certificate file          |
-| `TLS_KEY_PATH`            | `certs/nest-key.pem`  | TLS private key file          |
-| `PLUGINS_DIR`             | `plugins`             | Plugin directory              |
-| `LOG_FILE_PATH`           | `logs/nest.log`       | Log file path                 |
-| `MAX_LOG_FILE_SIZE_BYTES` | `1048576`             | Log rotation size (1MB)       |
-| `API_KEY_HEADER`          | `x-api-key`           | API key header name           |
-| `API_KEY`                 | (empty)               | API key for authentication    |
-| `ALLOWED_IPS`             | `127.0.0.1, ::1`      | Comma-separated allowed IPs   |
-| `RATE_LIMIT_WINDOW_MS`    | `60000`               | Rate limit window (ms)        |
-| `RATE_LIMIT_MAX`          | `120`                 | Max requests per window       |
+| Variable                  | Default               | Description                                |
+| ------------------------- | --------------------- | ------------------------------------------ |
+| `NODE_ENV`                | `development`         | `development` or `production`              |
+| `HOST`                    | `localhost`           | Network interface to bind                  |
+| `PORT`                    | `5000`                | HTTPS server port                          |
+| `TLS_CERT_PATH`           | `certs/nest-cert.pem` | TLS certificate file                       |
+| `TLS_KEY_PATH`            | `certs/nest-key.pem`  | TLS private key file                       |
+| `PLUGINS_DIR`             | `plugins`             | Plugin directory                           |
+| `LOG_FILE_PATH`           | `logs/nest.log`       | Log file path                              |
+| `MAX_LOG_FILE_SIZE_BYTES` | `1048576`             | Log rotation size (1MB)                    |
+| `API_KEY_HEADER`          | `x-api-key`           | API key header name                        |
+| `API_KEY`                 | (empty)               | API key for authentication                 |
+| `ALLOWED_IPS`             | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all |
+| `RATE_LIMIT_WINDOW_MS`    | `60000`               | Rate limit window (ms)                     |
+| `RATE_LIMIT_MAX`          | `120`                 | Max requests per window                    |
 
 TLS certificates are auto-generated if missing.
 

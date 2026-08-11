@@ -32,16 +32,7 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 		handlingSteps: [
 			'Set ALLOWED_IPS to a comma-separated list of trusted monitoring source IPs.',
 			'Use exact IP values and avoid leaving the variable blank.',
-		],
-	},
-	'allowed-ips-loopback-only': {
-		id: 'allowed-ips-loopback-only',
-		title: 'Allowed IPs Limited To Loopback',
-		description:
-			'Only localhost is allowed. Remote monitoring systems will be blocked until trusted source IPs are added.',
-		handlingSteps: [
-			'Append trusted monitoring source IPs to ALLOWED_IPS.',
-			'Keep loopback entries if local checks are still required.',
+			'Alternatively, use * to allow all IPs (NOT recommended for production).',
 		],
 	},
 	'rate-limit-disabled': {
@@ -197,10 +188,6 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 const CLASSIFIERS: StartupWarningClassifier[] = [
 	{id: 'api-key-missing', matcher: /API_KEY is not configured/i},
 	{id: 'allowed-ips-empty', matcher: /ALLOWED_IPS is not configured/i},
-	{
-		id: 'allowed-ips-loopback-only',
-		matcher: /ALLOWED_IPS is limited to loopback addresses/i,
-	},
 	{
 		id: 'rate-limit-disabled',
 		matcher: /rate limiting is effectively disabled/i,

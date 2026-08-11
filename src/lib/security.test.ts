@@ -1,11 +1,21 @@
 import express from 'express';
 import request from 'supertest';
+import * as honeyPotLib from './honey-pot';
 import {HttpStatusCodes} from './http-status-codes';
 import {createAccessControlMiddleware} from './security';
 
 type NagiosBody = {message?: string};
 
+jest.mock('./honey-pot');
+
 describe('security middleware', () => {
+	const mockRecordHoneypotSignal = jest.mocked(
+		honeyPotLib.recordHoneypotSignal,
+	);
+
+	beforeEach(() => {
+		jest.clearAllMocks();
+	});
 	const makeApp = (
 		middleware: ReturnType<typeof createAccessControlMiddleware>,
 	) => {
@@ -323,5 +333,266 @@ describe('security middleware', () => {
 		const res = await request(app).get('/ok').set('Accept', 'application/json');
 		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
 		expect(res.headers['www-authenticate']).toBeUndefined();
+	});
+
+	// ──────────────── Honey-pot Recording ────────────────
+
+	test('records honeypot signal when API key is missing', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledWith(
+			expect.any(Object),
+			'honeypot-route',
+		);
+	});
+
+	test('records honeypot signal when API key is wrong', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('x-api-key', 'wrong-key');
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledWith(
+			expect.any(Object),
+			'honeypot-route',
+		);
+	});
+
+	test('records honeypot signal when API key has wrong case', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'Secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('x-api-key', 'secret');
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledWith(
+			expect.any(Object),
+			'honeypot-route',
+		);
+	});
+
+	test('records honeypot signal when Basic Auth password is wrong', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const credentials = Buffer.from(':wrong-password').toString('base64');
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('Authorization', `Basic ${credentials}`);
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledWith(
+			expect.any(Object),
+			'honeypot-route',
+		);
+	});
+
+	test('does not record honeypot signal when API key is correct', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+				allowedIps: '198.51.100.10',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('x-api-key', 'secret');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+		expect(mockRecordHoneypotSignal).not.toHaveBeenCalled();
+	});
+
+	test('does not record honeypot signal when no API key is configured', async () => {
+		const app = makeApp(createAccessControlMiddleware({}));
+		const res = await request(app).get('/ok');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+		expect(mockRecordHoneypotSignal).not.toHaveBeenCalled();
+	});
+
+	test('does not record honeypot signal when API key is empty string', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: '',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app).get('/ok');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+		expect(mockRecordHoneypotSignal).not.toHaveBeenCalled();
+	});
+
+	test('records honeypot signal only once for single failed auth attempt', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('x-api-key', 'wrong-key');
+		expect(res.status).toBe(HttpStatusCodes.UNAUTHORIZED);
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+	});
+
+	test('records honeypot signal for each failed auth attempt', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+			}),
+		);
+
+		// First failed attempt
+		await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10')
+			.set('x-api-key', 'wrong-key-1');
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(1);
+
+		// Second failed attempt
+		await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '203.0.113.50')
+			.set('x-api-key', 'wrong-key-2');
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(2);
+
+		// Third failed attempt (missing key)
+		await request(app).get('/ok').set('x-forwarded-for', '198.51.100.20');
+		expect(mockRecordHoneypotSignal).toHaveBeenCalledTimes(3);
+	});
+
+	// ──────────────── Wildcard IP Allowlist ────────────────
+
+	test('allows all IPs when wildcard (*) is configured', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: '*',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+	});
+
+	test('allows all IPs when wildcard (*) is configured with API key', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				apiKey: 'secret',
+				apiKeyHeader: 'x-api-key',
+				allowedIps: '*',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '203.0.113.50')
+			.set('x-api-key', 'secret');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+	});
+
+	test('allows any IPv4 address when wildcard (*) is configured', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: '*',
+			}),
+		);
+		const res1 = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '192.168.1.100');
+		expect(res1.status).toBe(HttpStatusCodes.OK);
+
+		const res2 = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '10.0.0.1');
+		expect(res2.status).toBe(HttpStatusCodes.OK);
+
+		const res3 = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '8.8.8.8');
+		expect(res3.status).toBe(HttpStatusCodes.OK);
+	});
+
+	test('allows any IPv6 address when wildcard (*) is configured', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: '*',
+			}),
+		);
+		const res1 = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '2001:db8::1');
+		expect(res1.status).toBe(HttpStatusCodes.OK);
+
+		const res2 = await request(app).get('/ok').set('x-forwarded-for', '::1');
+		expect(res2.status).toBe(HttpStatusCodes.OK);
+	});
+
+	test('rejects request when wildcard (*) is combined with specific IPs', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: '127.0.0.1,*',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
+		expect(String(body.message)).toContain('invalid ALLOWED_IPS configuration');
+	});
+
+	test('rejects request when specific IPs are combined with wildcard (*)', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: '*,10.0.0.1',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		const body = res.body as NagiosBody;
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
+		expect(String(body.message)).toContain('invalid ALLOWED_IPS configuration');
+	});
+
+	test('handles wildcard with whitespace correctly', async () => {
+		const app = makeApp(
+			createAccessControlMiddleware({
+				allowedIps: ' * ',
+			}),
+		);
+		const res = await request(app)
+			.get('/ok')
+			.set('x-forwarded-for', '198.51.100.10');
+		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 });

@@ -4,6 +4,7 @@ import {
 	isBrowserRequest,
 	parseBasicAuthPassword,
 } from './browser-auth';
+import {recordHoneypotSignal} from './honey-pot';
 import {sendNagiosUnknownError} from './http-nagios';
 import {HttpStatusCodes} from './http-status-codes';
 import {getClientIpFromRequest, normalizeIp} from './request-ip';
@@ -25,24 +26,49 @@ export type RecommendedSecurityConfig = {
 
 const DEFAULT_ALLOWED_IPS = '127.0.0.1,::1';
 
-const parseAllowedIps = (value: string | undefined): Set<string> => {
+const parseAllowedIps = (
+	value: string | undefined,
+): {ips: Set<string>; hasWildcard: boolean; error?: string} => {
 	if (!value) {
-		return new Set<string>();
+		return {ips: new Set<string>(), hasWildcard: false};
 	}
 
-	return new Set(
-		value
-			.split(',')
-			.map((part) => normalizeIp(part))
-			.filter((part) => part.length > 0),
-	);
+	const parts = value.split(',').map((part) => part.trim());
+	const ips = new Set<string>();
+	let hasWildcard = false;
+
+	for (const part of parts) {
+		if (part.length === 0) {
+			continue;
+		}
+
+		if (part === '*') {
+			hasWildcard = true;
+		} else {
+			ips.add(normalizeIp(part));
+		}
+	}
+
+	// Error if both wildcard and specific IPs are provided
+	if (hasWildcard && ips.size > 0) {
+		return {
+			ips,
+			hasWildcard: true,
+			error:
+				'Invalid ALLOWED_IPS configuration: cannot specify both wildcard (*) and specific IP addresses',
+		};
+	}
+
+	return {ips, hasWildcard};
 };
 
-const getAllowedIpsOrDefault = (value: string | undefined): Set<string> => {
-	const parsedAllowedIps = parseAllowedIps(value);
+const getAllowedIpsOrDefault = (
+	value: string | undefined,
+): {ips: Set<string>; hasWildcard: boolean; error?: string} => {
+	const parsed = parseAllowedIps(value);
 
-	if (parsedAllowedIps.size > 0) {
-		return parsedAllowedIps;
+	if (parsed.ips.size > 0 || parsed.hasWildcard) {
+		return parsed;
 	}
 
 	return parseAllowedIps(DEFAULT_ALLOWED_IPS);
@@ -59,7 +85,10 @@ export const getRecommendedSecurityWarnings = (
 		);
 	}
 
-	if (parseAllowedIps(config.ALLOWED_IPS).size === 0) {
+	const allowedIpsResult = parseAllowedIps(config.ALLOWED_IPS);
+	if (allowedIpsResult.error) {
+		warnings.push(allowedIpsResult.error);
+	} else if (!allowedIpsResult.hasWildcard && allowedIpsResult.ips.size === 0) {
 		warnings.push(
 			'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 		);
@@ -82,7 +111,10 @@ export const getRecommendedSecurityWarnings = (
 export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 	const expectedApiKey = String(config.apiKey ?? '').trim();
 	const apiKeyHeader = String(config.apiKeyHeader ?? 'x-api-key').toLowerCase();
-	const allowedIps = getAllowedIpsOrDefault(config.allowedIps);
+	const allowedIpsResult = getAllowedIpsOrDefault(config.allowedIps);
+	const allowedIps = allowedIpsResult.ips;
+	const hasWildcard = allowedIpsResult.hasWildcard;
+	const hasConfigError = allowedIpsResult.error !== undefined;
 
 	return (req: Request, res: Response, next: NextFunction): void | Response => {
 		if (expectedApiKey.length > 0) {
@@ -98,6 +130,9 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 			const providedApiKey = headerKey || basicKey;
 
 			if (!apiKeyMatches(providedApiKey, expectedApiKey)) {
+				// Record failed API key attempt as honeypot signal
+				recordHoneypotSignal(req, 'honeypot-route');
+
 				if (isBrowserRequest(req)) {
 					// Trigger the browser's built-in credentials dialog
 					res.setHeader(
@@ -114,7 +149,14 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 		}
 
 		const requesterIp = getClientIpFromRequest(req);
-		if (!allowedIps.has(requesterIp)) {
+		if (hasConfigError) {
+			return sendNagiosUnknownError(
+				res,
+				HttpStatusCodes.FORBIDDEN,
+				`Forbidden: invalid ALLOWED_IPS configuration`,
+			);
+		}
+		if (!hasWildcard && !allowedIps.has(requesterIp)) {
 			return sendNagiosUnknownError(
 				res,
 				HttpStatusCodes.FORBIDDEN,
