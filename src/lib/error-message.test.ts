@@ -13,6 +13,6 @@ describe('getErrorMessage', () => {
 
 	test('falls back to String(error) for primitives and unknown shapes', () => {
 		expect(getErrorMessage(123)).toBe('123');
-		expect(getErrorMessage({code: 500})).toBe('[object Object]');
+		expect(getErrorMessage({code: 500})).toBe('[Unknown error]');
 	});
 });

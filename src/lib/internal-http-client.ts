@@ -1,5 +1,7 @@
 import * as https from 'https';
 import {env} from '../config/env';
+import {getErrorMessage} from './error-message';
+import {logger} from './logger';
 
 export interface InternalHttpRequestOptions {
 	method: 'GET' | 'POST';
@@ -72,8 +74,10 @@ export const makeInternalRequest = async (
 			},
 		);
 
-		req.on('error', (error) => {
-			reject(error);
+		req.on('error', (error: unknown) => {
+			const errorMsg = getErrorMessage(error);
+			logger.error(`Internal HTTPS request failed: ${errorMsg}`);
+			reject(error instanceof Error ? error : new Error(errorMsg));
 		});
 
 		req.setTimeout(30000, () => {

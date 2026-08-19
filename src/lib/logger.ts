@@ -15,7 +15,9 @@ class Logger {
 		const formattedMessage =
 			typeof message === 'string'
 				? message
-				: (message?.toString() ?? undefined);
+				: typeof message === 'object' && message !== null
+					? JSON.stringify(message, null, 2)
+					: String(message);
 		const timestamp = new Date().toISOString();
 		return `[${timestamp}] [${level.toUpperCase()}] ${formattedMessage}`;
 	}
@@ -50,7 +52,8 @@ class Logger {
 	}
 
 	debug(message: unknown) {
-		if (env.NODE_ENV !== 'production') {
+		// Only log debug in development mode
+		if (env.NODE_ENV === 'production') {
 			return;
 		}
 		const formatted = this.formatMessage('debug', message);

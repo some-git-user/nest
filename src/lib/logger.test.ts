@@ -81,9 +81,11 @@ describe('logger', () => {
 
 		logger.debug('skip-debug');
 
-		expect(debugSpy).not.toHaveBeenCalled();
-		expect(mkdirSync).not.toHaveBeenCalled();
-		expect(appendFileSync).not.toHaveBeenCalled();
+		// Debug SHOULD be logged in development mode
+		expect(debugSpy).toHaveBeenCalledTimes(1);
+		expect(String(debugSpy.mock.calls[0][0])).toContain('[DEBUG] skip-debug');
+		expect(mkdirSync).toHaveBeenCalled();
+		expect(appendFileSync).toHaveBeenCalled();
 	});
 
 	it('logs debug in production', () => {
@@ -94,9 +96,9 @@ describe('logger', () => {
 
 		logger.debug('prod-debug');
 
-		expect(debugSpy).toHaveBeenCalledTimes(1);
-		expect(String(debugSpy.mock.calls[0][0])).toContain('[DEBUG] prod-debug');
-		expect(appendFileSync).toHaveBeenCalledTimes(1);
+		// Debug should NOT be logged in production
+		expect(debugSpy).not.toHaveBeenCalled();
+		expect(appendFileSync).not.toHaveBeenCalled();
 	});
 
 	it('falls back to console.error when file writes fail', () => {
@@ -137,7 +139,7 @@ describe('logger', () => {
 		);
 	});
 
-	it('formats non-string messages through toString and undefined fallback', () => {
+	it('formats non-string messages through JSON.stringify and undefined fallback', () => {
 		const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
 		const {logger} = loadLoggerWithMocks({
 			LOG_FILE_PATH: undefined,
@@ -146,7 +148,7 @@ describe('logger', () => {
 		logger.info({toString: () => 'object-message'});
 		logger.info(undefined);
 
-		expect(String(infoSpy.mock.calls[0][0])).toContain('[INFO] object-message');
+		expect(String(infoSpy.mock.calls[0][0])).toContain('[INFO] {}');
 		expect(String(infoSpy.mock.calls[1][0])).toContain('[INFO] undefined');
 	});
 });

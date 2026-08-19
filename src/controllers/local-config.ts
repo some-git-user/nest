@@ -1,14 +1,14 @@
-import {Request, Response} from 'express';
-import {env} from '../config/env';
-import {getErrorMessage} from '../lib/error-message';
-import {HttpStatusCodes} from '../lib/http-status-codes';
-import {makeInternalRequest} from '../lib/internal-http-client';
+import { Request, Response } from 'express';
+import { env } from '../config/env';
+import { getErrorMessage } from '../lib/error-message';
+import { HttpStatusCodes } from '../lib/http-status-codes';
+import { makeInternalRequest } from '../lib/internal-http-client';
 import {
 	hasRuntimeValidationFailed,
 	safeLookupConfig,
 } from '../lib/local-config';
-import {logger} from '../lib/logger';
-import {commandToRoutePath} from '../lib/plugin-utils';
+import { logger } from '../lib/logger';
+import { commandToRoutePath } from '../lib/plugin-utils';
 
 interface LocalConfigRequest {
 	localConfig: string;
@@ -69,6 +69,7 @@ const executeLocalConfig = async (
 	const apiKey = req.headers[apiKeyHeader] as string | undefined;
 
 	// Make internal HTTPS request with API key
+	logger.debug(`Executing local config: ${configKey} -> ${routePath}`);
 	const internalResponse = await makeInternalRequest({
 		method: httpMethod,
 		path: routePath,
@@ -129,7 +130,6 @@ export const getLocalConfig = async (
 		await executeLocalConfig(req, res, configKey, 'GET');
 	} catch (error) {
 		const errorMessage = getErrorMessage(error);
-
 		logger.error(`Error executing local config: ${errorMessage}`);
 		res.status(HttpStatusCodes.INTERNAL_SERVER_ERROR).json({
 			code: 3,
