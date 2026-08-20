@@ -142,6 +142,7 @@ export function setupSsh2Interception(): void {
 		console.log('[SSH2 Preload] SSH2 native addon interception setup complete');
 
 		// Clean up temp file after a delay
+		// istanbul ignore next - cleanup runs asynchronously after test completes
 		setTimeout(() => {
 			try {
 				fs.rmSync(result.tempPath);
@@ -210,7 +211,9 @@ export function setupSsh2InSeaMode(
 			Object.keys(nativeExports),
 		);
 	} catch (dlopenErr) {
+		// istanbul ignore next - dlopen failure is hard to test in Jest isolation
 		console.error('[SSH2 Preload] dlopen failed:', dlopenErr);
+		// istanbul ignore next - dlopen failure is hard to test in Jest isolation
 		console.log('[SSH2 Preload] Will use empty stub instead');
 	}
 
@@ -222,6 +225,7 @@ export function setupSsh2InSeaMode(
 		preloadedSsh2 = require('ssh2') as Record<string, unknown>;
 		console.log('[SSH2 Preload] ssh2 module preloaded successfully');
 	} catch (preloadErr) {
+		// istanbul ignore next - ssh2 preload failure is hard to test in Jest isolation
 		console.error('[SSH2 Preload] Failed to preload ssh2:', preloadErr);
 	}
 

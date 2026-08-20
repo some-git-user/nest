@@ -8,6 +8,7 @@ jest.mock('fs', () => ({
 	writeFileSync: jest.fn(),
 	statSync: jest.fn().mockReturnValue({size: 1000}),
 	rmSync: jest.fn(),
+	xexistsSync: jest.fn().mockReturnValue(true),
 }));
 
 // Mock os
@@ -26,6 +27,8 @@ describe('ssh2-preload', () => {
 		// Reset global stubs
 		globalThis.__SSH2_CRYPTO_STUB__ = {};
 		globalThis.__CPU_FEATURES_STUB__ = {};
+		// Mock sea module to not exist by default
+		jest.doMock('node:sea', () => ({}));
 	});
 
 	describe('setupSsh2Interception', () => {

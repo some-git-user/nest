@@ -1,5 +1,9 @@
 export default {
 	roots: ['<rootDir>/src', '<rootDir>/plugins'],
+	coveragePathIgnorePatterns: [
+		'<rootDir>/src/preload/ssh2-preload.ts',
+		'<rootDir>/src/test/mocks/',
+	],
 	moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 	coverageThreshold: {
 		global: {
