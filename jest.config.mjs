@@ -1,6 +1,5 @@
 export default {
 	roots: ['<rootDir>/src', '<rootDir>/plugins'],
-	coveragePathIgnorePatterns: ['<rootDir>/src/test/'],
 	moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 	coverageThreshold: {
 		global: {

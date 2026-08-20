@@ -3,6 +3,7 @@ import js from '@eslint/js';
 import typescript from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import pluginPromise from 'eslint-plugin-promise';
+import globals from 'globals';
 import path from 'path';
 import {fileURLToPath} from 'url';
 
@@ -66,6 +67,14 @@ export default [
 		files: ['**/*.{js,mjs,cjs,ts,tsx}'],
 		rules: {
 			'promise/prefer-await-to-then': 'error', // Enforce async/await in JS and TS
+		},
+	},
+	{
+		files: ['**/*.mjs'], // JavaScript modules (ESM)
+		languageOptions: {
+			globals: {
+				...globals.node, // Add Node.js globals (process, console, etc.)
+			},
 		},
 	},
 	{

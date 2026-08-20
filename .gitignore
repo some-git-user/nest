@@ -29,3 +29,9 @@ plugins/plugin-whitelist.txt
 *.tmp
 *.bak
 temp
+
+# temp html files on root directory
+/*.html
+
+# local presets config file
+plugins/configs/local-presets.conf
