@@ -26,6 +26,8 @@ const {
 	setWhitelistCache,
 	setHashFunction,
 	resetModuleState,
+	validateConfigFilePath,
+	validateConfigFileSecurity,
 } = require('./local-config');
 
 // Import the real hash function for resetting
@@ -911,6 +913,51 @@ debian_eol=check-debian-eol`;
 			loadConfigAtStartup();
 
 			expect(hasRuntimeValidationFailed()).toBe(false);
+		});
+
+		describe('validateConfigFilePath', () => {
+			it('should throw on path traversal sequences', () => {
+				expect(() =>
+					validateConfigFilePath('/etc/nest/../../evil.conf'),
+				).toThrow(/path traversal/i);
+			});
+
+			it('should throw when path is not in allowed directory', () => {
+				expect(() => validateConfigFilePath('/tmp/outside.conf')).toThrow(
+					/not in allowed directory/i,
+				);
+			});
+
+			it('should accept a valid path inside the plugins directory', () => {
+				const validPath = path.join(
+					mockPluginsDir,
+					'configs',
+					'local-presets.conf',
+				);
+				expect(() => validateConfigFilePath(validPath)).not.toThrow();
+			});
+		});
+
+		describe('validateConfigFileSecurity', () => {
+			it('should throw when path is not a regular file', () => {
+				// mockPluginsDir is a directory, not a regular file
+				expect(() => validateConfigFileSecurity(mockPluginsDir)).toThrow(
+					/not a regular file/i,
+				);
+			});
+
+			it('should throw when file exceeds maximum size limit', () => {
+				// Write a file larger than 100KB
+				fs.writeFileSync(mockConfigPath, 'x'.repeat(200 * 1024));
+				expect(() => validateConfigFileSecurity(mockConfigPath)).toThrow(
+					/maximum size/i,
+				);
+			});
+
+			it('should accept a regular file within the size limit', () => {
+				fs.writeFileSync(mockConfigPath, 'test=check-test\n');
+				expect(() => validateConfigFileSecurity(mockConfigPath)).not.toThrow();
+			});
 		});
 
 		it('should load config when file is not in whitelist (no hash check)', () => {

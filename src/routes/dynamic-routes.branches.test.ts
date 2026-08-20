@@ -254,19 +254,6 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		createRequire: () => requireFn,
 	}));
 
-	jest.doMock('module', () => ({
-		createRequire: () => requireFn,
-	}));
-
-	// Mock vm module before require('vm')
-	jest.doMock('vm', () => ({
-		createContext: mockCreateContext,
-		runInContext: mockRunInContext,
-		setPluginModule: mockSetPluginModule,
-		resetPluginModule: mockResetPluginModule,
-		runInContextMock: mockRunInContext,
-	}));
-
 	// Configure vm mock with plugin module for this test
 	const vm = require('vm');
 	vm.setPluginModule(pluginModule);
@@ -300,8 +287,11 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const routesModule = require('./dynamic-routes') as {
 		default: express.Router;
+		ensurePluginRoutesInitialized: () => void;
 	};
 	router = routesModule.default as express.Router;
+	const ensurePluginRoutesInitialized =
+		routesModule.ensurePluginRoutesInitialized;
 
 	if (options.omitProcessGetuid) {
 		Object.defineProperty(process, 'getuid', {
@@ -315,7 +305,7 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 	app.use(express.json());
 	app.use('/', router!);
 
-	return {app, logger};
+	return {app, logger, ensurePluginRoutesInitialized};
 };
 
 describe('dynamic routes (branch coverage)', () => {
@@ -580,7 +570,6 @@ describe('dynamic routes (branch coverage)', () => {
 	test('loads plugin when process.getuid is unavailable in production', async () => {
 		const {app} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
-			pluginFileUid: 0,
 			omitProcessGetuid: true,
 			pluginModule: {
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),

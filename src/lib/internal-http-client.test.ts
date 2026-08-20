@@ -1,4 +1,6 @@
+import * as fs from 'fs';
 import * as https from 'https';
+import * as tls from 'tls';
 import {env} from '../config/env';
 import {
 	InternalHttpRequestOptions,
@@ -6,8 +8,33 @@ import {
 } from '../lib/internal-http-client';
 
 jest.mock('https');
+jest.mock('tls');
+jest.mock('fs', () => {
+	const existsSync = jest.fn();
+	const statSync = jest.fn();
+	const readFileSync = jest.fn();
+	const mockFs = {
+		__esModule: true,
+		default: {existsSync, statSync, readFileSync},
+		existsSync,
+		statSync,
+		readFileSync,
+	};
+	return mockFs;
+});
+jest.mock('../config/env', () => ({
+	env: {
+		TLS_CERT_PATH: 'certs/nest-cert.pem',
+		HOST: 'localhost',
+		PORT: 5000,
+		NODE_ENV: 'development',
+	},
+}));
 
 const mockedHttps = jest.mocked(https);
+const mockedFs = jest.mocked(fs);
+const mockedTls = jest.mocked(tls);
+const mockedEnv = jest.mocked(env);
 
 describe('makeInternalRequest', () => {
 	let mockRequest: any;
@@ -18,7 +45,21 @@ describe('makeInternalRequest', () => {
 	let onTimeoutCallbacks: (() => void)[];
 
 	beforeEach(() => {
+		// Set NODE_ENV to development for consistent test behavior
+		process.env.NODE_ENV = 'development';
+
 		jest.clearAllMocks();
+
+		// Default cert-loading mocks: a valid, small cert in an allowed directory
+		mockedFs.existsSync.mockReturnValue(true);
+		mockedFs.statSync.mockReturnValue({
+			isFile: () => true,
+			size: BigInt(1024),
+		} as never);
+		mockedFs.readFileSync.mockReturnValue(Buffer.from('fake-cert'));
+		mockedTls.createSecureContext.mockReturnValue({} as never);
+		mockedEnv.TLS_CERT_PATH = 'certs/nest-cert.pem';
+		mockedEnv.NODE_ENV = 'development';
 		onDataCallbacks = [];
 		onEndCallbacks = [];
 		onErrorCallbacks = [];
@@ -76,7 +117,7 @@ describe('makeInternalRequest', () => {
 		expect(mockedHttps.request).toHaveBeenCalledWith(
 			expect.objectContaining({
 				hostname: 'localhost',
-				port: env.PORT,
+				port: Number(env.PORT),
 				path: '/plugins/check_test',
 				method: 'GET',
 			}),
@@ -215,6 +256,20 @@ describe('makeInternalRequest', () => {
 		await expect(promise).rejects.toThrow('Connection refused');
 	});
 
+	it('should wrap non-Error request errors', async () => {
+		const options: InternalHttpRequestOptions = {
+			method: 'GET',
+			path: '/plugins/check_test',
+		};
+
+		const promise = makeInternalRequest(options);
+
+		// Trigger error with a non-Error value (e.g. a plain string)
+		onErrorCallbacks.forEach((cb) => cb('boom' as unknown as Error));
+
+		await expect(promise).rejects.toThrow('boom');
+	});
+
 	it('should handle timeout and destroy request', async () => {
 		const options: InternalHttpRequestOptions = {
 			method: 'GET',
@@ -238,11 +293,10 @@ describe('makeInternalRequest', () => {
 
 		makeInternalRequest(options);
 
-		// NODE_ENV defaults to 'production' in env.ts, but test environment may override
-		// Just verify the property is set correctly based on current NODE_ENV
+		// NODE_ENV is set to 'development' in beforeEach, so rejectUnauthorized should be false
 		expect(mockedHttps.request).toHaveBeenCalledWith(
 			expect.objectContaining({
-				rejectUnauthorized: process.env.NODE_ENV === 'production',
+				rejectUnauthorized: false,
 			}),
 			expect.any(Function),
 		);
@@ -315,5 +369,73 @@ describe('makeInternalRequest', () => {
 		const result = await promise;
 
 		expect(result.body).toBe('{"code":0}');
+	});
+
+	describe('loadNestCertificate branch coverage', () => {
+		const resolveRequest = async (): Promise<void> => {
+			const promise = makeInternalRequest({
+				method: 'GET',
+				path: '/plugins/check_test',
+			});
+			const callback = mockedHttps.request.mock.calls[0][1] as (
+				res: unknown,
+			) => void;
+			callback(mockResponse);
+			onDataCallbacks.forEach((cb) => cb('{}'));
+			onEndCallbacks.forEach((cb) => cb());
+			await promise;
+		};
+
+		it('warns and returns null when certificate path contains a path traversal', async () => {
+			mockedEnv.TLS_CERT_PATH = '/certs/../../evil.pem';
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when certificate path is not in an allowed directory', async () => {
+			mockedEnv.TLS_CERT_PATH = '/tmp/outside.pem';
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when certificate file does not exist', async () => {
+			mockedFs.existsSync.mockReturnValue(false);
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when certificate path is not a regular file', async () => {
+			mockedFs.statSync.mockReturnValue({
+				isFile: () => false,
+				size: 1024,
+			} as never);
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when certificate file exceeds maximum size', async () => {
+			mockedFs.statSync.mockReturnValue({
+				isFile: () => true,
+				size: 20 * 1024,
+			} as never);
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when certificate validation fails', async () => {
+			mockedTls.createSecureContext.mockImplementation(() => {
+				throw new Error('malformed certificate');
+			});
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
+
+		it('warns and returns null when reading the certificate file throws', async () => {
+			mockedFs.readFileSync.mockImplementation(() => {
+				throw new Error('read failed');
+			});
+			await resolveRequest();
+			expect(mockedHttps.request).toHaveBeenCalled();
+		});
 	});
 });

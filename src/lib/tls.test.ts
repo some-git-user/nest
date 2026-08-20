@@ -1,13 +1,9 @@
-type EnvShape = {
-	TLS_CERT_PATH: string;
-	TLS_KEY_PATH: string;
-};
-
 const loadTlsModule = (options?: {
-	envOverrides?: Partial<EnvShape>;
+	envOverrides?: Record<string, unknown>;
 	existingPaths?: string[];
 	spawnSyncImplementation?: jest.Mock;
 	chmodThrows?: boolean;
+	statSyncOverride?: (filePath: string) => unknown;
 }) => {
 	jest.resetModules();
 
@@ -30,21 +26,34 @@ const loadTlsModule = (options?: {
 	const warn = jest.fn();
 	const info = jest.fn();
 
-	const env: EnvShape = {
+	const env = {
 		TLS_CERT_PATH: 'certs/nest-cert.pem',
 		TLS_KEY_PATH: 'certs/nest-key.pem',
 		...options?.envOverrides,
-	};
+	} as Record<string, unknown>;
 
 	jest.doMock('../config/env', () => ({env}));
 	jest.doMock('./logger', () => ({logger: {warn, info}}));
+	const statSync =
+		options?.statSyncOverride ??
+		jest.fn((filePath: string) => {
+			if ((options?.existingPaths ?? []).includes(filePath)) {
+				return {
+					isFile: () => true,
+					size: 1024,
+				};
+			}
+			throw new Error('File not found');
+		});
+
 	jest.doMock('child_process', () => ({spawnSync}));
 	jest.doMock('fs', () => ({
 		__esModule: true,
-		default: {existsSync, mkdirSync, chmodSync},
+		default: {existsSync, mkdirSync, chmodSync, statSync},
 		existsSync,
 		mkdirSync,
 		chmodSync,
+		statSync,
 	}));
 
 	// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -70,8 +79,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('returns existing certificate and key paths without generating new files', () => {
-		const certPath = '/tmp/nest/server.crt';
-		const keyPath = '/tmp/nest/server.key';
+		const certPath = '/etc/nest/certs/server.crt';
+		const keyPath = '/etc/nest/certs/server.key';
 		const {ensureTlsCertificate, spawnSync, mkdirSync, chmodSync, warn, info} =
 			loadTlsModule({
 				envOverrides: {
@@ -98,13 +107,13 @@ describe('ensureTlsCertificate', () => {
 		});
 
 		expect(ensureTlsCertificate()).toEqual({certPath, keyPath});
-		expect(cwdSpy).toHaveBeenCalledTimes(2);
+		expect(cwdSpy).toHaveBeenCalledTimes(3);
 		expect(spawnSync).not.toHaveBeenCalled();
 	});
 
 	it('generates a self-signed certificate when either file is missing', () => {
-		const certPath = '/work/certs/nest-cert.pem';
-		const keyPath = '/work/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate, spawnSync, mkdirSync, chmodSync, warn, info} =
 			loadTlsModule({
 				envOverrides: {
@@ -142,7 +151,7 @@ describe('ensureTlsCertificate', () => {
 			],
 			expect.objectContaining({encoding: 'utf8'}),
 		);
-		expect(mkdirSync).toHaveBeenCalledWith('/work/certs', {recursive: true});
+		expect(mkdirSync).toHaveBeenCalledWith('/certs', {recursive: true});
 		expect(chmodSync).toHaveBeenCalledWith(keyPath, 0o600);
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(info).toHaveBeenCalledWith(
@@ -151,8 +160,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('continues when chmod tightening fails after certificate generation', () => {
-		const certPath = '/tmp/certs/nest-cert.pem';
-		const keyPath = '/tmp/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate, info} = loadTlsModule({
 			envOverrides: {
 				TLS_CERT_PATH: certPath,
@@ -170,8 +179,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('throws when files are missing and openssl is unavailable', () => {
-		const certPath = '/tmp/certs/nest-cert.pem';
-		const keyPath = '/tmp/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate, spawnSync, warn} = loadTlsModule({
 			envOverrides: {
 				TLS_CERT_PATH: certPath,
@@ -191,8 +200,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('throws when openssl execution fails during certificate generation', () => {
-		const certPath = '/tmp/certs/nest-cert.pem';
-		const keyPath = '/tmp/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate, spawnSync} = loadTlsModule({
 			envOverrides: {
 				TLS_CERT_PATH: certPath,
@@ -214,8 +223,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('throws when openssl exits non-zero during certificate generation', () => {
-		const certPath = '/tmp/certs/nest-cert.pem';
-		const keyPath = '/tmp/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate, spawnSync} = loadTlsModule({
 			envOverrides: {
 				TLS_CERT_PATH: certPath,
@@ -234,8 +243,8 @@ describe('ensureTlsCertificate', () => {
 	});
 
 	it('throws when openssl exits non-zero without stderr during certificate generation', () => {
-		const certPath = '/tmp/certs/nest-cert.pem';
-		const keyPath = '/tmp/certs/nest-key.pem';
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
 		const {ensureTlsCertificate} = loadTlsModule({
 			envOverrides: {
 				TLS_CERT_PATH: certPath,
@@ -250,5 +259,67 @@ describe('ensureTlsCertificate', () => {
 		expect(() => ensureTlsCertificate()).toThrow(
 			'openssl command failed with status 2',
 		);
+	});
+
+	it('throws when TLS certificate path contains a path traversal sequence', () => {
+		const certPath = '/certs/../../evil-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
+		const {ensureTlsCertificate} = loadTlsModule({
+			envOverrides: {
+				TLS_CERT_PATH: certPath,
+				TLS_KEY_PATH: keyPath,
+			},
+		});
+
+		expect(() => ensureTlsCertificate()).toThrow(/path traversal/i);
+	});
+
+	it('throws when TLS certificate path is not in an allowed directory', () => {
+		const certPath = '/tmp/outside-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
+		const {ensureTlsCertificate} = loadTlsModule({
+			envOverrides: {
+				TLS_CERT_PATH: certPath,
+				TLS_KEY_PATH: keyPath,
+			},
+		});
+
+		expect(() => ensureTlsCertificate()).toThrow(/not in allowed directory/i);
+	});
+
+	it('throws when existing TLS certificate is not a regular file', () => {
+		const certPath = '/etc/nest/certs/server.crt';
+		const keyPath = '/etc/nest/certs/server.key';
+		const {ensureTlsCertificate} = loadTlsModule({
+			envOverrides: {
+				TLS_CERT_PATH: certPath,
+				TLS_KEY_PATH: keyPath,
+			},
+			existingPaths: [certPath, keyPath],
+			statSyncOverride: jest.fn(() => ({
+				isFile: () => false,
+				size: 1024,
+			})),
+		});
+
+		expect(() => ensureTlsCertificate()).toThrow(/not a regular file/i);
+	});
+
+	it('throws when existing TLS certificate exceeds maximum size limit', () => {
+		const certPath = '/etc/nest/certs/server.crt';
+		const keyPath = '/etc/nest/certs/server.key';
+		const {ensureTlsCertificate} = loadTlsModule({
+			envOverrides: {
+				TLS_CERT_PATH: certPath,
+				TLS_KEY_PATH: keyPath,
+			},
+			existingPaths: [certPath, keyPath],
+			statSyncOverride: jest.fn(() => ({
+				isFile: () => true,
+				size: 20 * 1024,
+			})),
+		});
+
+		expect(() => ensureTlsCertificate()).toThrow(/maximum size/i);
 	});
 });

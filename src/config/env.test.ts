@@ -15,7 +15,7 @@ describe('env config loading', () => {
 		argv: string[];
 		env: Record<string, string | undefined>;
 		existsSyncImpl: (filePath: string) => boolean;
-		statSyncImpl?: (filePath: string) => {uid: number; mode: number};
+		statSyncImpl?: () => {uid: number; mode: number; isFile: () => boolean};
 		fileContent?: string;
 		omitProcessGetuid?: boolean;
 	}) => {
@@ -42,7 +42,7 @@ describe('env config loading', () => {
 				writable: true,
 				configurable: true,
 			});
-		} else {
+		} else if (typeof originalGetUid === 'function') {
 			processGetUidSpy = jest
 				.spyOn(process, 'getuid' as never)
 				.mockReturnValue(1000 as never);
@@ -50,6 +50,11 @@ describe('env config loading', () => {
 
 		jest.doMock('fs', () => ({
 			__esModule: true,
+			default: {
+				existsSync: existsSyncMock,
+				readFileSync: readFileSyncMock,
+				statSync: statSyncMock,
+			},
 			existsSync: existsSyncMock,
 			readFileSync: readFileSyncMock,
 			statSync: statSyncMock,
@@ -85,7 +90,7 @@ describe('env config loading', () => {
 	};
 
 	it('prefers --configPath and parses quoted values', () => {
-		const configPath = '/tmp/custom-nest.conf';
+		const configPath = '/etc/nest/custom-nest.conf';
 		const {existsSyncMock, readFileSyncMock, statSyncMock} = loadEnvModule({
 			argv: ['node', 'server.js', '--configPath', configPath],
 			env: {
@@ -94,7 +99,11 @@ describe('env config loading', () => {
 				PORT: undefined,
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
-			statSyncImpl: () => ({uid: 1000, mode: 0o100600}),
+			statSyncImpl: () => ({
+				uid: 1000,
+				mode: 0o100600,
+				isFile: () => true,
+			}),
 			fileContent:
 				'# comment\nHOST=\'example.local\'\nPORT=7001\nLOG_FILE_PATH="/tmp/nest.log"\nTLS_CERT_PATH=certs/test-cert.pem\nTLS_KEY_PATH=certs/test-key.pem\nIGNORED_LINE\nPLUGINS_DIR=custom-plugins\n',
 		});
@@ -120,6 +129,7 @@ describe('env config loading', () => {
 				NODE_ENV: 'development',
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
 			fileContent: 'HOST=host-from-env-file\n',
 		});
 
@@ -151,6 +161,7 @@ describe('env config loading', () => {
 				NODE_ENV: 'development',
 			},
 			existsSyncImpl: (filePath) => filePath === expectedDotEnvPath,
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
 			fileContent: 'LOG_FILE_PATH=logs/dev.log\n',
 		});
 
@@ -167,6 +178,7 @@ describe('env config loading', () => {
 				NEST_CONFIG_FILE: fallbackConfigPath,
 			},
 			existsSyncImpl: (filePath) => filePath === fallbackConfigPath,
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
 			fileContent: 'HOST=fallback-host\n',
 		});
 
@@ -184,7 +196,7 @@ describe('env config loading', () => {
 					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
 				},
 				existsSyncImpl: () => true,
-				statSyncImpl: () => ({uid: 0, mode: 0o100600}),
+				statSyncImpl: () => ({uid: 0, mode: 0o100600, isFile: () => true}),
 				fileContent: 'HOST=prod-host\n',
 			}),
 		).toThrow(/ownership/i);
@@ -199,7 +211,7 @@ describe('env config loading', () => {
 					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
 				},
 				existsSyncImpl: () => true,
-				statSyncImpl: () => ({uid: 1000, mode: 0o100660}),
+				statSyncImpl: () => ({uid: 1000, mode: 0o100660, isFile: () => true}),
 				fileContent: 'HOST=prod-host\n',
 			}),
 		).toThrow(/permissions/i);
@@ -214,7 +226,7 @@ describe('env config loading', () => {
 					NEST_CONFIG_FILE: '/etc/nest/nest.conf',
 				},
 				existsSyncImpl: () => true,
-				statSyncImpl: () => ({uid: 0, mode: 0o100666}),
+				statSyncImpl: () => ({uid: 0, mode: 0o100666, isFile: () => true}),
 				fileContent: 'HOST=prod-host\n',
 				omitProcessGetuid: true,
 			}),
@@ -223,8 +235,74 @@ describe('env config loading', () => {
 		expect(process.env.HOST).toBe('prod-host');
 	});
 
+	it('throws when --configPath contains a path traversal sequence', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: [
+					'node',
+					'server.js',
+					'--configPath',
+					'/etc/nest/../../evil.conf',
+				],
+				env: {
+					NODE_ENV: 'development',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
+				fileContent: 'HOST=evil\n',
+			}),
+		).toThrow(/path traversal/i);
+	});
+
+	it('throws when config file path is outside allowed directories', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js', '--configPath', '/tmp/outside.conf'],
+				env: {
+					NODE_ENV: 'development',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
+				fileContent: 'HOST=outside\n',
+			}),
+		).toThrow(/not in allowed directory/i);
+	});
+
+	it('throws when config file is not a regular file', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js', '--configPath', '/etc/nest/nest.conf'],
+				env: {
+					NODE_ENV: 'development',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => false}),
+				fileContent: 'HOST=dev\n',
+			}),
+		).toThrow(/not a regular file/i);
+	});
+
+	it('throws when config file exceeds maximum size limit', () => {
+		expect(() =>
+			loadEnvModule({
+				argv: ['node', 'server.js', '--configPath', '/etc/nest/nest.conf'],
+				env: {
+					NODE_ENV: 'development',
+				},
+				existsSyncImpl: () => true,
+				statSyncImpl: () => ({
+					uid: 1000,
+					mode: 0o100600,
+					isFile: () => true,
+					size: 20 * 1024,
+				}),
+				fileContent: 'HOST=big\n',
+			}),
+		).toThrow(/maximum size/i);
+	});
+
 	it('loads RATE_LIMIT_WINDOW_MS and RATE_LIMIT_MAX from config file', () => {
-		const configPath = '/tmp/rate-limit-test.conf';
+		const configPath = '/etc/nest/rate-limit-test.conf';
 		const {readFileSyncMock} = loadEnvModule({
 			argv: ['node', 'server.js', '--configPath', configPath],
 			env: {
@@ -233,7 +311,7 @@ describe('env config loading', () => {
 				RATE_LIMIT_MAX: undefined,
 			},
 			existsSyncImpl: (filePath) => filePath === configPath,
-			statSyncImpl: () => ({uid: 1000, mode: 0o100600}),
+			statSyncImpl: () => ({uid: 1000, mode: 0o100600, isFile: () => true}),
 			fileContent:
 				'HOST=test.local\nPORT=5443\nRATE_LIMIT_WINDOW_MS=30000\nRATE_LIMIT_MAX=60\nTLS_CERT_PATH=certs/test-cert.pem\nTLS_KEY_PATH=certs/test-key.pem\n',
 		});

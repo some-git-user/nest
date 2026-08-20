@@ -15,4 +15,17 @@ describe('getErrorMessage', () => {
 		expect(getErrorMessage(123)).toBe('123');
 		expect(getErrorMessage({code: 500})).toBe('[Unknown error]');
 	});
+
+	test('returns Undefined error for undefined input', () => {
+		expect(getErrorMessage(undefined)).toBe('Undefined error');
+	});
+
+	test('returns Null error for null input', () => {
+		expect(getErrorMessage(null)).toBe('Null error');
+	});
+
+	test('converts string, number and boolean to string', () => {
+		expect(getErrorMessage('boom')).toBe('boom');
+		expect(getErrorMessage(true)).toBe('true');
+	});
 });

@@ -1,19 +1,14 @@
-type EnvShape = {
-	NODE_ENV: string;
-	LOG_FILE_PATH?: string;
-};
-
-const loadLoggerWithMocks = (envOverrides: Partial<EnvShape> = {}) => {
+const loadLoggerWithMocks = (envOverrides: Record<string, unknown> = {}) => {
 	jest.resetModules();
 
 	const mkdirSync = jest.fn();
 	const appendFileSync = jest.fn();
 
-	const env: EnvShape = {
+	const env = {
 		NODE_ENV: 'production',
 		LOG_FILE_PATH: '/tmp/nest/logger.log',
 		...envOverrides,
-	};
+	} as Record<string, unknown>;
 
 	jest.doMock('../config/env', () => ({env}));
 
