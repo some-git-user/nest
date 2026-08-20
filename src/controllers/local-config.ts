@@ -1,14 +1,14 @@
-import { Request, Response } from 'express';
-import { env } from '../config/env';
-import { getErrorMessage } from '../lib/error-message';
-import { HttpStatusCodes } from '../lib/http-status-codes';
-import { makeInternalRequest } from '../lib/internal-http-client';
+import {Request, Response} from 'express';
+import {env} from '../config/env';
+import {getErrorMessage} from '../lib/error-message';
+import {HttpStatusCodes} from '../lib/http-status-codes';
+import {makeInternalRequest} from '../lib/internal-http-client';
 import {
 	hasRuntimeValidationFailed,
 	safeLookupConfig,
 } from '../lib/local-config';
-import { logger } from '../lib/logger';
-import { commandToRoutePath } from '../lib/plugin-utils';
+import {logger} from '../lib/logger';
+import {commandToRoutePath} from '../lib/plugin-utils';
 
 interface LocalConfigRequest {
 	localConfig: string;
