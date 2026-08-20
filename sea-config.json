@@ -2,5 +2,8 @@
 	"main": "standalone/server-bundled.js",
 	"output": "standalone/sea-prep.blob",
 	"disableExperimentalSEAWarning": true,
-	"useCodeCache": true
+	"useCodeCache": true,
+	"assets": {
+		"sshcrypto.node": "node_modules/ssh2/lib/protocol/crypto/build/Release/sshcrypto.node"
+	}
 }
