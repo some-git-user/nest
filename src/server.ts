@@ -242,14 +242,15 @@ setWhitelistCache(configVerification.whitelistEntries);
 // Load config once at startup (hash validation integrated)
 loadConfigAtStartup();
 
-const startupWarnings = Array.from(
-	new Set([
-		...getStartupWarnings(),
-		...pluginStartupWarnings,
-		...securityWarnings,
-		...configVerification.warnings,
-	]),
-);
+const getStartupWarningsAtRuntime = (): string[] =>
+	Array.from(
+		new Set([
+			...getStartupWarnings(),
+			...pluginStartupWarnings,
+			...securityWarnings,
+			...configVerification.warnings,
+		]),
+	);
 for (const warning of securityWarnings) {
 	logger.warn(warning);
 }
@@ -293,7 +294,7 @@ app.get('/', (_req: Request, res: Response) => {
 		buildOverviewPageHtml(
 			env.HOST,
 			env.PORT,
-			startupWarnings,
+			getStartupWarningsAtRuntime(),
 			registeredPluginRoutes,
 			registeredPluginRouteExamples,
 			localConfigPresets,
