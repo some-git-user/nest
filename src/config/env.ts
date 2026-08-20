@@ -5,10 +5,64 @@ import {validateUnixFileSecurity} from '../lib/file-security';
 
 process.env.NODE_ENV = process.env.NODE_ENV ?? 'production';
 
+// Maximum allowed config file size (10KB)
+const MAX_CONFIG_FILE_SIZE = 10 * 1024;
+
+// Allowed directories for config files
+const ALLOWED_CONFIG_DIRS = ['/etc/nest', process.cwd()];
+
+function validateConfigFilePath(filepath: string): void {
+	// Reject paths containing path traversal sequences
+	if (filepath.includes('..')) {
+		throw new Error('Config file path contains path traversal sequence');
+	}
+
+	// Resolve to absolute path for consistent validation
+	const absolutePath = path.resolve(filepath);
+
+	// Check if path is within allowed directories
+	const isAllowed = ALLOWED_CONFIG_DIRS.some((baseDir) => {
+		const resolvedBaseDir = path.resolve(baseDir);
+		return (
+			absolutePath.startsWith(resolvedBaseDir + path.sep) ||
+			absolutePath === resolvedBaseDir
+		);
+	});
+
+	if (!isAllowed) {
+		throw new Error(
+			`Config file path not in allowed directory: ${absolutePath}`,
+		);
+	}
+}
+
+function validateConfigFileSecurityInternal(filepath: string): void {
+	const stats = fs.statSync(filepath);
+
+	// Verify it's a regular file
+	if (!stats.isFile()) {
+		throw new Error('Config file is not a regular file');
+	}
+
+	// Check file size
+	if (stats.size > MAX_CONFIG_FILE_SIZE) {
+		throw new Error(
+			`Config file exceeds maximum size limit (${MAX_CONFIG_FILE_SIZE} bytes)`,
+		);
+	}
+}
+
 function loadEnvFile(filepath: string) {
 	if (!fs.existsSync(filepath)) {
 		return;
 	}
+
+	// Validate path security
+	validateConfigFilePath(filepath);
+
+	// Validate file security (type, size)
+	validateConfigFileSecurityInternal(filepath);
+
 	const lines = fs.readFileSync(filepath, 'utf8').split(/\r?\n/);
 	for (const line of lines) {
 		const trimmed = line.trim();
@@ -35,9 +89,14 @@ function getConfigPath(): string {
 	const argv = process.argv;
 	const idx = argv.indexOf('--configPath');
 	if (idx !== -1 && argv[idx + 1]) {
-		return argv[idx + 1];
+		const configPath = argv[idx + 1];
+		// Validate the provided path
+		validateConfigFilePath(configPath);
+		return configPath;
 	}
 	if (process.env.NEST_CONFIG_FILE) {
+		// Validate the environment variable path
+		validateConfigFilePath(process.env.NEST_CONFIG_FILE);
 		return process.env.NEST_CONFIG_FILE;
 	}
 	// In production prefer the system config file installed by the package

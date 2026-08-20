@@ -5,6 +5,9 @@ import {getErrorMessage} from './error-message';
 import {logger} from './logger';
 import {hashPluginFile as hashPluginFileImpl} from './plugin-whitelist';
 
+// Maximum allowed config file size (100KB)
+const MAX_CONFIG_FILE_SIZE = 100 * 1024;
+
 // Hash function - can be overridden in tests
 let hashPluginFileFn: (path: string) => string = hashPluginFileImpl;
 
@@ -67,6 +70,61 @@ let startupValidationFailed = false;
  */
 export const setWhitelistCache = (entries: Map<string, string>): void => {
 	cachedWhitelistEntries = entries;
+};
+
+/**
+ * Validate config file path for security
+ * Prevents path traversal and ensures file is in allowed directory
+ *
+ * @param configPath Absolute path to validate
+ * @throws Error if path is insecure
+ */
+export const validateConfigFilePath = (configPath: string): void => {
+	// Reject paths containing path traversal sequences
+	if (configPath.includes('..')) {
+		throw new Error('Config file path contains path traversal sequence');
+	}
+
+	// Resolve to absolute path for consistent validation
+	const absolutePath = path.resolve(configPath);
+
+	// Define allowed base directories
+	const allowedBaseDirs = [path.resolve(process.cwd(), env.PLUGINS_DIR)];
+
+	// Check if path is within allowed directories
+	const isAllowed = allowedBaseDirs.some((baseDir) => {
+		return (
+			absolutePath.startsWith(baseDir + path.sep) || absolutePath === baseDir
+		);
+	});
+
+	if (!isAllowed) {
+		throw new Error(
+			`Config file path not in allowed directory: ${absolutePath}`,
+		);
+	}
+};
+
+/**
+ * Validate config file security (type, size)
+ *
+ * @param configPath Absolute path to validate
+ * @throws Error if file security is unacceptable
+ */
+export const validateConfigFileSecurity = (configPath: string): void => {
+	const stats = fs.statSync(configPath);
+
+	// Verify it's a regular file
+	if (!stats.isFile()) {
+		throw new Error('Config file is not a regular file');
+	}
+
+	// Check file size
+	if (stats.size > MAX_CONFIG_FILE_SIZE) {
+		throw new Error(
+			`Config file exceeds maximum size limit (${MAX_CONFIG_FILE_SIZE} bytes)`,
+		);
+	}
 };
 
 /**
@@ -136,6 +194,12 @@ export const parseConfigLine = (line: string): LocalConfigEntry => {
 const parseConfigFileInternal = (
 	configPath: string,
 ): Map<string, LocalConfigEntry> => {
+	// Validate path security before reading
+	validateConfigFilePath(configPath);
+
+	// Validate file security (type, size)
+	validateConfigFileSecurity(configPath);
+
 	const configs = new Map<string, LocalConfigEntry>();
 	const content = fs.readFileSync(configPath, 'utf-8');
 	const lines = content.split(/\r?\n/);
