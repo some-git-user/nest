@@ -39,6 +39,7 @@ import {
 	recordStartupWarnings,
 } from './lib/startup-warning-registry';
 import {ensureTlsCertificate} from './lib/tls';
+import {getAppVersion} from './lib/version';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
 	pluginStartupWarnings,
@@ -54,6 +55,7 @@ validateStartup();
 const app: Application = express();
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
 const PLUGIN_EXAMPLE_FORM_SCRIPT_PATH = '/help/plugin-example-form.js';
+const APP_VERSION = getAppVersion();
 
 const escapeHtml = (value: string): string =>
 	value
@@ -182,6 +184,7 @@ li{margin:.35rem 0}
 <body>
 <h1 class="title-row">Nest Route Overview</h1>
 <p>Project Origin: <a href="${PROJECT_ORIGIN_URL}">${PROJECT_ORIGIN_URL}</a></p>
+<p>Version: <code>${APP_VERSION}</code></p>
 <p>Base URL: <code>${baseUrl}</code></p>
 ${warningsHtml}
 <h2>Built-in Routes</h2>

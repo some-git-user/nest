@@ -57,6 +57,7 @@ export default [
 			'**/*.spec.ts',
 			'**/*.spec.tsx',
 			'__mocks__/**',
+			'standalone/*.js',
 		],
 	},
 	js.configs.recommended, // ESLint recommended config for JavaScript

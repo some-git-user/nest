@@ -30,10 +30,6 @@ const {
 	validateConfigFileSecurity,
 } = require('./local-config');
 
-// Import the real hash function for resetting
-const pluginWhitelist = require('./plugin-whitelist');
-const hashPluginFileImpl = pluginWhitelist.hashPluginFile;
-
 describe('local-config', () => {
 	beforeEach(() => {
 		// Setup test fixtures - ensure parent directory exists first
@@ -42,12 +38,20 @@ describe('local-config', () => {
 	});
 
 	afterEach(() => {
-		// Cleanup
+		// Cleanup - remove everything we created
 		if (fs.existsSync(mockConfigDir)) {
 			fs.rmSync(mockConfigDir, {recursive: true, force: true});
 		}
 		if (fs.existsSync(mockPluginsDir)) {
 			fs.rmSync(mockPluginsDir, {recursive: true, force: true});
+		}
+		// Remove parent fixtures directory if empty
+		const fixturesDir = path.join(__dirname, '../../test/fixtures');
+		if (
+			fs.existsSync(fixturesDir) &&
+			fs.readdirSync(fixturesDir).length === 0
+		) {
+			fs.rmSync(fixturesDir, {recursive: true, force: true});
 		}
 	});
 

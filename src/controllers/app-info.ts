@@ -5,6 +5,7 @@ import {
 	applyHelpPageSecurityHeaders,
 } from '../lib/help-page';
 import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
+import {getAppVersion} from '../lib/version';
 import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 
@@ -92,7 +93,8 @@ export const getAppInfo = (req: Request, res: Response): Response => {
 		{label: 'process_rss_bytes', value: procMem.rss, uom: 'B'},
 	];
 
-	const message = `${getNagiosStatusText(status)} - uptime(s)=${Math.floor(procUptime)} cpu%=${cpuPercent.toFixed(2)} mem%=${usedMemPercent.toFixed(2)}`;
+	const version = getAppVersion();
+	const message = `${getNagiosStatusText(status)} - v${version} uptime(s)=${Math.floor(procUptime)} cpu%=${cpuPercent.toFixed(2)} mem%=${usedMemPercent.toFixed(2)}`;
 
 	const nagios = createNagiosReturnMessage(message, status, perf);
 	return res.send(nagios);

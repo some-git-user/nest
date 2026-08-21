@@ -1,6 +1,14 @@
 import * as esbuild from 'esbuild';
 import fs from 'fs';
 import path from 'path';
+import {fileURLToPath} from 'url';
+
+// Get version from package.json
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(
+	fs.readFileSync(path.join(scriptDir, 'package.json'), 'utf8'),
+);
+const APP_VERSION = packageJson.version;
 
 /**
  * Custom esbuild plugin to handle native .node files
@@ -82,7 +90,7 @@ async function build() {
 			logLevel: 'info',
 			external: [], // Bundle everything (native addons will be stubbed)
 			banner: {
-				js: 'process.argv[1] = process.argv[1] || "dist/server-preload.js";',
+				js: `process.argv[1] = process.argv[1] || "dist/server-preload.js";\nglobalThis.__VERSION__ = ${JSON.stringify(APP_VERSION)};`,
 			},
 		});
 
