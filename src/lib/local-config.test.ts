@@ -317,9 +317,7 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
@@ -352,9 +350,7 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
@@ -379,9 +375,7 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
@@ -404,9 +398,7 @@ test2=check-test`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
@@ -479,9 +471,7 @@ test2=check-test`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
@@ -508,9 +498,7 @@ test2=check-test`;
 				.digest('hex');
 
 			setHashFunction(() => configHash);
-			setWhitelistCache(
-				new Map([['configs/local-presets.conf', configHash]]),
-			);
+			setWhitelistCache(new Map([['configs/local-presets.conf', configHash]]));
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -565,9 +553,7 @@ test2=check-test`;
 				.update(configContent)
 				.digest('hex');
 			setHashFunction(() => configHash);
-			setWhitelistCache(
-				new Map([['configs/local-presets.conf', configHash]]),
-			);
+			setWhitelistCache(new Map([['configs/local-presets.conf', configHash]]));
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -645,14 +631,14 @@ debian_eol=check-debian-eol`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([
-				['configs/local-presets.conf', configHash],
-			]);
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
 			const keys = getConfigKeys();
-			expect(keys.sort()).toEqual(['debian_eol', 'test', 'test_perfdata'].sort());
+			expect(keys.sort()).toEqual(
+				['debian_eol', 'test', 'test_perfdata'].sort(),
+			);
 		});
 
 		it('should return empty array when startup validation failed', () => {
