@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {env} from '../config/env';
 import {getErrorMessage} from './error-message';
+import {validateUnixFileSecurity} from './file-security';
 import {logger} from './logger';
 import {hashPluginFile as hashPluginFileImpl} from './plugin-whitelist';
 
@@ -10,6 +11,19 @@ const MAX_CONFIG_FILE_SIZE = 100 * 1024;
 
 // Hash function - can be overridden in tests
 let hashPluginFileFn: (path: string) => string = hashPluginFileImpl;
+
+// File security check function - can be overridden in tests
+let checkConfigFileSecurityFn: (
+	filePath: string,
+	expectedUid: number,
+) => boolean = (filePath: string, expectedUid: number): boolean => {
+	try {
+		const fileStat = fs.statSync(filePath);
+		return validateUnixFileSecurity(fileStat, expectedUid).ok;
+	} catch {
+		return false;
+	}
+};
 
 /**
  * Set the hash function (for testing purposes)
@@ -20,10 +34,31 @@ export const setHashFunction = (fn: (path: string) => string): void => {
 };
 
 /**
+ * Set the file security check function (for testing purposes)
+ * @param fn The file security check function to use
+ */
+export const setCheckConfigFileSecurityFn = (
+	fn: (filePath: string, expectedUid: number) => boolean,
+): void => {
+	checkConfigFileSecurityFn = fn;
+};
+
+/**
  * Reset module state (for testing purposes)
  */
 export const resetModuleState = (): void => {
 	hashPluginFileFn = hashPluginFileImpl;
+	checkConfigFileSecurityFn = (
+		filePath: string,
+		expectedUid: number,
+	): boolean => {
+		try {
+			const fileStat = fs.statSync(filePath);
+			return validateUnixFileSecurity(fileStat, expectedUid).ok;
+		} catch {
+			return false;
+		}
+	};
 	cachedWhitelistEntries = null;
 	cachedConfig = null;
 	startupLoadingCompleted = false;
@@ -261,6 +296,25 @@ export const loadConfigAtStartup = (): void => {
 		return;
 	}
 
+	// File security check (permissions/ownership)
+	const expectedUid =
+		typeof process.getuid === 'function' ? process.getuid() : undefined;
+	if (expectedUid !== undefined) {
+		if (!checkConfigFileSecurityFn(configPath, expectedUid)) {
+			const fileStat = fs.statSync(configPath);
+			const mode = ((fileStat.mode & 0o7777) >>> 0)
+				.toString(8)
+				.padStart(4, '0');
+			logger.warn(
+				`Config file ${relativePath} has insecure permissions (${mode}); it must not be writable by group or others. ` +
+					`Restart the service after fixing the file permissions.`,
+			);
+			startupValidationFailed = true;
+			startupLoadingCompleted = true;
+			return;
+		}
+	}
+
 	// Hash validation (only at startup)
 	const approvedHash = cachedWhitelistEntries.get(relativePath);
 	if (approvedHash) {
@@ -275,6 +329,15 @@ export const loadConfigAtStartup = (): void => {
 			startupLoadingCompleted = true;
 			return;
 		}
+	} else {
+		// Config file exists but is not whitelisted — fail secure
+		logger.warn(
+			`Config file ${relativePath} is not whitelisted. ` +
+				`Add the hash to the whitelist to approve this config file.`,
+		);
+		startupValidationFailed = true;
+		startupLoadingCompleted = true;
+		return;
 	}
 
 	// Load and parse config (only disk I/O point)

@@ -25,6 +25,7 @@ const {
 	safeLookupConfig,
 	setWhitelistCache,
 	setHashFunction,
+	setCheckConfigFileSecurityFn,
 	resetModuleState,
 	validateConfigFilePath,
 	validateConfigFileSecurity,
@@ -196,6 +197,8 @@ test_perfdata=check-test nagiosReturnValue=0`;
 			// Set whitelist cache and load config for tests
 			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
 			setWhitelistCache(whitelist);
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
 		});
 
@@ -266,6 +269,9 @@ test_perfdata=check-test nagiosReturnValue=0`;
 					mkdirSync: jest.fn(),
 					rmSync: jest.fn(),
 					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+					})),
 				};
 				jest.doMock('fs', () => mockFs);
 
@@ -298,23 +304,25 @@ test_perfdata=check-test nagiosReturnValue=0`;
 		});
 
 		it('should return same cached reference on multiple calls (no disk I/O)', () => {
+			resetModuleState();
 			// Create config file
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-			);
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
 
 			const result1 = parseConfigFile();
@@ -326,6 +334,8 @@ test_perfdata=check-test nagiosReturnValue=0`;
 	describe('lookupConfig', () => {
 		beforeEach(() => {
 			resetModuleState();
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 		});
 
 		it('should return config entry for valid key', () => {
@@ -334,17 +344,16 @@ test_perfdata=check-test nagiosReturnValue=0`;
 test_perfdata=check-test nagiosReturnValue=0`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-			);
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
@@ -356,27 +365,22 @@ test_perfdata=check-test nagiosReturnValue=0`;
 			});
 		});
 
-		afterEach(() => {
-			resetModuleState();
-		});
-
 		it('should throw error for non-existent key', () => {
 			// Create config file
 			const configContent = `test=check-test nagiosReturnMessage=Test
 test_perfdata=check-test nagiosReturnValue=0`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-			);
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'f4571f210b9e74eee59a3e5aa1e9349295ddf9c53812dd5b05b2f84924913514',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
@@ -392,17 +396,16 @@ test_perfdata=check-test nagiosReturnValue=0`;
 test2=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'e53327d02793bf67c13ed66ffe774a8028c1daba295d418b8e98f8eb31ecb3ec',
-			);
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'e53327d02793bf67c13ed66ffe774a8028c1daba295d418b8e98f8eb31ecb3ec',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
@@ -413,19 +416,19 @@ test2=check-test`;
 		});
 
 		it('should throw error with no config file message when file does not exist', () => {
+			resetModuleState();
 			// Ensure file doesn't exist
 			fs.rmSync(mockConfigPath, {force: true});
 
 			// Set mock hash function for empty file
-			setHashFunction(
-				() =>
-					'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-			);
+			setHashFunction(() => {
+				return crypto.createHash('sha256').update('').digest('hex');
+			});
 
 			const whitelist = new Map([
 				[
 					'configs/local-presets.conf',
-					'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+					crypto.createHash('sha256').update('').digest('hex'),
 				],
 			]);
 			setWhitelistCache(whitelist);
@@ -468,17 +471,16 @@ test2=check-test`;
 			const configContent = '';
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-			);
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
@@ -486,6 +488,10 @@ test2=check-test`;
 			expect(() => lookupConfig('nonexistent')).toThrow(
 				'Config key "nonexistent" not found. No local config presets available',
 			);
+		});
+
+		afterEach(() => {
+			resetModuleState();
 		});
 	});
 
@@ -495,8 +501,18 @@ test2=check-test`;
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Use empty whitelist - no hash validation for happy path tests
-			setWhitelistCache(new Map());
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
 		});
 
@@ -532,14 +548,28 @@ test2=check-test`;
 			expect(result).toBeDefined();
 			expect(result?.command).toBe('check-test');
 		});
+
+		afterEach(() => {
+			resetModuleState();
+		});
 	});
 
 	describe('configKeyExists', () => {
 		beforeEach(() => {
+			resetModuleState();
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
-			// Set whitelist cache and load config for tests
-			setWhitelistCache(new Map());
+			// Calculate hash dynamically
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			setHashFunction(() => configHash);
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
 		});
 
@@ -570,42 +600,23 @@ test2=check-test`;
 		});
 
 		it('should return false when startup validation failed', () => {
-			jest.isolateModules(() => {
-				const mockFs = {
-					readFileSync: jest.fn(() => {
-						throw new Error('Failed to read config file');
-					}),
-					existsSync: jest.fn(() => true),
-					mkdirSync: jest.fn(),
-					rmSync: jest.fn(),
-					writeFileSync: jest.fn(),
-				};
-				jest.doMock('fs', () => mockFs);
+			resetModuleState();
 
-				jest.doMock('../config/env', () => ({
-					env: {PLUGINS_DIR: mockPluginsDir},
-				}));
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
 
-				jest.doMock('../lib/logger', () => ({
-					logger: {
-						error: jest.fn(),
-						warn: jest.fn(),
-						info: jest.fn(),
-						debug: jest.fn(),
-					},
-				}));
+			// Use wrong hash to trigger validation failure
+			setHashFunction(() => 'wronghash123');
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', 'correcthash456']]),
+			);
+			loadConfigAtStartup();
 
-				const {
-					configKeyExists: configKeyExistsMocked,
-					loadConfigAtStartup: loadConfigAtStartupMocked,
-					setWhitelistCache: setWhitelistCacheMocked,
-				} = require('./local-config');
+			expect(configKeyExists('test')).toBe(false);
+		});
 
-				setWhitelistCacheMocked(new Map());
-				loadConfigAtStartupMocked();
-
-				expect(configKeyExistsMocked('test')).toBe(false);
-			});
+		afterEach(() => {
+			resetModuleState();
 		});
 	});
 
@@ -616,6 +627,8 @@ test2=check-test`;
 test_perfdata=check-test
 debian_eol=check-debian-eol`;
 			fs.writeFileSync(mockConfigPath, configContent);
+			// Mock file security check to always pass
+			setCheckConfigFileSecurityFn(() => true);
 		});
 
 		afterEach(() => {
@@ -623,23 +636,23 @@ debian_eol=check-debian-eol`;
 		});
 
 		it('should return all config keys', () => {
-			// Set mock hash function
-			setHashFunction(
-				() =>
-					'f2a7ea5edb24913819489fe2a84333c5aa72c4cea87cc08cf25f1716c1f02b93',
-			);
+			// Read file and calculate hash dynamically
+			const configContent = fs.readFileSync(mockConfigPath, 'utf-8');
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+
+			setHashFunction(() => configHash);
 
 			const whitelist = new Map([
-				[
-					'configs/local-presets.conf',
-					'f2a7ea5edb24913819489fe2a84333c5aa72c4cea87cc08cf25f1716c1f02b93',
-				],
+				['configs/local-presets.conf', configHash],
 			]);
 			setWhitelistCache(whitelist);
 			loadConfigAtStartup();
 
 			const keys = getConfigKeys();
-			expect(keys).toEqual(['test', 'test_perfdata', 'debian_eol']);
+			expect(keys.sort()).toEqual(['debian_eol', 'test', 'test_perfdata'].sort());
 		});
 
 		it('should return empty array when startup validation failed', () => {
@@ -652,6 +665,9 @@ debian_eol=check-debian-eol`;
 					mkdirSync: jest.fn(),
 					rmSync: jest.fn(),
 					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+					})),
 				};
 				jest.doMock('fs', () => mockFs);
 
@@ -683,63 +699,49 @@ debian_eol=check-debian-eol`;
 		});
 
 		it('should return empty array if config file does not exist', () => {
-			// Need to reset modules to get fresh instance
-			jest.resetModules();
+			resetModuleState();
+			// Ensure file doesn't exist
 			fs.rmSync(mockConfigPath, {force: true});
 
-			const {getConfigKeys: getConfigKeysFresh} = require('./local-config');
-			const {
-				setWhitelistCache: setWhitelistCacheFresh,
-			} = require('./local-config');
-			const {
-				loadConfigAtStartup: loadConfigAtStartupFresh,
-			} = require('./local-config');
+			setWhitelistCache(new Map());
+			loadConfigAtStartup();
 
-			setWhitelistCacheFresh(new Map());
-			loadConfigAtStartupFresh();
+			const keys = getConfigKeys();
+			expect(keys).toEqual([]);
+		});
 
-			const keys = getConfigKeysFresh();
+		it('should return empty array when config file exists but is not whitelisted', () => {
+			resetModuleState();
+
+			// Create config file
+			fs.writeFileSync(mockConfigPath, 'test=check-test');
+
+			// Set mock hash function
+			setHashFunction(() => 'somehash');
+
+			// Empty whitelist - file exists but not whitelisted
+			setWhitelistCache(new Map());
+			loadConfigAtStartup();
+
+			const keys = getConfigKeys();
 			expect(keys).toEqual([]);
 		});
 
 		it('should return empty array when startup validation failed', () => {
-			jest.isolateModules(() => {
-				const mockFs = {
-					readFileSync: jest.fn(() => {
-						throw new Error('Failed to read config file');
-					}),
-					existsSync: jest.fn(() => true),
-					mkdirSync: jest.fn(),
-					rmSync: jest.fn(),
-					writeFileSync: jest.fn(),
-				};
-				jest.doMock('fs', () => mockFs);
+			resetModuleState();
 
-				jest.doMock('../config/env', () => ({
-					env: {PLUGINS_DIR: mockPluginsDir},
-				}));
+			// Create config file
+			fs.writeFileSync(mockConfigPath, 'test=check-test');
 
-				jest.doMock('../lib/logger', () => ({
-					logger: {
-						error: jest.fn(),
-						warn: jest.fn(),
-						info: jest.fn(),
-						debug: jest.fn(),
-					},
-				}));
+			// Set wrong hash to trigger validation failure
+			setHashFunction(() => 'wronghash');
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', 'correcthash']]),
+			);
+			loadConfigAtStartup();
 
-				const {
-					getConfigKeys: getConfigKeysMocked,
-					loadConfigAtStartup: loadConfigAtStartupMocked,
-					setWhitelistCache: setWhitelistCacheMocked,
-				} = require('./local-config');
-
-				setWhitelistCacheMocked(new Map());
-				loadConfigAtStartupMocked();
-
-				const keys = getConfigKeysMocked();
-				expect(keys).toEqual([]);
-			});
+			const keys = getConfigKeys();
+			expect(keys).toEqual([]);
 		});
 	});
 
@@ -768,6 +770,9 @@ debian_eol=check-debian-eol`;
 				mkdirSync: jest.fn(),
 				rmSync: jest.fn(),
 				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
 			};
 			jest.doMock('fs', () => mockFs);
 
@@ -835,6 +840,9 @@ debian_eol=check-debian-eol`;
 				mkdirSync: jest.fn(),
 				rmSync: jest.fn(),
 				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
 			};
 			jest.doMock('fs', () => mockFs);
 
@@ -885,6 +893,9 @@ debian_eol=check-debian-eol`;
 				mkdirSync: jest.fn(),
 				rmSync: jest.fn(),
 				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
 			};
 			jest.doMock('fs', () => mockFs);
 
@@ -964,10 +975,23 @@ debian_eol=check-debian-eol`;
 			});
 		});
 
-		it('should load config when file is not in whitelist (no hash check)', () => {
+		it('should fail validation when config file exists but is not in whitelist', () => {
 			// Create actual config file
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs so existsSync returns true (file exists)
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
+			};
+			jest.doMock('fs', () => mockFs);
 
 			const {
 				loadConfigAtStartup,
@@ -975,13 +999,13 @@ debian_eol=check-debian-eol`;
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
-			// Create whitelist without the config file (so no hash check is performed)
+			// Create whitelist without the config file (file is not whitelisted)
 			const whitelist = new Map([['other-file.txt', 'somehash']]);
 			setWhitelistCache(whitelist);
 
 			loadConfigAtStartup();
 
-			expect(hasRuntimeValidationFailed()).toBe(false);
+			expect(hasRuntimeValidationFailed()).toBe(true);
 		});
 	});
 });
