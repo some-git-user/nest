@@ -1,7 +1,6 @@
 /**
  * Tests for SSH2 Preload Module
  */
-import {setupSsh2Interception} from './ssh2-preload';
 
 // Mock fs
 jest.mock('fs', () => ({

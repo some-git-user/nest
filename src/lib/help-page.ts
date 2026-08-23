@@ -1,5 +1,4 @@
 import {Response} from 'express';
-import path from 'path';
 import sanitizeHtml, {type Attributes, type IOptions} from 'sanitize-html';
 import {EXTERNAL_LINK_GUARD_SCRIPT} from './client-scripts';
 
