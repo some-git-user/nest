@@ -98,7 +98,10 @@ export function setupSsh2Interception(): void {
 	}
 
 	// Check if we're running in SEA mode
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	// Note: We must use require() here because this code runs before ES module
+	// initialization in SEA mode. The 'node:sea' API is only available at runtime
+	// when the binary is executed, not during bundling.
+	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 	const seaModule: unknown = require('node:sea');
 	if (
 		!(
@@ -179,10 +182,12 @@ export function setupSsh2InSeaMode(
 } {
 	// Try to extract the native addon from SEA assets to a temp file
 	// Note: Native addon may not be available if it couldn't be built for this Node.js version
-	console.log('[SSH2 Preload] Attempting to extract sshcrypto.node from SEA assets');
+	console.log(
+		'[SSH2 Preload] Attempting to extract sshcrypto.node from SEA assets',
+	);
 	let tempPath = '';
 	let nativeExports: Record<string, unknown> | null = null;
-	
+
 	try {
 		const rawAsset = seaModuleApi.getRawAsset('sshcrypto.node');
 		console.log('[SSH2 Preload] Raw asset type:', typeof rawAsset);
@@ -197,10 +202,18 @@ export function setupSsh2InSeaMode(
 		tempPath = path.join(os.tmpdir(), `sshcrypto-${process.pid}.node`);
 		fs.writeFileSync(tempPath, sshcryptoBuffer);
 		console.log(`[SSH2 Preload] Extracted sshcrypto.node to ${tempPath}`);
-		console.log('[SSH2 Preload] File size:', fs.statSync(tempPath).size, 'bytes');
+		console.log(
+			'[SSH2 Preload] File size:',
+			fs.statSync(tempPath).size,
+			'bytes',
+		);
 
 		// Load the native addon using a proper Module instance
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		// Note: We must use require('module') here to get a fresh Module constructor
+		// for creating a new module instance to load the native addon. This is required
+		// because we need to call process.dlopen() on a Module instance we create,
+		// not the imported module type.
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 		const Module = require('module') as typeof import('module');
 		const nativeModule = new Module('ssh2-crypto') as Module & {
 			exports: Record<string, unknown>;
@@ -217,7 +230,9 @@ export function setupSsh2InSeaMode(
 		} catch (dlopenErr) {
 			// istanbul ignore next - dlopen failure is hard to test in SEA mode
 			console.error('[SSH2 Preload] dlopen failed:', dlopenErr);
-			console.log('[SSH2 Preload] Native addon failed, will use ssh2 JS fallback');
+			console.log(
+				'[SSH2 Preload] Native addon failed, will use ssh2 JS fallback',
+			);
 			// Clean up temp file if dlopen failed
 			try {
 				fs.rmSync(tempPath);
@@ -242,6 +257,10 @@ export function setupSsh2InSeaMode(
 	console.log('[SSH2 Preload] Preloading ssh2 module');
 	let preloadedSsh2: Record<string, unknown> | null = null;
 	try {
+		// Preload ssh2 module using require() to ensure it loads with our
+		// require() interception already in place. This is necessary because
+		// ssh2 may try to load its native addon during import, and we need
+		// to catch that require() call.
 		// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 		preloadedSsh2 = require('ssh2') as Record<string, unknown>;
 		console.log('[SSH2 Preload] ssh2 module preloaded successfully');
@@ -250,7 +269,8 @@ export function setupSsh2InSeaMode(
 		// istanbul ignore next - ssh2 preload failure is hard to test in Jest isolation
 		console.error('[SSH2 Preload] Failed to preload ssh2:', preloadErr);
 	}
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	// Get Module constructor for return value
+	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 	const mod = require('module') as typeof import('module');
 
 	return {Module: mod, nativeExports, preloadedSsh2, tempPath};
