@@ -101,7 +101,7 @@ export function setupSsh2Interception(): void {
 	// Note: We must use require() here because this code runs before ES module
 	// initialization in SEA mode. The 'node:sea' API is only available at runtime
 	// when the binary is executed, not during bundling.
-	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const seaModule: unknown = require('node:sea');
 	if (
 		!(
@@ -213,7 +213,7 @@ export function setupSsh2InSeaMode(
 		// for creating a new module instance to load the native addon. This is required
 		// because we need to call process.dlopen() on a Module instance we create,
 		// not the imported module type.
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const Module = require('module') as typeof import('module');
 		const nativeModule = new Module('ssh2-crypto') as Module & {
 			exports: Record<string, unknown>;
@@ -261,7 +261,7 @@ export function setupSsh2InSeaMode(
 		// require() interception already in place. This is necessary because
 		// ssh2 may try to load its native addon during import, and we need
 		// to catch that require() call.
-		// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		preloadedSsh2 = require('ssh2') as Record<string, unknown>;
 		console.log('[SSH2 Preload] ssh2 module preloaded successfully');
 		console.log('[SSH2 Preload] ssh2 exports:', Object.keys(preloadedSsh2));
@@ -270,7 +270,7 @@ export function setupSsh2InSeaMode(
 		console.error('[SSH2 Preload] Failed to preload ssh2:', preloadErr);
 	}
 	// Get Module constructor for return value
-	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const mod = require('module') as typeof import('module');
 
 	return {Module: mod, nativeExports, preloadedSsh2, tempPath};
