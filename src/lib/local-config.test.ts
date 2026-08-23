@@ -993,5 +993,683 @@ debian_eol=check-debian-eol`;
 
 			expect(hasRuntimeValidationFailed()).toBe(true);
 		});
+
+		it('should fail validation when config file security check fails (statSync throws)', () => {
+			jest.isolateModules(() => {
+				// Create actual config file
+				const configContent = `test=check-test`;
+				fs.writeFileSync(mockConfigPath, configContent);
+
+				// Mock fs - statSync should return valid mode for the warning message
+				const mockFs = {
+					readFileSync: jest.fn(() => configContent),
+					existsSync: jest.fn(() => true),
+					mkdirSync: jest.fn(),
+					rmSync: jest.fn(),
+					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+					})),
+				};
+				jest.doMock('fs', () => mockFs);
+
+				// Mock env
+				jest.doMock('../config/env', () => ({
+					env: {PLUGINS_DIR: mockPluginsDir},
+				}));
+
+				// Mock logger
+				const mockLogger = {
+					error: jest.fn(),
+					warn: jest.fn(),
+					info: jest.fn(),
+					debug: jest.fn(),
+				};
+				jest.doMock('../lib/logger', () => ({
+					logger: mockLogger,
+				}));
+
+				const {
+					loadConfigAtStartup,
+					setWhitelistCache,
+					hasRuntimeValidationFailed,
+					setCheckConfigFileSecurityFn,
+				} = require('./local-config');
+
+				// Set correct hash
+				const configHash = crypto
+					.createHash('sha256')
+					.update(configContent)
+					.digest('hex');
+
+				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+				setWhitelistCache(whitelist);
+
+				// Mock security check to fail (return false)
+				setCheckConfigFileSecurityFn(() => false);
+
+				loadConfigAtStartup();
+
+				expect(mockLogger.warn).toHaveBeenCalledWith(
+					expect.stringContaining('has insecure permissions'),
+				);
+				expect(hasRuntimeValidationFailed()).toBe(true);
+			});
+		});
+
+		it('should handle parse error with invalid format (no equals sign)', () => {
+			jest.isolateModules(() => {
+				// Mock fs with proper isFile method and invalid content
+				const configContent = `test=check-test
+invalidLineWithoutEquals`;
+				const mockFs = {
+					readFileSync: jest.fn(() => configContent),
+					existsSync: jest.fn(() => true),
+					mkdirSync: jest.fn(),
+					rmSync: jest.fn(),
+					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+						size: configContent.length,
+						isFile: () => true,
+						uid: process.getuid?.() ?? 0,
+					})),
+				};
+				jest.doMock('fs', () => mockFs);
+
+				// Mock env
+				jest.doMock('../config/env', () => ({
+					env: {PLUGINS_DIR: mockPluginsDir},
+				}));
+
+				// Mock logger
+				const mockLogger = {
+					error: jest.fn(),
+					warn: jest.fn(),
+					info: jest.fn(),
+					debug: jest.fn(),
+				};
+				jest.doMock('../lib/logger', () => ({
+					logger: mockLogger,
+				}));
+
+				// Set correct hash
+				const configHash = crypto
+					.createHash('sha256')
+					.update(configContent)
+					.digest('hex');
+
+				// Mock plugin-whitelist to return the correct hash
+				jest.doMock('./plugin-whitelist', () => ({
+					hashPluginFile: jest.fn(() => configHash),
+				}));
+
+				const {
+					loadConfigAtStartup,
+					setWhitelistCache,
+					hasRuntimeValidationFailed,
+					setCheckConfigFileSecurityFn,
+				} = require('./local-config');
+
+				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+				setWhitelistCache(whitelist);
+
+				// Mock security check to pass
+				setCheckConfigFileSecurityFn(() => true);
+
+				loadConfigAtStartup();
+
+				expect(mockLogger.error).toHaveBeenCalledWith(
+					expect.stringContaining('Failed to parse config file'),
+				);
+				expect(hasRuntimeValidationFailed()).toBe(true);
+			});
+		});
+
+		it('should handle parse error with empty key', () => {
+			jest.isolateModules(() => {
+				// Mock fs with proper isFile method and invalid content
+				const configContent = `test=check-test
+=emptyKey`;
+				const mockFs = {
+					readFileSync: jest.fn(() => configContent),
+					existsSync: jest.fn(() => true),
+					mkdirSync: jest.fn(),
+					rmSync: jest.fn(),
+					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+						size: configContent.length,
+						isFile: () => true,
+						uid: process.getuid?.() ?? 0,
+					})),
+				};
+				jest.doMock('fs', () => mockFs);
+
+				// Mock env
+				jest.doMock('../config/env', () => ({
+					env: {PLUGINS_DIR: mockPluginsDir},
+				}));
+
+				// Mock logger
+				const mockLogger = {
+					error: jest.fn(),
+					warn: jest.fn(),
+					info: jest.fn(),
+					debug: jest.fn(),
+				};
+				jest.doMock('../lib/logger', () => ({
+					logger: mockLogger,
+				}));
+
+				// Set correct hash
+				const configHash = crypto
+					.createHash('sha256')
+					.update(configContent)
+					.digest('hex');
+
+				// Mock plugin-whitelist to return the correct hash
+				jest.doMock('./plugin-whitelist', () => ({
+					hashPluginFile: jest.fn(() => configHash),
+				}));
+
+				const {
+					loadConfigAtStartup,
+					setWhitelistCache,
+					hasRuntimeValidationFailed,
+					setCheckConfigFileSecurityFn,
+				} = require('./local-config');
+
+				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+				setWhitelistCache(whitelist);
+
+				// Mock security check to pass
+				setCheckConfigFileSecurityFn(() => true);
+
+				loadConfigAtStartup();
+
+				expect(mockLogger.error).toHaveBeenCalledWith(
+					expect.stringContaining('Failed to parse config file'),
+				);
+				expect(hasRuntimeValidationFailed()).toBe(true);
+			});
+		});
+
+		it('should handle parse error with duplicate key', () => {
+			jest.isolateModules(() => {
+				// Mock fs with proper isFile method and invalid content
+				const configContent = `test=check-test
+test=duplicate`;
+				const mockFs = {
+					readFileSync: jest.fn(() => configContent),
+					existsSync: jest.fn(() => true),
+					mkdirSync: jest.fn(),
+					rmSync: jest.fn(),
+					writeFileSync: jest.fn(),
+					statSync: jest.fn(() => ({
+						mode: 0o100644,
+						size: configContent.length,
+						isFile: () => true,
+						uid: process.getuid?.() ?? 0,
+					})),
+				};
+				jest.doMock('fs', () => mockFs);
+
+				// Mock env
+				jest.doMock('../config/env', () => ({
+					env: {PLUGINS_DIR: mockPluginsDir},
+				}));
+
+				// Mock logger
+				const mockLogger = {
+					error: jest.fn(),
+					warn: jest.fn(),
+					info: jest.fn(),
+					debug: jest.fn(),
+				};
+				jest.doMock('../lib/logger', () => ({
+					logger: mockLogger,
+				}));
+
+				// Set correct hash
+				const configHash = crypto
+					.createHash('sha256')
+					.update(configContent)
+					.digest('hex');
+
+				// Mock plugin-whitelist to return the correct hash
+				jest.doMock('./plugin-whitelist', () => ({
+					hashPluginFile: jest.fn(() => configHash),
+				}));
+
+				const {
+					loadConfigAtStartup,
+					setWhitelistCache,
+					hasRuntimeValidationFailed,
+					setCheckConfigFileSecurityFn,
+				} = require('./local-config');
+
+				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+				setWhitelistCache(whitelist);
+
+				// Mock security check to pass
+				setCheckConfigFileSecurityFn(() => true);
+
+				loadConfigAtStartup();
+
+				expect(mockLogger.error).toHaveBeenCalledWith(
+					expect.stringContaining('Failed to parse config file'),
+				);
+				expect(hasRuntimeValidationFailed()).toBe(true);
+			});
+		});
+
+		it('should log specific hash mismatch warning message', () => {
+			// Create actual config file
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			// Mock plugin-whitelist to return current hash
+			const currentHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => currentHash),
+			}));
+
+			const {
+				loadConfigAtStartup,
+				setWhitelistCache,
+				setCheckConfigFileSecurityFn,
+			} = require('./local-config');
+
+			// Set whitelist with different hash
+			const approvedHash = 'approvedHash123';
+			const whitelist = new Map([['configs/local-presets.conf', approvedHash]]);
+			setWhitelistCache(whitelist);
+
+			// Mock security check to pass
+			setCheckConfigFileSecurityFn(() => true);
+
+			loadConfigAtStartup();
+
+			expect(mockLogger.warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					`Whitelist expects ${approvedHash}, current sha256 is ${currentHash}`,
+				),
+			);
+		});
+
+		it('should log specific not whitelisted warning message', () => {
+			// Create actual config file
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+				})),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			const {
+				loadConfigAtStartup,
+				setWhitelistCache,
+				setCheckConfigFileSecurityFn,
+			} = require('./local-config');
+
+			// Set whitelist without this config file
+			const whitelist = new Map([['other-config.conf', 'somehash']]);
+			setWhitelistCache(whitelist);
+
+			// Mock security check to pass
+			setCheckConfigFileSecurityFn(() => true);
+
+			loadConfigAtStartup();
+
+			expect(mockLogger.warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					`Config file configs/local-presets.conf is not whitelisted`,
+				),
+			);
+		});
+
+		it('should handle double-loading gracefully (prevent duplicate execution)', () => {
+			// Create actual config file
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => ({
+					mode: 0o100644,
+					size: configContent.length,
+					isFile: () => true,
+					uid: process.getuid?.() ?? 0,
+				})),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			// Mock plugin-whitelist
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => configHash),
+			}));
+
+			const {
+				loadConfigAtStartup,
+				setWhitelistCache,
+				setCheckConfigFileSecurityFn,
+				resetModuleState,
+			} = require('./local-config');
+
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+			setWhitelistCache(whitelist);
+			setCheckConfigFileSecurityFn(() => true);
+
+			// Call twice - second call should be a no-op
+			loadConfigAtStartup();
+			loadConfigAtStartup();
+
+			// Should not throw or error on second call
+			expect(mockLogger.error).not.toHaveBeenCalled();
+			expect(mockLogger.warn).not.toHaveBeenCalled();
+
+			// Reset module state
+			resetModuleState();
+		});
+
+		it('should handle statSync error in default checkConfigFileSecurityFn (line 24)', () => {
+			// Create actual config file
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs - statSync throws on first call (inside checkConfigFileSecurityFn), returns valid on second (line 304)
+			const mockStats = {
+				isFile: jest.fn(() => true),
+				mode: 0o644,
+				uid: 1000,
+			};
+			let statCallCount = 0;
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn((filePath: string) => {
+					statCallCount++;
+					// First call (inside checkConfigFileSecurityFn) throws to test line 24
+					if (statCallCount === 1) {
+						throw new Error('stat error');
+					}
+					// Second call (line 304) returns valid stats
+					return mockStats;
+				}),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			// Mock plugin-whitelist
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => configHash),
+			}));
+
+			const {
+				loadConfigAtStartup,
+				setWhitelistCache,
+				hasRuntimeValidationFailed,
+				resetModuleState,
+			} = require('./local-config');
+
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+			setWhitelistCache(whitelist);
+
+			// Use default checkConfigFileSecurityFn (not overridden)
+			loadConfigAtStartup();
+
+			// Should fail validation due to stat error
+			expect(hasRuntimeValidationFailed()).toBe(true);
+
+			// Reset module state
+			resetModuleState();
+		});
+
+		it('should handle statSync error in resetModuleState default function (line 59)', () => {
+			// Mock fs - statSync throws error
+			const mockStats = {
+				isFile: jest.fn(() => true),
+				mode: 0o644,
+				uid: 1000,
+			};
+			let statCallCount = 0;
+			const mockFs = {
+				readFileSync: jest.fn(() => 'test=check-test'),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn((filePath: string) => {
+					statCallCount++;
+					// First call (inside checkConfigFileSecurityFn after reset) throws to test line 59
+					if (statCallCount === 1) {
+						throw new Error('stat error');
+					}
+					// Subsequent calls return valid stats
+					return mockStats;
+				}),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			// Mock plugin-whitelist
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => 'testhash'),
+			}));
+
+			const {
+				resetModuleState,
+				loadConfigAtStartup,
+				setWhitelistCache,
+				hasRuntimeValidationFailed,
+			} = require('./local-config');
+
+			// Reset module state to set default checkConfigFileSecurityFn
+			resetModuleState();
+
+			// Set whitelist cache
+			const whitelist = new Map([['configs/local-presets.conf', 'testhash']]);
+			setWhitelistCache(whitelist);
+
+			// Call loadConfigAtStartup - this will use the default function from resetModuleState
+			// which should catch the stat error at line 59 and return false
+			loadConfigAtStartup();
+
+			// Should fail validation due to stat error caught in line 59
+			expect(hasRuntimeValidationFailed()).toBe(true);
+		});
+
+		it('should handle when process.getuid is not available (lines 301-302)', () => {
+			// Create actual config file
+			const configContent = `test=check-test`;
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			// Mock fs
+			const mockStats = {
+				isFile: jest.fn(() => true),
+				mode: 0o644,
+				uid: 1000,
+			};
+			const mockFs = {
+				readFileSync: jest.fn(() => configContent),
+				existsSync: jest.fn(() => true),
+				mkdirSync: jest.fn(),
+				rmSync: jest.fn(),
+				writeFileSync: jest.fn(),
+				statSync: jest.fn(() => mockStats),
+			};
+			jest.doMock('fs', () => mockFs);
+
+			// Mock env
+			jest.doMock('../config/env', () => ({
+				env: {PLUGINS_DIR: mockPluginsDir},
+			}));
+
+			// Mock logger
+			const mockLogger = {
+				error: jest.fn(),
+				warn: jest.fn(),
+				info: jest.fn(),
+				debug: jest.fn(),
+			};
+			jest.doMock('../lib/logger', () => ({
+				logger: mockLogger,
+			}));
+
+			// Mock plugin-whitelist
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => configHash),
+			}));
+
+			// Mock process.getuid to be undefined (not a function)
+			const originalGetuid = process.getuid;
+			process.getuid = undefined as any;
+
+			const {
+				loadConfigAtStartup,
+				setWhitelistCache,
+				hasRuntimeValidationFailed,
+				resetModuleState,
+			} = require('./local-config');
+
+			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
+			setWhitelistCache(whitelist);
+
+			// Should load successfully without checking uid when getuid is not available
+			loadConfigAtStartup();
+
+			// Should succeed since uid check is skipped
+			expect(hasRuntimeValidationFailed()).toBe(false);
+
+			// Restore original getuid
+			process.getuid = originalGetuid;
+
+			// Reset module state
+			resetModuleState();
+		});
 	});
 });

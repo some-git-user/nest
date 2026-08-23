@@ -1,7 +1,7 @@
 import {Response} from 'express';
-import fs from 'fs';
 import path from 'path';
 import sanitizeHtml, {type Attributes, type IOptions} from 'sanitize-html';
+import {EXTERNAL_LINK_GUARD_SCRIPT} from './client-scripts';
 
 export const EXTERNAL_LINK_WARNING_MESSAGE =
 	'You are about to leave this Nest app and open an external website. Continue?';
@@ -29,8 +29,7 @@ const isAbsoluteHttpUrl = (href: string): boolean => {
 };
 
 export const getExternalLinkGuardScriptContent = (): string => {
-	const filePath = path.join(__dirname, 'external-link-guard.js');
-	return fs.readFileSync(filePath, 'utf-8');
+	return EXTERNAL_LINK_GUARD_SCRIPT;
 };
 
 export const applyHelpPageSecurityHeaders = (res: Response): void => {

@@ -6,6 +6,10 @@ import https from 'https';
 // Verify config files against whitelist
 import path from 'path';
 import {env} from './config/env';
+import {
+	EXTERNAL_LINK_GUARD_SCRIPT,
+	PLUGIN_EXAMPLE_FORM_SCRIPT,
+} from './lib/client-scripts';
 import {runScheduler} from './lib/cron/scheduler';
 import {getErrorMessage} from './lib/error-message';
 import {
@@ -262,15 +266,14 @@ for (const warning of securityWarnings) {
 app.get('/favicon.ico', (_req: Request, res: Response) => {
 	return res.status(HttpStatusCodes.NO_CONTENT).end();
 });
+
 app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-	const filePath = path.join(__dirname, 'lib', 'external-link-guard.js');
-	return res.send(fs.readFileSync(filePath, 'utf-8'));
+	return res.send(EXTERNAL_LINK_GUARD_SCRIPT);
 });
 app.get(PLUGIN_EXAMPLE_FORM_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-	const filePath = path.join(__dirname, 'lib', 'plugin-example-form.js');
-	return res.send(fs.readFileSync(filePath, 'utf-8'));
+	return res.send(PLUGIN_EXAMPLE_FORM_SCRIPT);
 });
 app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
 	const warningId = String(req.params?.warningId ?? '');
@@ -293,17 +296,16 @@ app.get('/', (_req: Request, res: Response) => {
 	const validationFailed = hasRuntimeValidationFailed();
 	// Only parse config if validation succeeded
 	const localConfigPresets = validationFailed ? new Map() : parseConfigFile();
-	return res.send(
-		buildOverviewPageHtml(
-			env.HOST,
-			env.PORT,
-			getStartupWarningsAtRuntime(),
-			registeredPluginRoutes,
-			registeredPluginRouteExamples,
-			localConfigPresets,
-			validationFailed,
-		),
+	const html = buildOverviewPageHtml(
+		env.HOST,
+		env.PORT,
+		getStartupWarningsAtRuntime(),
+		registeredPluginRoutes,
+		registeredPluginRouteExamples,
+		localConfigPresets,
+		validationFailed,
 	);
+	return res.send(appendExternalLinkGuard(html));
 });
 app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);

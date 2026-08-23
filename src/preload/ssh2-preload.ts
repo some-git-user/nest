@@ -147,14 +147,17 @@ export function setupSsh2Interception(): void {
 		// Clean up temp file after a delay
 		// istanbul ignore next - cleanup runs asynchronously after test completes
 		setTimeout(() => {
-			try {
-				fs.rmSync(result.tempPath);
-				console.log('[SSH2 Preload] Cleaned up temp sshcrypto.node file');
-			} catch (err) {
-				const errorMsg = getErrorMessage(err);
-				console.log(
-					`[SSH2 Preload] Temp file cleanup error (ignored): ${errorMsg}`,
-				);
+			// Only cleanup if tempPath is not empty (native addon was extracted)
+			if (result.tempPath) {
+				try {
+					fs.rmSync(result.tempPath);
+					console.log('[SSH2 Preload] Cleaned up temp sshcrypto.node file');
+				} catch (err) {
+					const errorMsg = getErrorMessage(err);
+					console.log(
+						`[SSH2 Preload] Temp file cleanup error (ignored): ${errorMsg}`,
+					);
+				}
 			}
 		}, 10000);
 	} catch (err) {

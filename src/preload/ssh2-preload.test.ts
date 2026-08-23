@@ -19,6 +19,7 @@ jest.mock('os', () => ({
 // Mock path
 jest.mock('path', () => ({
 	join: jest.fn().mockReturnValue('/tmp/test.node'),
+	resolve: jest.fn().mockReturnValue('/tmp/test.node'),
 }));
 
 describe('ssh2-preload', () => {
@@ -167,15 +168,20 @@ describe('ssh2-preload', () => {
 				getRawAsset: mockGetRawAsset,
 			}));
 
+			// Mock ssh2 to avoid actual module loading
+			jest.doMock('ssh2', () => ({
+				Client: jest.fn(),
+			}));
+
 			jest.isolateModules(() => {
 				// eslint-disable-next-line @typescript-eslint/no-require-imports
 				const {setupSsh2Interception: setup} = require('./ssh2-preload');
 				setup();
 			});
 
-			// Verify error was logged via getErrorMessage
-			expect(consoleErrorSpy).toHaveBeenCalledWith(
-				expect.stringContaining('Failed to setup ssh2 interception'),
+			// Verify graceful handling - should log about JS fallback
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining('ssh2 will use JavaScript crypto fallback'),
 			);
 			consoleSpy.mockRestore();
 			consoleErrorSpy.mockRestore();
