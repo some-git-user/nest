@@ -76,6 +76,7 @@ async function main(): Promise<void> {
 
 	if (untestedFiles.length === 0) {
 		console.log('✅ All TypeScript files have corresponding test files!');
+		process.exit(0);
 	} else {
 		console.log(`❌ Found ${untestedFiles.length} file(s) without tests:\n`);
 
@@ -89,6 +90,7 @@ async function main(): Promise<void> {
 		console.log(
 			'\n💡 Tip: Type definition files (.d.ts) typically do not need tests.',
 		);
+		process.exit(1);
 	}
 }
 
