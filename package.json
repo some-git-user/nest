@@ -1,12 +1,12 @@
 {
 	"name": "nest",
-	"version": "0.1.4.3",
+	"version": "0.1.4.4",
 	"description": "Nagios Rest Server",
 	"main": "dist/server.js",
 	"module": "ESNext",
 	"scripts": {
 		"build": "rm -rf dist && npx tsc",
-		"build:release": "npm run build && node esbuild-bundle.mjs && node --experimental-sea-config sea-config.json && cp \"$(which node)\" standalone/node && cd standalone && rm -rf nest && cp node nest && npx postject nest NODE_SEA_BLOB sea-prep.blob --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 && rm -rf sea-prep.blob && rm -rf node && rm -rf server-bundled.js",
+		"build:release": "npm run build && node esbuild-bundle.mjs && node --build-sea sea-config.json && cd standalone && rm -rf nest && mv sea-prep.blob nest && rm -rf server-bundled.js",
 		"build:deb": "npm run build:release && cd build_deb && ./make_deb.sh && ./make_plugins_deb.sh",
 		"start": "node dist/server.js",
 		"dev": "NODE_ENV=development nodemon --exec tsx src/server-preload.ts --inspect",

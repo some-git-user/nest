@@ -177,57 +177,81 @@ export function setupSsh2InSeaMode(
 	preloadedSsh2: Record<string, unknown> | null;
 	tempPath: string;
 } {
-	// Extract the native addon from SEA assets to a temp file
-	console.log('[SSH2 Preload] Extracting sshcrypto.node from SEA assets');
-	const rawAsset = seaModuleApi.getRawAsset('sshcrypto.node');
-	console.log('[SSH2 Preload] Raw asset type:', typeof rawAsset);
-	// getRawAsset returns ArrayBuffer in SEA mode, convert to Buffer
-	const sshcryptoBuffer: Buffer = Buffer.isBuffer(rawAsset)
-		? rawAsset
-		: Buffer.from(rawAsset as ArrayBuffer);
-	console.log(
-		'[SSH2 Preload] Converted to Buffer:',
-		Buffer.isBuffer(sshcryptoBuffer),
-	);
-	const tempPath = path.join(os.tmpdir(), `sshcrypto-${process.pid}.node`);
-	fs.writeFileSync(tempPath, sshcryptoBuffer);
-	console.log(`[SSH2 Preload] Extracted sshcrypto.node to ${tempPath}`);
-	console.log('[SSH2 Preload] File size:', fs.statSync(tempPath).size, 'bytes');
-
-	// Load the native addon using a proper Module instance
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
-	const Module = require('module') as typeof import('module');
-	const nativeModule = new Module('ssh2-crypto') as Module & {
-		exports: Record<string, unknown>;
-	};
-	console.log('[SSH2 Preload] Calling process.dlopen() with Module instance');
+	// Try to extract the native addon from SEA assets to a temp file
+	// Note: Native addon may not be available if it couldn't be built for this Node.js version
+	console.log('[SSH2 Preload] Attempting to extract sshcrypto.node from SEA assets');
+	let tempPath = '';
 	let nativeExports: Record<string, unknown> | null = null;
+	
 	try {
-		process.dlopen(nativeModule, tempPath);
-		console.log('[SSH2 Preload] Loaded native addon via dlopen');
-		nativeExports = nativeModule.exports as Record<string, unknown>;
+		const rawAsset = seaModuleApi.getRawAsset('sshcrypto.node');
+		console.log('[SSH2 Preload] Raw asset type:', typeof rawAsset);
+		// getRawAsset returns ArrayBuffer in SEA mode, convert to Buffer
+		const sshcryptoBuffer: Buffer = Buffer.isBuffer(rawAsset)
+			? rawAsset
+			: Buffer.from(rawAsset as ArrayBuffer);
 		console.log(
-			'[SSH2 Preload] nativeAddon exports:',
-			Object.keys(nativeExports),
+			'[SSH2 Preload] Converted to Buffer:',
+			Buffer.isBuffer(sshcryptoBuffer),
 		);
-	} catch (dlopenErr) {
-		// istanbul ignore next - dlopen failure is hard to test in Jest isolation
-		console.error('[SSH2 Preload] dlopen failed:', dlopenErr);
-		// istanbul ignore next - dlopen failure is hard to test in Jest isolation
-		console.log('[SSH2 Preload] Will use empty stub instead');
+		tempPath = path.join(os.tmpdir(), `sshcrypto-${process.pid}.node`);
+		fs.writeFileSync(tempPath, sshcryptoBuffer);
+		console.log(`[SSH2 Preload] Extracted sshcrypto.node to ${tempPath}`);
+		console.log('[SSH2 Preload] File size:', fs.statSync(tempPath).size, 'bytes');
+
+		// Load the native addon using a proper Module instance
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const Module = require('module') as typeof import('module');
+		const nativeModule = new Module('ssh2-crypto') as Module & {
+			exports: Record<string, unknown>;
+		};
+		console.log('[SSH2 Preload] Calling process.dlopen() with Module instance');
+		try {
+			process.dlopen(nativeModule, tempPath);
+			console.log('[SSH2 Preload] Loaded native addon via dlopen');
+			nativeExports = nativeModule.exports as Record<string, unknown>;
+			console.log(
+				'[SSH2 Preload] nativeAddon exports:',
+				Object.keys(nativeExports),
+			);
+		} catch (dlopenErr) {
+			// istanbul ignore next - dlopen failure is hard to test in SEA mode
+			console.error('[SSH2 Preload] dlopen failed:', dlopenErr);
+			console.log('[SSH2 Preload] Native addon failed, will use ssh2 JS fallback');
+			// Clean up temp file if dlopen failed
+			try {
+				fs.rmSync(tempPath);
+				tempPath = '';
+			} catch (cleanupErr) {
+				// Ignore cleanup errors
+				void cleanupErr;
+			}
+			nativeExports = null;
+		}
+	} catch (err) {
+		// Native addon not in SEA assets or extraction failed
+		// This is expected if the native addon couldn't be built for this Node.js version
+		const errorMsg = getErrorMessage(err);
+		console.log('[SSH2 Preload] No native addon in SEA assets:', errorMsg);
+		console.log('[SSH2 Preload] ssh2 will use JavaScript crypto fallback');
+		tempPath = '';
+		nativeExports = null;
 	}
 
-	// Preload ssh2 module now that native addon is loaded
+	// Preload ssh2 module now that native addon is loaded (or JS fallback will be used)
 	console.log('[SSH2 Preload] Preloading ssh2 module');
 	let preloadedSsh2: Record<string, unknown> | null = null;
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 		preloadedSsh2 = require('ssh2') as Record<string, unknown>;
 		console.log('[SSH2 Preload] ssh2 module preloaded successfully');
+		console.log('[SSH2 Preload] ssh2 exports:', Object.keys(preloadedSsh2));
 	} catch (preloadErr) {
 		// istanbul ignore next - ssh2 preload failure is hard to test in Jest isolation
 		console.error('[SSH2 Preload] Failed to preload ssh2:', preloadErr);
 	}
+	// eslint-disable-next-line @typescript-eslint/no-require-imports
+	const mod = require('module') as typeof import('module');
 
-	return {Module, nativeExports, preloadedSsh2, tempPath};
+	return {Module: mod, nativeExports, preloadedSsh2, tempPath};
 }
