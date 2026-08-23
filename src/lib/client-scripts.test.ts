@@ -16,9 +16,7 @@ describe('client-scripts', () => {
 		});
 
 		it('should contain click event listener', () => {
-			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain(
-				'document.addEventListener',
-			);
+			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain('document.addEventListener');
 			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain("'click'");
 		});
 
@@ -29,7 +27,7 @@ describe('client-scripts', () => {
 		});
 
 		it('should check for anchor elements', () => {
-			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain('closest(\'a\')');
+			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain("closest('a')");
 			expect(EXTERNAL_LINK_GUARD_SCRIPT).toContain('HTMLAnchorElement');
 		});
 
@@ -74,16 +72,14 @@ describe('client-scripts', () => {
 		});
 
 		it('should contain submit event listener', () => {
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'document.addEventListener',
-			);
+			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('document.addEventListener');
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain("'submit'");
 		});
 
 		it('should check for form elements', () => {
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('HTMLFormElement');
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'classList.contains(\'plugin-example-form\')',
+				"classList.contains('plugin-example-form')",
 			);
 		});
 
@@ -102,7 +98,7 @@ describe('client-scripts', () => {
 		});
 
 		it('should filter empty form values', () => {
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('value !== \'\'');
+			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain("value !== ''");
 		});
 
 		it('should use FormData for form data extraction', () => {
@@ -110,17 +106,15 @@ describe('client-scripts', () => {
 		});
 
 		it('should hide submit button for POST forms', () => {
+			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain("element.type === 'submit'");
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'element.type === \'submit\'',
-			);
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'element.style.display = \'none\'',
+				"element.style.display = 'none'",
 			);
 		});
 
 		it('should create a new form for POST submission', () => {
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'document.createElement(\'form\')',
+				"document.createElement('form')",
 			);
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('submitForm.submit()');
 		});
