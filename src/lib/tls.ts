@@ -1,13 +1,20 @@
 import {spawnSync} from 'child_process';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import {env} from '../config/env';
+import {getErrorMessage} from './error-message';
 import {logger} from './logger';
+import {LOOPBACK_HOSTS, WILDCARD_HOSTS} from './network-identity';
 import {recordStartupWarning} from './startup-warning-registry';
 
-// Static defaults for self-signed certificate generation
-const DEFAULT_CERT_COMMON_NAME = 'localhost';
+// Certificate generation configuration
 const DEFAULT_CERT_VALIDITY_DAYS = 365;
+const CERT_RENEWAL_THRESHOLD_DAYS = 30; // Renew if less than 30 days remaining
+
+// How `openssl x509 -text` labels the two SAN kinds. The IP label includes its
+// own colon, which matters when splitting a value off an IPv6 entry.
+const IP_SAN_PREFIX = 'IP Address:';
 
 // Maximum allowed certificate/key file size (10KB)
 const MAX_CERT_FILE_SIZE = 10 * 1024;
@@ -117,7 +124,7 @@ const opensslAvailable = (): boolean => {
 const createSelfSignedCert = (
 	certPath: string,
 	keyPath: string,
-	commonName: string,
+	host: string,
 	days: number,
 ): void => {
 	const certDir = path.dirname(certPath);
@@ -125,6 +132,16 @@ const createSelfSignedCert = (
 
 	fs.mkdirSync(certDir, {recursive: true});
 	fs.mkdirSync(keyDir, {recursive: true});
+
+	// Use -addext flags for SAN (OpenSSL 1.1.1+) to avoid config file issues
+	const requiredSans = buildRequiredSans(host);
+	const sanExt = requiredSans
+		.map((entry) => toOpenSslSanExtension(entry))
+		.join(',');
+
+	// A wildcard bind address is not an identity, so the CN falls back to the
+	// first real identity in the certificate.
+	const commonName = requiredSans[0];
 
 	runOpenSsl([
 		'req',
@@ -140,7 +157,16 @@ const createSelfSignedCert = (
 		'-days',
 		String(days),
 		'-subj',
-		`/CN=${commonName}`,
+		'/CN=' + commonName,
+		'-addext',
+		'subjectAltName=' + sanExt,
+		'-addext',
+		'basicConstraints=CA:false',
+		'-addext',
+		'keyUsage=digitalSignature,keyEncipherment',
+		'-addext',
+		'extendedKeyUsage=serverAuth',
+		'-batch',
 	]);
 
 	try {
@@ -148,6 +174,199 @@ const createSelfSignedCert = (
 	} catch {
 		// Best effort: key permissions are tightened when filesystem supports chmod.
 	}
+};
+
+/**
+ * Build the `-addext subjectAltName=` value for an identity.
+ *
+ * OpenSSL expects `IP:<addr>` / `DNS:<name>` here, while `openssl x509 -text`
+ * prints the same identities as `IP Address:<addr>` / `DNS:<name>`. Keeping the
+ * two spellings next to each other avoids the two formats drifting apart.
+ */
+const toOpenSslSanExtension = (identity: string): string => {
+	return net.isIP(identity) ? `IP:${identity}` : `DNS:${identity}`;
+};
+
+/**
+ * The identity spelling used by `openssl x509 -text` output.
+ */
+const toParsedSanEntry = (identity: string): string => {
+	return net.isIP(identity) ? `${IP_SAN_PREFIX}${identity}` : `DNS:${identity}`;
+};
+
+/**
+ * Expand an IPv6 address to its fully written-out form.
+ *
+ * `openssl x509 -text` prints IPv6 SANs expanded (`0:0:0:0:0:0:0:1` for `::1`),
+ * so both sides of a comparison are expanded before matching.
+ */
+const expandIpv6 = (address: string): string => {
+	// `split('::')` always yields at least one element, so only the tail needs a default.
+	const [headPart, tailPart = ''] = address.split('::');
+	const head = headPart ? headPart.split(':') : [];
+	const tail = tailPart ? tailPart.split(':') : [];
+	const groups = [
+		...head,
+		...Array<string>(Math.max(8 - head.length - tail.length, 0)).fill('0'),
+		...tail,
+	];
+
+	return groups.map((group) => group.padStart(4, '0')).join(':');
+};
+
+/**
+ * Bring a SAN entry to a common comparison key.
+ *
+ * Entries always come from `parseCertificateInfo()` or `toParsedSanEntry()`,
+ * so they always carry an `IP Address:` or `DNS:` label. The label has to be
+ * stripped by prefix rather than at the first colon: an IPv6 value starts with
+ * a colon itself (`IP Address:::1`).
+ */
+const normalizeSanEntry = (entry: string): string => {
+	if (!entry.startsWith(IP_SAN_PREFIX)) {
+		return entry.toLowerCase();
+	}
+
+	const value = entry.slice(IP_SAN_PREFIX.length);
+
+	return net.isIP(value) === 6 ? `${IP_SAN_PREFIX}${expandIpv6(value)}` : entry;
+};
+
+/**
+ * Every identity a certificate must carry to be usable in the current setup:
+ * the configured host (unless it is a wildcard bind address) plus loopback, so
+ * that internal self-requests always find a matching SAN.
+ */
+export const buildRequiredSans = (host: string): string[] => {
+	const identities = [...LOOPBACK_HOSTS];
+
+	if (!WILDCARD_HOSTS.includes(host) && !identities.includes(host)) {
+		identities.unshift(host);
+	}
+
+	return identities;
+};
+
+/**
+ * Parse certificate to extract SAN and expiry date
+ */
+const parseCertificateInfo = (
+	certPath: string,
+): {
+	sans: string[];
+	expiryDate: Date | null;
+} | null => {
+	try {
+		const result = spawnSync(
+			'openssl',
+			['x509', '-in', certPath, '-noout', '-text'],
+			{
+				encoding: 'utf8',
+			},
+		);
+
+		if (result.error || result.status !== 0) {
+			return null;
+		}
+
+		const output = result.stdout;
+
+		// Extract Subject Alternative Names
+		const sanMatch = output.match(
+			/X509v3 Subject Alternative Name:\s*\n\s*([^\n]+)/,
+		);
+		const sans: string[] = [];
+		if (sanMatch && sanMatch[1]) {
+			const sanLine = sanMatch[1].trim();
+			// Parse IP Address:192.168.1.1, DNS:localhost format (OpenSSL output)
+			const sanEntries = sanLine.split(',').map((s) => s.trim());
+			for (const entry of sanEntries) {
+				if (entry.startsWith(IP_SAN_PREFIX) || entry.startsWith('DNS:')) {
+					sans.push(entry);
+				}
+			}
+		}
+
+		// Extract expiry date
+		const expiryMatch = output.match(/Not After :\s*([^\n]+)/);
+		let expiryDate: Date | null = null;
+		if (expiryMatch && expiryMatch[1]) {
+			// OpenSSL date format: Aug 24 19:16:50 2027 GMT
+			const parsed = new Date(expiryMatch[1].trim());
+			// `new Date()` returns a truthy Invalid Date, which would silently
+			// poison every downstream comparison.
+			if (!Number.isNaN(parsed.getTime())) {
+				expiryDate = parsed;
+			}
+		}
+
+		return {sans, expiryDate};
+	} catch {
+		return null;
+	}
+};
+
+/**
+ * Calculate days until certificate expiry.
+ *
+ * Negative when the certificate has already expired - that must stay negative,
+ * otherwise an expired certificate looks far in the future and is never renewed.
+ */
+export const calculateDaysUntilExpiry = (
+	expiryDate: Date,
+	now: Date = new Date(),
+): number => {
+	return Math.trunc(
+		(expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+	);
+};
+
+/**
+ * Check if certificate needs regeneration
+ */
+export const needsCertRegeneration = (
+	certPath: string,
+	host: string,
+): {needsRegen: boolean; reason: string} => {
+	const info = parseCertificateInfo(certPath);
+
+	if (!info) {
+		return {needsRegen: true, reason: 'Failed to parse certificate'};
+	}
+
+	// The certificate has to cover every identity we connect with. Matching is
+	// done on normalised entries because openssl expands IPv6 addresses and may
+	// change the casing of DNS names, while the reason keeps the readable
+	// spelling we asked for.
+	const presentSans = new Set(info.sans.map((san) => normalizeSanEntry(san)));
+	const missingIdentities = buildRequiredSans(host).filter(
+		(identity) =>
+			!presentSans.has(normalizeSanEntry(toParsedSanEntry(identity))),
+	);
+
+	if (missingIdentities.length > 0) {
+		const missing = missingIdentities
+			.map((identity) => toParsedSanEntry(identity))
+			.join(', ');
+		return {
+			needsRegen: true,
+			reason: `Certificate SAN does not include ${missing}. Current SANs: ${info.sans.join(', ') || 'none'}`,
+		};
+	}
+
+	// Check if certificate is expiring soon
+	if (info.expiryDate) {
+		const daysUntilExpiry = calculateDaysUntilExpiry(info.expiryDate);
+
+		if (daysUntilExpiry < CERT_RENEWAL_THRESHOLD_DAYS) {
+			return {
+				needsRegen: true,
+				reason: `Certificate expires in ${daysUntilExpiry} days (threshold: ${CERT_RENEWAL_THRESHOLD_DAYS} days)`,
+			};
+		}
+	}
+
+	return {needsRegen: false, reason: 'Certificate is valid'};
 };
 
 export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
@@ -165,7 +384,30 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 		// Validate file security for existing files
 		validateTlsFileSecurity(certPath, 'certificate');
 		validateTlsFileSecurity(keyPath, 'key');
-		return {certPath, keyPath};
+
+		// Check if certificate needs regeneration (host mismatch or expiring soon).
+		// needsCertRegeneration never throws: parse failures are reported as
+		// { needsRegen: true }, so no try/catch is needed here.
+		const {needsRegen, reason} = needsCertRegeneration(certPath, env.HOST);
+
+		if (needsRegen) {
+			logger.warn(
+				`Certificate needs regeneration: ${reason}. Regenerating certificate.`,
+			);
+			recordStartupWarning(
+				`Certificate needs regeneration: ${reason}. Regenerating certificate.`,
+			);
+			// Delete old certificate and key to trigger regeneration
+			try {
+				fs.unlinkSync(certPath);
+				fs.unlinkSync(keyPath);
+			} catch {
+				// Ignore deletion errors, will fail below if still missing
+			}
+		} else {
+			logger.info('Certificate is valid and up to date.');
+			return {certPath, keyPath};
+		}
 	}
 
 	if (!opensslAvailable()) {
@@ -181,12 +423,21 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 		`TLS certificate or key missing. Generating self-signed certificate at cert=${certPath}, key=${keyPath}`,
 	);
 
-	createSelfSignedCert(
-		certPath,
-		keyPath,
-		DEFAULT_CERT_COMMON_NAME,
-		DEFAULT_CERT_VALIDITY_DAYS,
-	);
+	try {
+		createSelfSignedCert(
+			certPath,
+			keyPath,
+			env.HOST,
+			DEFAULT_CERT_VALIDITY_DAYS,
+		);
+	} catch (error) {
+		logger.error(
+			`Failed to generate TLS certificate: ${getErrorMessage(error)}`,
+		);
+		throw new Error(
+			`Failed to generate TLS certificate: ${getErrorMessage(error)}`,
+		);
+	}
 
 	logger.info('Generated self-signed TLS certificate for HTTPS startup.');
 

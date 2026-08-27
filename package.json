@@ -7,7 +7,7 @@
 	"scripts": {
 		"build": "rm -rf dist && npx tsc",
 		"build:release": "npm run build && node esbuild-bundle.mjs && node --build-sea sea-config.json && cd standalone && rm -rf nest && mv sea-prep.blob nest && rm -rf server-bundled.js",
-		"build:deb": "npm run build:release && cd build_deb && ./make_deb.sh && ./make_plugins_deb.sh",
+		"build:deb": "./nvm-wrapper.sh rm -rf dist standalone/nest && ./nvm-wrapper.sh npm run build:release && cd build_deb && ./make_deb.sh && ./make_plugins_deb.sh",
 		"start": "node dist/server.js",
 		"dev": "NODE_ENV=development nodemon --exec tsx src/server-preload.ts --inspect",
 		"dev:root": "sudo env PATH=\"$(sudo bash -c 'echo $PATH'):$PATH\" npm run dev",
@@ -28,7 +28,7 @@
 		"typescript-plugins:check": "npx tsc --noEmit --project tsconfig.plugins.json",
 		"typescript-tests:check": "npx tsc --noEmit --project tsconfig.jest.json",
 		"validate": "npm run lint:check && npm run format:check && npm run typescript-app:check && npm run typescript-plugins:check && npm run typescript-tests:check && npm run test:coverage && npm run build && npm run find-untested",
-		"prepare": "node .husky/install.mjs"
+		"prepare": "./nvm-wrapper.sh node .husky/install.mjs"
 	},
 	"repository": {
 		"type": "git",

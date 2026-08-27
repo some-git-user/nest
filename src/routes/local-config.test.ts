@@ -12,6 +12,16 @@ app.use('/local-config', localConfigRouter);
 // Mock the dependencies
 jest.mock('../lib/local-config');
 jest.mock('../lib/internal-http-client');
+// Authentication is disabled by default (empty API_KEY), so a POST without a
+// key header is forwarded without requiring one.
+jest.mock('../config/env', () => ({
+	env: {
+		API_KEY: '',
+		API_KEY_HEADER: 'x-api-key',
+		LOG_FILE_PATH: undefined,
+		NODE_ENV: 'production',
+	},
+}));
 
 const mockedMakeInternalRequest = jest.mocked(
 	internalHttpClient.makeInternalRequest,
@@ -170,6 +180,7 @@ describe('local-config route', () => {
 				body: mockConfigEntry.params,
 				apiKey: undefined,
 				apiKeyHeader: 'x-api-key',
+				requireApiKey: false,
 			});
 		});
 

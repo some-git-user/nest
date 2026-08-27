@@ -9,6 +9,16 @@ import {getLocalConfig, postLocalConfig} from './local-config';
 
 jest.mock('../lib/local-config');
 jest.mock('../lib/internal-http-client');
+// Authentication is disabled by default (empty API_KEY), which is what these
+// tests assume: a POST without a key header is still forwarded.
+jest.mock('../config/env', () => ({
+	env: {
+		API_KEY: '',
+		API_KEY_HEADER: 'x-api-key',
+		LOG_FILE_PATH: undefined,
+		NODE_ENV: 'production',
+	},
+}));
 
 const mockedSafeLookupConfig = jest.mocked(safeLookupConfig);
 const mockedMakeInternalRequest = jest.mocked(makeInternalRequest);
@@ -158,6 +168,8 @@ describe('POST /local-config controller', () => {
 			body: {device: '/dev/sda'},
 			apiKey: undefined,
 			apiKeyHeader: 'x-api-key',
+			// No API_KEY configured, so the internal request needs no key
+			requireApiKey: false,
 		});
 	});
 
@@ -344,6 +356,7 @@ describe('POST /local-config controller', () => {
 			body: {device: '/dev/sda'},
 			apiKey: 'secret-key-123',
 			apiKeyHeader: 'x-api-key',
+			requireApiKey: false,
 		});
 	});
 
@@ -384,6 +397,8 @@ describe('POST /local-config controller', () => {
 			body: {device: '/dev/sda'},
 			apiKey: 'secret-key-123',
 			apiKeyHeader: 'x-api-key',
+			params: undefined,
+			requireApiKey: false,
 		});
 	});
 });
@@ -490,6 +505,7 @@ describe('GET /local-config controller', () => {
 			params: {device: '/dev/sda'},
 			apiKey: undefined,
 			apiKeyHeader: 'x-api-key',
+			requireApiKey: false,
 		});
 	});
 
@@ -547,8 +563,10 @@ describe('GET /local-config controller', () => {
 			method: 'GET',
 			path: '/plugins/check-test',
 			params: {},
+			body: undefined,
 			apiKey: 'secret-key-123',
 			apiKeyHeader: 'x-api-key',
+			requireApiKey: false,
 		});
 	});
 
@@ -584,8 +602,10 @@ describe('GET /local-config controller', () => {
 			method: 'GET',
 			path: '/plugins/check-test',
 			params: {},
+			body: undefined,
 			apiKey: 'secret-key-123',
 			apiKeyHeader: 'x-api-key',
+			requireApiKey: false,
 		});
 	});
 

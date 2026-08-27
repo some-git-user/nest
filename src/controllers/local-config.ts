@@ -64,11 +64,28 @@ const executeLocalConfig = async (
 	// Convert command to route path
 	const routePath = commandToRoutePath(configEntry.command);
 
-	// Extract API key from original request headers to reuse for internal call
+	// For GET requests (web UI access), API key is optional since the web UI is already protected by HTTPS
+	// For POST requests (programmatic access), API key is required, but only when
+	// authentication is actually configured (API_KEY can be empty).
 	const apiKeyHeader = env.API_KEY_HEADER;
 	const apiKey = req.headers[apiKeyHeader] as string | undefined;
+	const apiKeyRequired = httpMethod === 'POST' && env.API_KEY.length > 0;
 
-	// Make internal HTTPS request with API key
+	// With an API key configured, the internal request could never pass the access
+	// control middleware without one. Reject here with 401 instead of letting the
+	// internal request fail and surface as a generic 500.
+	if (apiKeyRequired && !apiKey) {
+		logger.warn(
+			`Rejected local config POST for '${configKey}': missing API key header`,
+		);
+		res.status(HttpStatusCodes.UNAUTHORIZED).json({
+			code: 3,
+			message: `Missing API key. Provide it in the '${apiKeyHeader}' header.`,
+		});
+		return;
+	}
+
+	// Make internal HTTPS request with API key (optional for GET requests)
 	logger.debug(`Executing local config: ${configKey} -> ${routePath}`);
 	const internalResponse = await makeInternalRequest({
 		method: httpMethod,
@@ -77,6 +94,7 @@ const executeLocalConfig = async (
 		body: httpMethod === 'POST' ? configEntry.params : undefined,
 		apiKey,
 		apiKeyHeader,
+		requireApiKey: apiKeyRequired,
 	});
 
 	// Parse and forward response

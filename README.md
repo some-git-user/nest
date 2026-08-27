@@ -72,8 +72,11 @@ The `/local-config` endpoint allows executing pre-configured plugin presets stor
 ```bash
 curl -X POST https://localhost:5000/local-config \
   -H "Content-Type: application/json" \
+  -H "x-api-key: $NEST_API_KEY" \
   -d '{"localConfig": "test_perfdata"}'
 ```
+
+When `API_KEY` is configured, a `POST` without a valid key header returns `401`. When `API_KEY` is empty (the default), no key is required and access is restricted to `ALLOWED_IPS` instead.
 
 **Response:**
 
