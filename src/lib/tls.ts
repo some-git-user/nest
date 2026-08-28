@@ -369,6 +369,29 @@ export const needsCertRegeneration = (
 	return {needsRegen: false, reason: 'Certificate is valid'};
 };
 
+/**
+ * The part of a certificate startup warning that tells the operator what to do.
+ *
+ * A regenerated certificate always changes its fingerprint, so the practical
+ * consequence is the same in both cases below: clients have to trust the new
+ * certificate again. Saying so up front turns the warning into instructions
+ * instead of a mystery the operator has to decode from the log.
+ */
+const CERT_ACTION_HINT =
+	'What to do now: nothing has to be configured, HTTPS is already serving the new certificate. Every browser and client has to trust it again, so re-accept the security warning, re-import the certificate into client trust stores, and update any pinned certificate fingerprint. This warning only refers to the run that created the certificate and is gone after the next restart.';
+
+/**
+ * Startup warning for a certificate that existed but did not qualify anymore.
+ */
+const buildReplacedCertWarning = (certPath: string, reason: string): string =>
+	`TLS certificate replaced automatically: ${reason}. New self-signed certificate: ${certPath}. ${CERT_ACTION_HINT}`;
+
+/**
+ * Startup warning for a certificate that was created because it did not exist.
+ */
+const buildMissingCertWarning = (certPath: string): string =>
+	`TLS certificate or key was missing. New self-signed certificate: ${certPath}. ${CERT_ACTION_HINT}`;
+
 export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 	const certPath = resolvePathFromCwd(env.TLS_CERT_PATH);
 	const keyPath = resolvePathFromCwd(env.TLS_KEY_PATH);
@@ -379,6 +402,12 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 
 	const certExists = fs.existsSync(certPath);
 	const keyExists = fs.existsSync(keyPath);
+
+	// Why an existing certificate had to be thrown away. The reason is reported
+	// once the replacement is on disk, so the startup warning describes the
+	// state the service is actually running in rather than a problem that has
+	// already been fixed.
+	let replacementReason: string | null = null;
 
 	if (certExists && keyExists) {
 		// Validate file security for existing files
@@ -394,9 +423,7 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 			logger.warn(
 				`Certificate needs regeneration: ${reason}. Regenerating certificate.`,
 			);
-			recordStartupWarning(
-				`Certificate needs regeneration: ${reason}. Regenerating certificate.`,
-			);
+			replacementReason = reason;
 			// Delete old certificate and key to trigger regeneration
 			try {
 				fs.unlinkSync(certPath);
@@ -419,9 +446,6 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 	logger.warn(
 		`TLS certificate or key missing. Generating self-signed certificate at cert=${certPath}, key=${keyPath}`,
 	);
-	recordStartupWarning(
-		`TLS certificate or key missing. Generating self-signed certificate at cert=${certPath}, key=${keyPath}`,
-	);
 
 	try {
 		createSelfSignedCert(
@@ -440,6 +464,12 @@ export const ensureTlsCertificate = (): {certPath: string; keyPath: string} => {
 	}
 
 	logger.info('Generated self-signed TLS certificate for HTTPS startup.');
+
+	recordStartupWarning(
+		replacementReason === null
+			? buildMissingCertWarning(certPath)
+			: buildReplacedCertWarning(certPath, replacementReason),
+	);
 
 	return {certPath, keyPath};
 };

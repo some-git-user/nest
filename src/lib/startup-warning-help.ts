@@ -173,6 +173,32 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Restart the service to load the updated plugin.',
 		],
 	},
+	'cert-replaced': {
+		id: 'cert-replaced',
+		title: 'TLS Certificate Replaced Automatically',
+		description:
+			'The certificate on disk did not qualify anymore - it missed a required SAN or was close to expiry - so the service created a new self-signed certificate before starting HTTPS. The old key is gone and the new certificate has a different fingerprint.',
+		handlingSteps: [
+			'No configuration change is needed: HTTPS is already serving the new certificate.',
+			'Re-open the Web UI and accept the new certificate, or re-import it into the client trust store.',
+			'If a certificate fingerprint is pinned somewhere (monitoring, SSH tunnel, client config), replace it with the new one: openssl x509 -in <cert path> -noout -fingerprint -sha256',
+			'Serve a certificate from your own CA at TLS_CERT_PATH and TLS_KEY_PATH to avoid self-signed warnings permanently.',
+			'Restart the service once: the warning belongs to the run that replaced the certificate and is not shown again.',
+		],
+	},
+	'cert-generated': {
+		id: 'cert-generated',
+		title: 'TLS Certificate Generated Automatically',
+		description:
+			'No usable certificate and key were found at TLS_CERT_PATH and TLS_KEY_PATH, so the service generated a self-signed pair to be able to start HTTPS.',
+		handlingSteps: [
+			'No configuration change is needed: HTTPS is already serving the new certificate.',
+			'Open the Web UI and accept the self-signed certificate, or import it into the client trust store.',
+			'Keep the generated files: regenerating them changes the fingerprint again and invalidates any pinned value.',
+			'Serve a certificate from your own CA at TLS_CERT_PATH and TLS_KEY_PATH to avoid self-signed warnings permanently.',
+			'Restart the service once: the warning belongs to the run that created the certificate and is not shown again.',
+		],
+	},
 	unknown: {
 		id: 'unknown',
 		title: 'Generic Startup Warning',
@@ -231,6 +257,8 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		matcher: /Skipping plugin .* due to insecure permissions/i,
 	},
 	{id: 'plugin-hash-changed', matcher: /hash changed\. whitelist expects/i},
+	{id: 'cert-replaced', matcher: /TLS certificate replaced automatically/i},
+	{id: 'cert-generated', matcher: /TLS certificate or key was missing/i},
 ];
 
 const escapeHtml = (value: string): string =>

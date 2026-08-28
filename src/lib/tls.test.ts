@@ -77,8 +77,15 @@ const loadTlsModule = (options?: {
 			...options?.envOverrides,
 		} as Record<string, unknown>);
 
+	const startupWarnings: string[] = [];
+
 	jest.doMock('../config/env', () => ({env}));
 	jest.doMock('./logger', () => ({logger: {warn, info, error}}));
+	jest.doMock('./startup-warning-registry', () => ({
+		recordStartupWarning: (warning: string) => {
+			startupWarnings.push(warning);
+		},
+	}));
 	const statSync =
 		options?.statSyncOverride ??
 		jest.fn((filePath: string) => {
@@ -129,6 +136,7 @@ const loadTlsModule = (options?: {
 		warn,
 		info,
 		error,
+		startupWarnings,
 	};
 };
 
@@ -900,6 +908,7 @@ describe('ensureTlsCertificate', () => {
 			chmodSync,
 			warn,
 			rmSync,
+			startupWarnings,
 		} = loadTlsModule({
 			envOverrides: {
 				HOST: '192.168.111.50',
@@ -927,6 +936,44 @@ describe('ensureTlsCertificate', () => {
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining('Certificate SAN does not include DNS:localhost'),
 		);
+		// The startup warning has to describe the state the service is running
+		// in, plus what the operator should do about it - not a problem that
+		// was already fixed while starting.
+		expect(startupWarnings).toHaveLength(1);
+		expect(startupWarnings[0]).toContain(
+			'TLS certificate replaced automatically: Certificate SAN does not include DNS:localhost',
+		);
+		expect(startupWarnings[0]).toContain(
+			`New self-signed certificate: ${certPath}`,
+		);
+		expect(startupWarnings[0]).toContain('What to do now:');
+		expect(startupWarnings[0]).toContain('fingerprint');
+		expect(startupWarnings[0]).not.toContain('Regenerating certificate.');
+	});
+
+	it('records an actionable startup warning when a certificate is created from scratch', () => {
+		const certPath = '/certs/nest-cert.pem';
+		const keyPath = '/certs/nest-key.pem';
+		const {ensureTlsCertificate, startupWarnings} = loadTlsModule({
+			envOverrides: {
+				HOST: '192.168.111.50',
+				TLS_CERT_PATH: certPath,
+				TLS_KEY_PATH: keyPath,
+			},
+			existingPaths: [],
+			spawnSyncImplementation: jest
+				.fn()
+				.mockReturnValueOnce({status: 0}) // openssl version check
+				.mockReturnValueOnce({status: 0}), // generate cert
+		});
+
+		expect(ensureTlsCertificate()).toEqual({certPath, keyPath});
+		expect(startupWarnings).toHaveLength(1);
+		expect(startupWarnings[0]).toContain('TLS certificate or key was missing.');
+		expect(startupWarnings[0]).toContain(
+			`New self-signed certificate: ${certPath}`,
+		);
+		expect(startupWarnings[0]).toContain('What to do now:');
 	});
 
 	it('accepts a certificate whose IPv6 SAN is written in a compressed form', () => {

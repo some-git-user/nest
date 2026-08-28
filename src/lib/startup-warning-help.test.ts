@@ -43,6 +43,18 @@ describe('startup warning help', () => {
 				'Config warning: plugins/configs/local-presets.conf is new or not whitelisted. Current sha256: abc123. Add "configs/local-presets.conf abc123" to plugins/plugin-whitelist.txt.',
 			),
 		).toBe('config-not-whitelisted');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'TLS certificate replaced automatically: Certificate SAN does not include DNS:localhost. New self-signed certificate: /certs/nest-cert.pem. What to do now: nothing has to be configured.',
+			),
+		).toBe('cert-replaced');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'TLS certificate or key was missing. New self-signed certificate: /certs/nest-cert.pem. What to do now: nothing has to be configured.',
+			),
+		).toBe('cert-generated');
 	});
 
 	test('falls back to unknown topic for unmatched warning text', () => {
@@ -95,6 +107,28 @@ describe('startup warning help', () => {
 		);
 		expect(html).toContain(
 			'<pre class="startup-warning-whitelist-entry"><code>check_test.ts newHash</code></pre>',
+		);
+	});
+
+	test('renders certificate warning entries with a link to the new topics', () => {
+		const html = renderStartupWarningListItems([
+			'TLS certificate replaced automatically: Certificate expires in 12 days (threshold: 30 days). New self-signed certificate: /certs/nest-cert.pem. What to do now: nothing has to be configured.',
+			'TLS certificate or key was missing. New self-signed certificate: /certs/nest-cert.pem. What to do now: nothing has to be configured.',
+		]);
+
+		expect(html).toContain('/help/startup-warnings/cert-replaced');
+		expect(html).toContain('/help/startup-warnings/cert-generated');
+
+		const replacedTopic = getStartupWarningHelpTopic('cert-replaced');
+		expect(replacedTopic).toBeDefined();
+		expect(renderStartupWarningHelpHtml(replacedTopic!)).toContain(
+			'openssl x509 -in &lt;cert path&gt; -noout -fingerprint -sha256',
+		);
+
+		const generatedTopic = getStartupWarningHelpTopic('cert-generated');
+		expect(generatedTopic).toBeDefined();
+		expect(renderStartupWarningHelpHtml(generatedTopic!)).toContain(
+			'TLS Certificate Generated Automatically',
 		);
 	});
 
