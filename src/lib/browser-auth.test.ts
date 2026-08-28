@@ -1,6 +1,7 @@
 import type {Request} from 'express';
 import {
 	apiKeyMatches,
+	extractApiKey,
 	isBrowserRequest,
 	parseBasicAuthPassword,
 } from './browser-auth';
@@ -108,5 +109,61 @@ describe('isBrowserRequest', () => {
 
 	test('returns false when Accept header is absent', () => {
 		expect(isBrowserRequest(makeReq())).toBe(false);
+	});
+});
+
+// ── extractApiKey ─────────────────────────────────────────────────────────────
+
+describe('extractApiKey', () => {
+	const makeReq = (headers: Record<string, unknown>): Request =>
+		({headers}) as unknown as Request;
+
+	test('returns the value of the configured API key header', () => {
+		const req = makeReq({'x-api-key': 'header-key'});
+		expect(extractApiKey(req, 'x-api-key')).toBe('header-key');
+	});
+
+	test('matches the header name case-insensitively', () => {
+		const req = makeReq({'x-api-key': 'header-key'});
+		expect(extractApiKey(req, 'X-API-Key')).toBe('header-key');
+	});
+
+	test('uses the first value when the header is an array', () => {
+		const req = makeReq({'x-api-key': ['first', 'second']});
+		expect(extractApiKey(req, 'x-api-key')).toBe('first');
+	});
+
+	test('falls back to the Basic Auth password when no header is set', () => {
+		const encoded = Buffer.from(':basic-key').toString('base64');
+		const req = makeReq({authorization: `Basic ${encoded}`});
+		expect(extractApiKey(req, 'x-api-key')).toBe('basic-key');
+	});
+
+	test('prefers the API key header over Basic Auth', () => {
+		const encoded = Buffer.from(':basic-key').toString('base64');
+		const req = makeReq({
+			'x-api-key': 'header-key',
+			authorization: `Basic ${encoded}`,
+		});
+		expect(extractApiKey(req, 'x-api-key')).toBe('header-key');
+	});
+
+	test('ignores an empty-string array element and falls back to Basic Auth', () => {
+		const encoded = Buffer.from(':basic-key').toString('base64');
+		const req = makeReq({
+			'x-api-key': [''],
+			authorization: `Basic ${encoded}`,
+		});
+		expect(extractApiKey(req, 'x-api-key')).toBe('basic-key');
+	});
+
+	test('treats a sparse array header value as missing', () => {
+		const header: string[] = [];
+		const req = makeReq({'x-api-key': header});
+		expect(extractApiKey(req, 'x-api-key')).toBe('');
+	});
+
+	test('returns an empty string when neither source is present', () => {
+		expect(extractApiKey(makeReq({}), 'x-api-key')).toBe('');
 	});
 });

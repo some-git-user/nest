@@ -147,7 +147,53 @@ describe('local-config controller with an API key configured', () => {
 
 		expect(statusMock).toHaveBeenCalledWith(200);
 		expect(makeInternalRequest).toHaveBeenCalledWith(
-			expect.objectContaining({requireApiKey: false, apiKey: undefined}),
+			expect.objectContaining({requireApiKey: false}),
+		);
+	});
+
+	it('forwards the configured key for a keyless GET so the internal request authenticates', async () => {
+		const {getLocalConfig, safeLookupConfig, makeInternalRequest} =
+			loadController('configured-key');
+		safeLookupConfig.mockReturnValue(configEntry);
+		makeInternalRequest.mockResolvedValue({
+			statusCode: 200,
+			headers: {},
+			body: JSON.stringify({code: 0, message: 'OK'}),
+		});
+		const {res} = createMockResponse();
+
+		await getLocalConfig(
+			{query: {config: 'test-key'}, headers: {}} as unknown as Request,
+			res,
+		);
+
+		expect(makeInternalRequest).toHaveBeenCalledWith(
+			expect.objectContaining({apiKey: 'configured-key'}),
+		);
+	});
+
+	it('forwards the key supplied via Basic Auth for a GET request', async () => {
+		const {getLocalConfig, safeLookupConfig, makeInternalRequest} =
+			loadController('configured-key');
+		safeLookupConfig.mockReturnValue(configEntry);
+		makeInternalRequest.mockResolvedValue({
+			statusCode: 200,
+			headers: {},
+			body: JSON.stringify({code: 0, message: 'OK'}),
+		});
+		const {res} = createMockResponse();
+		const encoded = Buffer.from(':browser-key').toString('base64');
+
+		await getLocalConfig(
+			{
+				query: {config: 'test-key'},
+				headers: {authorization: `Basic ${encoded}`},
+			} as unknown as Request,
+			res,
+		);
+
+		expect(makeInternalRequest).toHaveBeenCalledWith(
+			expect.objectContaining({apiKey: 'browser-key'}),
 		);
 	});
 });

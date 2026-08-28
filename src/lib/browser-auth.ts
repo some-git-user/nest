@@ -36,3 +36,21 @@ export const isBrowserRequest = (req: Request): boolean => {
 	const accept = req.headers.accept ?? '';
 	return accept.includes('text/html');
 };
+
+/**
+ * Extracts the API key from a request, accepting either the configured API key
+ * header or an HTTP Basic Auth password (the browser credentials dialog).
+ * Returns an empty string when neither is present.
+ */
+export const extractApiKey = (req: Request, apiKeyHeader: string): string => {
+	const rawHeader = req.headers[apiKeyHeader.toLowerCase()];
+	const headerKey = Array.isArray(rawHeader)
+		? String(rawHeader[0] ?? '')
+		: String(rawHeader ?? '');
+
+	if (headerKey.length > 0) {
+		return headerKey;
+	}
+
+	return parseBasicAuthPassword(String(req.headers.authorization ?? ''));
+};
