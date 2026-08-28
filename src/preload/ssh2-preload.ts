@@ -59,19 +59,14 @@ export function setupRequireInterception(
 		}
 		// Check if this is the main ssh2 package - return preloaded ssh2
 		if (id === 'ssh2' && !inSsh2Require) {
-			console.log('[SSH2 Preload] Intercepted ssh2 package require');
 			if (preloaded) {
-				console.log('[SSH2 Preload] Returning preloaded ssh2 module');
 				return preloaded;
 			}
-			console.log('[SSH2 Preload] No preloaded ssh2, using original require');
 			inSsh2Require = true;
 			try {
-				const ssh2Module = (
+				return (
 					originalRequire as (id: string, ...args: unknown[]) => unknown
 				).call(originalRequire, id, ...args);
-				console.log('[SSH2 Preload] ssh2 package loaded successfully');
-				return ssh2Module;
 			} finally {
 				inSsh2Require = false;
 			}
@@ -119,7 +114,6 @@ export function setupSsh2Interception(): void {
 		isSea: () => boolean;
 		getRawAsset: (name: string) => Buffer;
 	};
-	console.log('[SSH2 Preload] Checking SEA mode:', seaModuleApi.isSea());
 	if (!seaModuleApi.isSea()) {
 		console.log(
 			'[SSH2 Preload] Not running in SEA mode, ssh2 will load normally',
@@ -138,11 +132,9 @@ export function setupSsh2Interception(): void {
 		preloadedSsh2 = result.preloadedSsh2;
 
 		// Intercept require calls to intercept ssh2's native module load
-		console.log('[SSH2 Preload] Setting up require() interception');
 		setupRequireInterception(result.Module, nativeAddonExports, preloadedSsh2);
 
 		interceptionSetup = true;
-		console.log('[SSH2 Preload] SSH2 native addon interception setup complete');
 
 		// Clean up temp file after a delay
 		// istanbul ignore next - cleanup runs asynchronously after test completes
@@ -151,12 +143,8 @@ export function setupSsh2Interception(): void {
 			if (result.tempPath) {
 				try {
 					fs.rmSync(result.tempPath);
-					console.log('[SSH2 Preload] Cleaned up temp sshcrypto.node file');
-				} catch (err) {
-					const errorMsg = getErrorMessage(err);
-					console.log(
-						`[SSH2 Preload] Temp file cleanup error (ignored): ${errorMsg}`,
-					);
+				} catch {
+					// A leftover temp file is harmless, nothing to report
 				}
 			}
 		}, 10000);
@@ -185,31 +173,17 @@ export function setupSsh2InSeaMode(
 } {
 	// Try to extract the native addon from SEA assets to a temp file
 	// Note: Native addon may not be available if it couldn't be built for this Node.js version
-	console.log(
-		'[SSH2 Preload] Attempting to extract sshcrypto.node from SEA assets',
-	);
 	let tempPath = '';
 	let nativeExports: Record<string, unknown> | null = null;
 
 	try {
 		const rawAsset = seaModuleApi.getRawAsset('sshcrypto.node');
-		console.log('[SSH2 Preload] Raw asset type:', typeof rawAsset);
 		// getRawAsset returns ArrayBuffer in SEA mode, convert to Buffer
 		const sshcryptoBuffer: Buffer = Buffer.isBuffer(rawAsset)
 			? rawAsset
 			: Buffer.from(rawAsset as ArrayBuffer);
-		console.log(
-			'[SSH2 Preload] Converted to Buffer:',
-			Buffer.isBuffer(sshcryptoBuffer),
-		);
 		tempPath = path.join(os.tmpdir(), `sshcrypto-${process.pid}.node`);
 		fs.writeFileSync(tempPath, sshcryptoBuffer);
-		console.log(`[SSH2 Preload] Extracted sshcrypto.node to ${tempPath}`);
-		console.log(
-			'[SSH2 Preload] File size:',
-			fs.statSync(tempPath).size,
-			'bytes',
-		);
 
 		// Load the native addon using a proper Module instance
 		// Note: We must use require('module') here to get a fresh Module constructor
@@ -221,20 +195,14 @@ export function setupSsh2InSeaMode(
 		const nativeModule = new Module('ssh2-crypto') as Module & {
 			exports: Record<string, unknown>;
 		};
-		console.log('[SSH2 Preload] Calling process.dlopen() with Module instance');
 		try {
 			process.dlopen(nativeModule, tempPath);
-			console.log('[SSH2 Preload] Loaded native addon via dlopen');
 			nativeExports = nativeModule.exports as Record<string, unknown>;
-			console.log(
-				'[SSH2 Preload] nativeAddon exports:',
-				Object.keys(nativeExports),
-			);
 		} catch (dlopenErr) {
 			// istanbul ignore next - dlopen failure is hard to test in SEA mode
-			console.error('[SSH2 Preload] dlopen failed:', dlopenErr);
-			console.log(
-				'[SSH2 Preload] Native addon failed, will use ssh2 JS fallback',
+			console.error(
+				'[SSH2 Preload] dlopen failed, ssh2 will use JavaScript crypto fallback:',
+				dlopenErr,
 			);
 			// Clean up temp file if dlopen failed
 			try {
@@ -250,14 +218,14 @@ export function setupSsh2InSeaMode(
 		// Native addon not in SEA assets or extraction failed
 		// This is expected if the native addon couldn't be built for this Node.js version
 		const errorMsg = getErrorMessage(err);
-		console.log('[SSH2 Preload] No native addon in SEA assets:', errorMsg);
-		console.log('[SSH2 Preload] ssh2 will use JavaScript crypto fallback');
+		console.log(
+			`[SSH2 Preload] No native addon in SEA assets (${errorMsg}), ssh2 will use JavaScript crypto fallback`,
+		);
 		tempPath = '';
 		nativeExports = null;
 	}
 
 	// Preload ssh2 module now that native addon is loaded (or JS fallback will be used)
-	console.log('[SSH2 Preload] Preloading ssh2 module');
 	let preloadedSsh2: Record<string, unknown> | null = null;
 	try {
 		// Preload ssh2 module using require() to ensure it loads with our
@@ -266,8 +234,6 @@ export function setupSsh2InSeaMode(
 		// to catch that require() call.
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		preloadedSsh2 = require('ssh2') as Record<string, unknown>;
-		console.log('[SSH2 Preload] ssh2 module preloaded successfully');
-		console.log('[SSH2 Preload] ssh2 exports:', Object.keys(preloadedSsh2));
 	} catch (preloadErr) {
 		// istanbul ignore next - ssh2 preload failure is hard to test in Jest isolation
 		console.error('[SSH2 Preload] Failed to preload ssh2:', preloadErr);

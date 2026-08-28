@@ -59,7 +59,7 @@ export const EXTERNAL_LINK_GUARD_SCRIPT = `// External link guard script
  */
 export const PLUGIN_EXAMPLE_FORM_SCRIPT = `// Form submission handler for plugin example forms
 // Filters empty parameters and handles GET/POST submissions
-/* global document, HTMLFormElement, console, window, URL, FormData, HTMLInputElement */
+/* global document, HTMLFormElement, window, URL, FormData, HTMLInputElement */
 
 (function () {
 	document.addEventListener(
@@ -73,22 +73,15 @@ export const PLUGIN_EXAMPLE_FORM_SCRIPT = `// Form submission handler for plugin
 				return;
 			}
 
-			console.log('[nest-form-filter] intercepting form submit');
 			event.preventDefault();
 
 			const method = (target.getAttribute('method') || 'get').toLowerCase();
-			console.log('[nest-form-filter] method:', method);
-
 			const action = target.getAttribute('action') || window.location.pathname;
-			console.log('[nest-form-filter] action:', action);
-
 			const destination = new URL(action, window.location.href);
 
 			if (method === 'get') {
 				// GET: Build query string and navigate
 				const formData = new FormData(target);
-				const entries = Array.from(formData.entries());
-				console.log('[nest-form-filter] form fields before filter:', entries);
 
 				destination.search = '';
 				for (const [name, value] of formData.entries()) {
@@ -97,13 +90,9 @@ export const PLUGIN_EXAMPLE_FORM_SCRIPT = `// Form submission handler for plugin
 					}
 				}
 
-				const finalUrl = destination.toString();
-				console.log('[nest-form-filter] navigating to:', finalUrl);
-				window.location.assign(finalUrl);
+				window.location.assign(destination.toString());
 			} else {
 				// POST: Prepare form with filtered data and submit
-				console.log('[nest-form-filter] handling POST form');
-
 				const formData = new FormData(target);
 				const filtered = new FormData();
 

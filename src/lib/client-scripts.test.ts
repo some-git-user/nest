@@ -94,7 +94,9 @@ describe('client-scripts', () => {
 
 		it('should handle POST method', () => {
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('else {');
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('handling POST form');
+			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
+				'POST: Prepare form with filtered data and submit',
+			);
 		});
 
 		it('should filter empty form values', () => {
@@ -121,18 +123,6 @@ describe('client-scripts', () => {
 
 		it('should use capture phase for event listener', () => {
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('true,');
-		});
-
-		it('should log form processing steps', () => {
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'[nest-form-filter] intercepting form submit',
-			);
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'[nest-form-filter] method:',
-			);
-			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain(
-				'[nest-form-filter] action:',
-			);
 		});
 	});
 });
