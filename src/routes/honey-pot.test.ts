@@ -91,10 +91,10 @@ describe('/nagios/honey-pot route', () => {
 		expect(String(body.message)).toContain('max_paths_per_ip=6');
 		expect(String(body.message)).toContain('most_active_ip=198.51.100.44');
 		expect(String(body.performanceData)).toContain(
-			"'honeypot_probable_scan_ips':1c",
+			"'honeypot_probable_scan_ips'=1c",
 		);
 		expect(String(body.performanceData)).toContain(
-			"'honeypot_max_paths_per_ip':6c",
+			"'honeypot_max_paths_per_ip'=6c",
 		);
 	});
 
@@ -111,10 +111,10 @@ describe('/nagios/honey-pot route', () => {
 		expect(String(body.message)).toContain('port_scan_ips=1');
 		expect(String(body.message)).toContain('protocol_errors=3');
 		expect(String(body.performanceData)).toContain(
-			"'honeypot_probable_port_scan_ips':1c",
+			"'honeypot_probable_port_scan_ips'=1c",
 		);
 		expect(String(body.performanceData)).toContain(
-			"'honeypot_protocol_errors':3c",
+			"'honeypot_protocol_errors'=3c",
 		);
 	});
 

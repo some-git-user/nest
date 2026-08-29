@@ -368,7 +368,7 @@ module.exports = pluginModule;
 		expect(res.body).toHaveProperty('code', 0);
 		expect(res.body).toHaveProperty(
 			'performanceData',
-			"'WATER BOILER TEMP':55C°;WARN=80;CRIT=90;MIN=0;MAX=100 'OUTDOOR TEMP':21C°;WARN=30;CRIT=40;MIN=-20;MAX=50",
+			"'WATER BOILER TEMP'=55C°;80;90;0;100 'OUTDOOR TEMP'=21C°;30;40;-20;50",
 		);
 	});
 
@@ -397,7 +397,7 @@ module.exports = pluginModule;
 		expect(res.body).toHaveProperty('code', 3);
 		expect(res.body).toHaveProperty(
 			'performanceData',
-			"'WATER BOILER TEMP':55C°;WARN=80;CRIT=90;MIN=0;MAX=100 'OUTDOOR TEMP':21C°;WARN=30;CRIT=40;MIN=-20;MAX=50",
+			"'WATER BOILER TEMP'=55C°;80;90;0;100 'OUTDOOR TEMP'=21C°;30;40;-20;50",
 		);
 	});
 

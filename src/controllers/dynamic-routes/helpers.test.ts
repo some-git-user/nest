@@ -178,7 +178,7 @@ describe('dynamic-routes helpers', () => {
 
 		expect(normalized.message).toContain('did not return a message');
 		expect(normalized.code).toBe(NagiosReturnCodes.UNKNOWN);
-		expect(normalized.performanceData).toBeUndefined();
+		expect(normalized.performanceData).toEqual([]);
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining('returned invalid performanceData'),
 		);
@@ -196,7 +196,7 @@ describe('dynamic-routes helpers', () => {
 			warn,
 		);
 
-		expect(normalized.performanceData).toBeUndefined();
+		expect(normalized.performanceData).toEqual([]);
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining('returned invalid performanceData'),
 		);
@@ -214,7 +214,7 @@ describe('dynamic-routes helpers', () => {
 			warn,
 		);
 
-		expect(normalized.performanceData).toBeUndefined();
+		expect(normalized.performanceData).toEqual([]);
 		expect(warn).toHaveBeenCalledWith(
 			expect.stringContaining('returned invalid performanceData'),
 		);
@@ -239,6 +239,44 @@ describe('dynamic-routes helpers', () => {
 			{label: 'cpu', value: 50, uom: '%'},
 			{label: 'memory', value: 75, uom: '%'},
 		]);
+		expect(warn).not.toHaveBeenCalled();
+	});
+
+	test('normalizePluginResult accepts entries whose optional fields are present but undefined', () => {
+		// Regression: check_nvidia_smi builds its entries with
+		// `warn: thresholds.x !== undefined ? String(...) : undefined`, so a metric
+		// without a configured threshold has the key present with an undefined
+		// value. That used to invalidate the whole array, which dropped every
+		// metric and logged a misleading warning on each run.
+		const warn = jest.fn();
+		const normalized = normalizePluginResult(
+			{
+				message: 'OK: NVIDIA driver detected',
+				code: 0,
+				performanceData: [
+					{
+						label: 'gpu_count',
+						value: '1',
+						uom: '',
+						min: '0',
+						max: undefined,
+					},
+					{
+						label: 'gpu0_utilization_pct',
+						value: '42',
+						uom: '%',
+						warn: undefined,
+						crit: undefined,
+						min: '0',
+						max: '100',
+					},
+				],
+			},
+			'/tmp/check.js',
+			warn,
+		);
+
+		expect(normalized.performanceData).toHaveLength(2);
 		expect(warn).not.toHaveBeenCalled();
 	});
 

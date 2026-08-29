@@ -56,9 +56,9 @@ describe('app-info route (branch coverage)', () => {
 		expect(body).toHaveProperty('code', 0);
 		expect(String(body.message)).toContain('cpu%=0.00');
 		expect(String(body.message)).toContain('mem%=0.00');
-		expect(String(body.performanceData)).toContain("'cpu_load_1min':");
+		expect(String(body.performanceData)).toContain("'cpu_load_1min'=");
 		expect(String(body.performanceData)).toContain(
-			"'process_rss_bytes':123456B",
+			"'process_rss_bytes'=123456B",
 		);
 	});
 

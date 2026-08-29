@@ -2,8 +2,8 @@ import {getErrorMessage} from '../../lib/error-message';
 import {
 	type NagiosReturnMessage,
 	createNagiosReturnMessage,
-	isPerformanceData,
-	isPerformanceDataArray,
+	describeForLog,
+	sanitizePerformanceData,
 } from '../../lib/nagios';
 import type {NagiosPerformanceData} from '../../types/nagios';
 import {NagiosReturnCode, NagiosReturnCodes} from '../../types/nagios';
@@ -131,16 +131,14 @@ export const normalizePluginResult = (
 	if ('performanceData' in (result as Record<string, unknown>)) {
 		const unknownPerformanceData: unknown = (result as Record<string, unknown>)
 			.performanceData;
-		if (isPerformanceDataArray(unknownPerformanceData)) {
-			performanceData = unknownPerformanceData;
-		} else if (isPerformanceData(unknownPerformanceData)) {
-			// Normalize single PerformanceData to array
-			performanceData = [unknownPerformanceData];
-		} else {
+		// Normalize instead of validating: a plugin reporting a threshold as a
+		// number, or leaving a key present but undefined, still reports real
+		// metrics, and one unusable entry must not discard the others.
+		const {entries, dropped} = sanitizePerformanceData(unknownPerformanceData);
+		performanceData = entries;
+		if (dropped.length > 0) {
 			onWarn(
-				`Plugin ${jsFilePath} returned invalid performanceData: ${JSON.stringify(
-					unknownPerformanceData,
-				)}`,
+				`Plugin ${jsFilePath} returned invalid performanceData: ${describeForLog(dropped)}`,
 			);
 		}
 	}

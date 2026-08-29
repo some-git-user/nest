@@ -498,9 +498,9 @@ describe('honey-pot controller', () => {
 			expect(response?.message).toContain('port_scan_ips=1');
 			expect(response?.message).toContain('protocol_errors=2');
 			// Performance data contains full labels with format 'label':valueuom
-			expect(response?.performanceData).toContain("'honeypot_probes':10c");
-			expect(response?.performanceData).toContain("'honeypot_suspicious':5c");
-			expect(response?.performanceData).toContain("'honeypot_unique_paths':8c");
+			expect(response?.performanceData).toContain("'honeypot_probes'=10c");
+			expect(response?.performanceData).toContain("'honeypot_suspicious'=5c");
+			expect(response?.performanceData).toContain("'honeypot_unique_paths'=8c");
 		});
 
 		it('should prioritize CRITICAL over WARNING for multiple metrics', () => {
