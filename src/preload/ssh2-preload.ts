@@ -136,7 +136,9 @@ export function setupSsh2Interception(): void {
 
 		interceptionSetup = true;
 
-		// Clean up temp file after a delay
+		// Clean up temp file after a delay.
+		// unref() so this pending timer never keeps the process (or a Jest
+		// worker) alive: the cleanup is best-effort and must not block exit.
 		// istanbul ignore next - cleanup runs asynchronously after test completes
 		setTimeout(() => {
 			// Only cleanup if tempPath is not empty (native addon was extracted)
@@ -147,7 +149,7 @@ export function setupSsh2Interception(): void {
 					// A leftover temp file is harmless, nothing to report
 				}
 			}
-		}, 10000);
+		}, 10000).unref();
 	} catch (err) {
 		const errorMsg = getErrorMessage(err);
 		console.error(
