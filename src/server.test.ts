@@ -209,6 +209,9 @@ describe('server bootstrap', () => {
 				'Security recommendation: ALLOWED_IPS is not configured; access defaults to loopback addresses only (127.0.0.1, ::1). Add trusted monitoring source IPs for remote access.',
 			]),
 		}));
+		jest.doMock('./lib/csrf-guard', () => ({
+			createCsrfGuardMiddleware: jest.fn(() => 'csrf-guard-middleware'),
+		}));
 		jest.doMock('./lib/cron/scheduler', () => ({runScheduler: scheduler}));
 		jest.doMock('./routes/app-info', () => ({
 			__esModule: true,
@@ -417,6 +420,7 @@ describe('server bootstrap', () => {
 		expect(use).toHaveBeenCalledWith(helmetMiddleware);
 		expect(use).toHaveBeenCalledWith(rateLimitMiddleware);
 		expect(use).toHaveBeenCalledWith(accessControlMiddleware);
+		expect(use).toHaveBeenCalledWith('csrf-guard-middleware');
 		expect(use).toHaveBeenCalledWith('/', 'dynamicRoutesRouter');
 		expect(use).toHaveBeenCalledWith('/nagios', 'appInfoRouter');
 		expect(use).toHaveBeenCalledWith('/nagios/honey-pot', 'honeyPotRouter');
@@ -759,6 +763,7 @@ describe('server bootstrap', () => {
 		expect(use).toHaveBeenCalledWith(helmetMiddleware);
 		expect(use).toHaveBeenCalledWith(rateLimitMiddleware);
 		expect(use).toHaveBeenCalledWith(accessControlMiddleware);
+		expect(use).toHaveBeenCalledWith(expect.any(Function));
 		expect(rootSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'text/html; charset=utf-8',

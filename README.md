@@ -208,6 +208,9 @@ Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST
 ## Security
 
 - Helmet headers, IP allowlist, rate limiting
+- CSRF guard on state-changing requests: a browser `Origin` that is not this
+  server, or `Sec-Fetch-Site: cross-site`, is rejected. curl/Nagios send neither
+  header and are unaffected.
 - Plugin/config file ownership/permission validation in production
 - CSP headers and HTML sanitization on help pages
 - Default `ALLOWED_IPS` restricted to loopback only

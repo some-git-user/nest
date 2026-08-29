@@ -11,6 +11,7 @@ import {
 	PLUGIN_EXAMPLE_FORM_SCRIPT,
 } from './lib/client-scripts';
 import {runScheduler} from './lib/cron/scheduler';
+import {createCsrfGuardMiddleware} from './lib/csrf-guard';
 import {getErrorMessage} from './lib/error-message';
 import {
 	EXTERNAL_LINK_GUARD_SCRIPT_PATH,
@@ -226,6 +227,9 @@ app.use(
 		allowedIps: env.ALLOWED_IPS,
 	}),
 );
+// After access control: an unauthenticated caller is rejected before the CSRF
+// guard spends work on it, and the guard only ever adds a rejection on top.
+app.use(createCsrfGuardMiddleware());
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
 
