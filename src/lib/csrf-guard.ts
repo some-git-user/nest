@@ -29,6 +29,25 @@ import {HttpStatusCodes} from './http-status-codes';
  *   - `Sec-Fetch-Site: cross-site`         -> rejected
  *   - `Origin` that is not this server     -> rejected
  *
+ * One browser quirk makes the third rule need an exception. A page with an
+ * opaque origin sends the literal `Origin: null`, and `Referrer-Policy:
+ * no-referrer` - which helmet puts on every response here - is enough to make
+ * a document opaque for this purpose. A form POST from the Web UI therefore
+ * arrives as `Origin: null` even though it is same-origin, and comparing that
+ * string against this server would reject the operator's own form. A `null`
+ * origin is therefore read as "no origin information", exactly like a missing
+ * `Origin`.
+ *
+ * That does not open a hole, because the rejection of an attacker never depends
+ * on `Origin` alone: a page on another site is stamped `Sec-Fetch-Site:
+ * cross-site` by the browser whether or not it hides its referrer, and that
+ * check runs first. Measured against headless Chromium, a cross-site form POST
+ * from a `no-referrer` page arrives as `Origin: null` + `Sec-Fetch-Site:
+ * cross-site` (rejected), while the Web UI's own form arrives as `Origin:
+ * null` + `Sec-Fetch-Site: same-origin` (allowed). Both headers are forbidden
+ * for scripts, so trusting them is the same trust the rules above already place
+ * in them.
+ *
  * Only state-changing methods are guarded. Guarding GET would break following
  * a link to the Web UI from another site, which arrives as `cross-site`.
  */
@@ -38,6 +57,13 @@ const SEC_FETCH_SITE_CROSS_SITE = 'cross-site';
 
 /** Default port of the HTTPS listener; a Host header may or may not carry it. */
 const HTTPS_DEFAULT_PORT_SUFFIX = ':443';
+
+/**
+ * The `Origin` a browser sends for a document with an opaque origin, e.g. one
+ * served with `Referrer-Policy: no-referrer`. It says nothing about where the
+ * request came from, so it is treated as a missing `Origin`.
+ */
+const OPAQUE_ORIGIN = 'null';
 
 /**
  * Reads a request header as a single string. Node lowercases header names, and
@@ -60,9 +86,19 @@ const expectedOrigin = (req: Request): string => {
 	return `https://${host}`;
 };
 
+/**
+ * Request `Origin`, normalised: the opaque `null` origin is reported as empty,
+ * because it carries no information about where the request came from and must
+ * not be compared against this server. See the header comment.
+ */
+const readOrigin = (req: Request): string => {
+	const origin = readHeader(req, 'origin');
+	return origin.toLowerCase() === OPAQUE_ORIGIN ? '' : origin;
+};
+
 /** True when the request carries no trace of having been made by a browser. */
 const looksLikeNonBrowserClient = (req: Request): boolean =>
-	readHeader(req, 'origin').length === 0 &&
+	readOrigin(req).length === 0 &&
 	readHeader(req, 'sec-fetch-site').length === 0;
 
 export const createCsrfGuardMiddleware = () => {
@@ -88,7 +124,7 @@ export const createCsrfGuardMiddleware = () => {
 			);
 		}
 
-		const origin = readHeader(req, 'origin');
+		const origin = readOrigin(req);
 		if (origin.length > 0 && origin !== expectedOrigin(req)) {
 			return sendNagiosUnknownError(
 				res,

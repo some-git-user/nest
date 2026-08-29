@@ -187,6 +187,64 @@ describe('csrf guard middleware', () => {
 		expect(status).not.toHaveBeenCalled();
 	});
 
+	// ───────────────────────── Opaque (null) Origin ─────────────────────────
+	//
+	// A page served with `Referrer-Policy: no-referrer` - which helmet sets on
+	// every response here - has an opaque origin for form-POST navigations, so
+	// the browser sends the literal `Origin: null` even for the Web UI's own
+	// same-origin form. It must be read as "no origin information".
+
+	test('accepts the Web UI form POST that arrives with an opaque Origin', () => {
+		const {next, status} = invoke({
+			method: 'POST',
+			headers: {
+				host: 'nest.example',
+				origin: 'null',
+				'sec-fetch-site': 'same-origin',
+			},
+		});
+		expect(next).toHaveBeenCalledTimes(1);
+		expect(status).not.toHaveBeenCalled();
+	});
+
+	test('treats an opaque Origin with no Sec-Fetch-Site as a non-browser client', () => {
+		const {next, status} = invoke({
+			method: 'POST',
+			headers: {host: 'nest.example', origin: 'null'},
+		});
+		expect(next).toHaveBeenCalledTimes(1);
+		expect(status).not.toHaveBeenCalled();
+	});
+
+	test('matches an opaque Origin case-insensitively', () => {
+		const {next, status} = invoke({
+			method: 'POST',
+			headers: {
+				host: 'nest.example',
+				origin: 'NULL',
+				'sec-fetch-site': 'same-origin',
+			},
+		});
+		expect(next).toHaveBeenCalledTimes(1);
+		expect(status).not.toHaveBeenCalled();
+	});
+
+	test('still rejects an opaque Origin that the browser marked cross-site', () => {
+		const {next, status, send} = invoke({
+			method: 'POST',
+			headers: {
+				host: 'nest.example',
+				origin: 'null',
+				'sec-fetch-site': 'cross-site',
+			},
+		});
+		expect(next).not.toHaveBeenCalled();
+		expect(status).toHaveBeenCalledWith(HttpStatusCodes.FORBIDDEN);
+		expect(String((send.mock.calls[0] as [NagiosBody])[0].message)).toContain(
+			'cross-site',
+		);
+	});
+
 	// ────────────────────────── End-to-end over HTTP ──────────────────────────
 
 	const makeApp = () => {
@@ -228,6 +286,15 @@ describe('csrf guard middleware', () => {
 			.post('/ok')
 			.set('Host', 'nest.example')
 			.set('Origin', 'https://nest.example')
+			.set('Sec-Fetch-Site', 'same-origin');
+		expect(res.status).toBe(HttpStatusCodes.OK);
+	});
+
+	test('allows a no-referrer form POST that carries an opaque Origin', async () => {
+		const res = await request(makeApp())
+			.post('/ok')
+			.set('Host', 'nest.example')
+			.set('Origin', 'null')
 			.set('Sec-Fetch-Site', 'same-origin');
 		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
