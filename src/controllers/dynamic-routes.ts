@@ -13,6 +13,7 @@ import {
 import {sendNagiosUnknownError} from '../lib/http-nagios';
 import {logger} from '../lib/logger';
 import {createNagiosReturnMessage} from '../lib/nagios';
+import {buildPluginSandbox} from '../lib/plugin-sandbox';
 import {vmApi} from '../routes/dynamic-routes';
 import {NagiosReturnCode, NagiosReturnCodes} from '../types/nagios';
 import type {HtmlTemplateString} from '../types/plugin';
@@ -189,14 +190,15 @@ export const executePluginFromMemory = (
 	}
 
 	const moduleExports: Record<string, unknown> = {};
-	const context: vm.Context = vmApi.createContext({
-		...globalThis,
-		require: createRequire(__filename),
-		module: {exports: moduleExports},
-		exports: moduleExports,
-		__filename: virtualPath,
-		__dirname: pluginsDir,
-	});
+	const context: vm.Context = vmApi.createContext(
+		buildPluginSandbox({
+			require: createRequire(__filename),
+			module: {exports: moduleExports},
+			exports: moduleExports,
+			__filename: virtualPath,
+			__dirname: pluginsDir,
+		}),
+	);
 
 	vmApi.runInContext(transpiledCode, context);
 	// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access

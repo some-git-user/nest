@@ -13,6 +13,7 @@ import {
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {logger} from '../lib/logger';
+import {buildPluginSandbox} from '../lib/plugin-sandbox';
 import {commandToRoutePath} from '../lib/plugin-utils';
 import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
 import {
@@ -412,14 +413,15 @@ export const executePluginInMemory = (virtualPath: string): unknown => {
 	// TypeScript transpiles to Object.defineProperty(exports, "__esModule", ...)
 	// so exports and module.exports must reference the SAME object
 	const moduleExports: Record<string, unknown> = {};
-	const context: vm.Context = vmApi.createContext({
-		...globalThis,
-		require: createRequire(__filename),
-		module: {exports: moduleExports},
-		exports: moduleExports, // Same reference as module.exports
-		__filename: virtualPath,
-		__dirname: pluginsDir,
-	});
+	const context: vm.Context = vmApi.createContext(
+		buildPluginSandbox({
+			require: createRequire(__filename),
+			module: {exports: moduleExports},
+			exports: moduleExports, // Same reference as module.exports
+			__filename: virtualPath,
+			__dirname: pluginsDir,
+		}),
+	);
 
 	// Execute transpiled code directly in vm context
 	// The code uses Object.defineProperty(exports, "__esModule", ...)
