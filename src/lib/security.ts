@@ -19,6 +19,7 @@ export type AccessControlConfig = {
 export type RecommendedSecurityConfig = {
 	NODE_ENV?: string;
 	API_KEY?: string;
+	ADMIN_UI_PASSWORD?: string;
 	ALLOWED_IPS?: string;
 	RATE_LIMIT_WINDOW_MS?: number;
 	RATE_LIMIT_MAX?: number;
@@ -82,6 +83,12 @@ export const getRecommendedSecurityWarnings = (
 	if (String(config.API_KEY ?? '').trim().length === 0) {
 		warnings.push(
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
+		);
+	}
+
+	if (String(config.ADMIN_UI_PASSWORD ?? '').trim().length === 0) {
+		warnings.push(
+			'Security recommendation: ADMIN_UI_PASSWORD is not configured; the admin UI is mounted but no credential can grant access to it.',
 		);
 	}
 

@@ -6,6 +6,7 @@ import https from 'https';
 // Verify config files against whitelist
 import path from 'path';
 import {env} from './config/env';
+import {ADMIN_UI_MOUNT_PATH} from './lib/admin-auth';
 import {
 	EXTERNAL_LINK_GUARD_SCRIPT,
 	PLUGIN_EXAMPLE_FORM_SCRIPT,
@@ -22,6 +23,7 @@ import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
 import {sendNagiosUnknownError} from './lib/http-nagios';
 import {HttpStatusCodes} from './lib/http-status-codes';
 import {
+	getConfigDrift,
 	hasRuntimeValidationFailed,
 	loadConfigAtStartup,
 	parseConfigFile,
@@ -45,6 +47,7 @@ import {
 } from './lib/startup-warning-registry';
 import {ensureTlsCertificate} from './lib/tls';
 import {getAppVersion} from './lib/version';
+import adminLocalConfig from './routes/admin-local-config';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
 	pluginStartupWarnings,
@@ -69,11 +72,67 @@ const escapeHtml = (value: string): string =>
 		.replace(/>/g, '&gt;')
 		.replace(/"/g, '&quot;');
 
+const renderExampleFormHtml = (example: PluginRouteExample): string => {
+	if (example.kind === 'link') {
+		return `<a class="plugin-example-link" href="${example.href}">${escapeHtml(example.label)}</a>`;
+	}
+
+	const fieldsHtml = example.fields
+		.map((field) => {
+			const requiredAttr = field.required ? ' required' : '';
+			const valueAttr = field.defaultValue
+				? ` value="${escapeHtml(field.defaultValue)}"`
+				: '';
+			const requiredLabel = field.required
+				? ' <span class="plugin-example-required" title="Required field">*</span>'
+				: '';
+			return `<label class="plugin-example-field"><span class="plugin-example-field-label">${escapeHtml(
+				field.label,
+			)}${requiredLabel}</span><input name="${escapeHtml(
+				field.name,
+			)}" type="${escapeHtml(field.type)}"${requiredAttr}${valueAttr}></label>`;
+		})
+		.join('');
+
+	return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions"><button type="submit">Run</button></div></form>`;
+};
+
+/**
+ * Warning shown while the file on disk and the whitelist disagree.
+ *
+ * Saving through the admin UI rewrites the file without touching the whitelist,
+ * so this state is expected after every edit and must stay visible: an operator
+ * who forgets to approve the hash loses *all* presets at the next restart, not
+ * just the ones they changed. The message embeds the exact whitelist line so it
+ * can be copied verbatim.
+ */
+const getConfigDriftWarning = (): string | undefined => {
+	const drift = getConfigDrift();
+	if (!drift.drifted) {
+		return undefined;
+	}
+
+	if (drift.currentHash === undefined) {
+		return (
+			'Config drift: the local config presets file on disk is awaiting whitelist approval ' +
+			'because the file was removed after startup. Restore it from a backup, or write it ' +
+			'again and approve the new hash, then restart the service.'
+		);
+	}
+
+	return (
+		'Config drift: the local config presets file on disk is awaiting whitelist approval. ' +
+		`The presets currently served are the previously approved ones. Add "configs/local-presets.conf ${drift.currentHash}" to ` +
+		'plugins/plugin-whitelist.txt and restart the service to activate the file on disk.'
+	);
+};
+
 const buildOverviewPageHtml = (
 	host: string,
 	port: number,
 	warnings: string[],
 	pluginRoutes: string[],
+	adminUiPath: string,
 	pluginRouteExamples?: Record<string, PluginRouteExample[]>,
 	localConfigPresets?: Map<
 		string,
@@ -85,6 +144,10 @@ const buildOverviewPageHtml = (
 	const staticRoutes = [
 		{path: '/nagios', helpPath: '/nagios?help'},
 		{path: '/nagios/honey-pot', helpPath: '/nagios/honey-pot?help'},
+		// The admin UI is always mounted; when no password is configured it
+		// serves a "not configured" page rather than 404, so the link is always
+		// reachable.
+		{path: adminUiPath, helpPath: `${adminUiPath}/local-config`},
 	];
 
 	const staticRouteItems = staticRoutes
@@ -113,32 +176,7 @@ const buildOverviewPageHtml = (
 				(example) => example.kind === 'link',
 			);
 			const primaryHref = firstLinkExample ? firstLinkExample.href : routePath;
-			const examplesHtml = examples
-				.map((example) => {
-					if (example.kind === 'link') {
-						return `<a class="plugin-example-link" href="${example.href}">${escapeHtml(example.label)}</a>`;
-					}
-
-					const fieldsHtml = example.fields
-						.map((field) => {
-							const requiredAttr = field.required ? ' required' : '';
-							const valueAttr = field.defaultValue
-								? ` value="${escapeHtml(field.defaultValue)}"`
-								: '';
-							const requiredLabel = field.required
-								? ' <span class="plugin-example-required" title="Required field">*</span>'
-								: '';
-							return `<label class="plugin-example-field"><span class="plugin-example-field-label">${escapeHtml(
-								field.label,
-							)}${requiredLabel}</span><input name="${escapeHtml(
-								field.name,
-							)}" type="${escapeHtml(field.type)}"${requiredAttr}${valueAttr}></label>`;
-						})
-						.join('');
-
-					return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions"><button type="submit">Run</button></div></form>`;
-				})
-				.join('');
+			const examplesHtml = examples.map(renderExampleFormHtml).join('');
 
 			return `<li class="plugin-route-item"><div class="plugin-route-header"><a href="${primaryHref}">${routePath}</a> - <a href="${routePath}?help">help</a></div>${examplesHtml ? `<div class="plugin-examples">${examplesHtml}</div>` : ''}</li>`;
 		})
@@ -253,15 +291,20 @@ setWhitelistCache(configVerification.whitelistEntries);
 // Load config once at startup (hash validation integrated)
 loadConfigAtStartup();
 
-const getStartupWarningsAtRuntime = (): string[] =>
-	Array.from(
+const getStartupWarningsAtRuntime = (): string[] => {
+	const driftWarning = getConfigDriftWarning();
+	return Array.from(
 		new Set([
 			...getStartupWarnings(),
 			...pluginStartupWarnings,
 			...securityWarnings,
 			...configVerification.warnings,
+			// A drift that appears after startup - typically an edit made through the
+			// admin UI - has to be as visible as one detected during boot.
+			...(driftWarning ? [driftWarning] : []),
 		]),
 	);
+};
 for (const warning of securityWarnings) {
 	logger.warn(warning);
 }
@@ -305,6 +348,7 @@ app.get('/', (_req: Request, res: Response) => {
 		env.PORT,
 		getStartupWarningsAtRuntime(),
 		registeredPluginRoutes,
+		ADMIN_UI_MOUNT_PATH,
 		registeredPluginRouteExamples,
 		localConfigPresets,
 		validationFailed,
@@ -315,6 +359,10 @@ app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);
 app.use('/nagios/honey-pot', honeyPot);
 app.use('/local-config', localConfig);
+// Mounted after access control on purpose: reaching the admin UI requires the
+// global API key *and* the admin credential, so a leaked monitoring key alone
+// can never rewrite the config file.
+app.use(ADMIN_UI_MOUNT_PATH, adminLocalConfig);
 // 404 handler for unknown routes
 app.use((req: Request, res: Response) => {
 	recordHoneypotSignal(req, 'unknown-route');

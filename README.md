@@ -29,21 +29,24 @@ npm run build:deb    # Debian packages (build_deb/)
 
 Create `.env` from `.env.example`:
 
-| Variable                  | Default               | Description                                |
-| ------------------------- | --------------------- | ------------------------------------------ |
-| `NODE_ENV`                | `development`         | `development` or `production`              |
-| `HOST`                    | `localhost`           | Network interface to bind                  |
-| `PORT`                    | `5000`                | HTTPS server port                          |
-| `TLS_CERT_PATH`           | `certs/nest-cert.pem` | TLS certificate file                       |
-| `TLS_KEY_PATH`            | `certs/nest-key.pem`  | TLS private key file                       |
-| `PLUGINS_DIR`             | `plugins`             | Plugin directory                           |
-| `LOG_FILE_PATH`           | `logs/nest.log`       | Log file path                              |
-| `MAX_LOG_FILE_SIZE_BYTES` | `1048576`             | Log rotation size (1MB)                    |
-| `API_KEY_HEADER`          | `x-api-key`           | API key header name                        |
-| `API_KEY`                 | (empty)               | API key for authentication                 |
-| `ALLOWED_IPS`             | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all |
-| `RATE_LIMIT_WINDOW_MS`    | `60000`               | Rate limit window (ms)                     |
-| `RATE_LIMIT_MAX`          | `120`                 | Max requests per window                    |
+| Variable                     | Default               | Description                                |
+| ---------------------------- | --------------------- | ------------------------------------------ |
+| `NODE_ENV`                   | `development`         | `development` or `production`              |
+| `HOST`                       | `localhost`           | Network interface to bind                  |
+| `PORT`                       | `5000`                | HTTPS server port                          |
+| `TLS_CERT_PATH`              | `certs/nest-cert.pem` | TLS certificate file                       |
+| `TLS_KEY_PATH`               | `certs/nest-key.pem`  | TLS private key file                       |
+| `PLUGINS_DIR`                | `plugins`             | Plugin directory                           |
+| `LOG_FILE_PATH`              | `logs/nest.log`       | Log file path                              |
+| `MAX_LOG_FILE_SIZE_BYTES`    | `1048576`             | Log rotation size (1MB)                    |
+| `API_KEY_HEADER`             | `x-api-key`           | API key header name                        |
+| `API_KEY`                    | (empty)               | API key for authentication                 |
+| `ALLOWED_IPS`                | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all |
+| `RATE_LIMIT_WINDOW_MS`       | `60000`               | Rate limit window (ms)                     |
+| `RATE_LIMIT_MAX`             | `120`                 | Max requests per window                    |
+| `ADMIN_UI_PASSWORD`          | (empty)               | Password for the `/admin` config editor    |
+| `ADMIN_SESSION_TTL_SECONDS`  | `900`                 | Admin session cookie lifetime (s)          |
+| `ADMIN_LOGIN_RATE_LIMIT_MAX` | `5`                   | Max admin login attempts per window        |
 
 TLS certificates are auto-generated if missing.
 
@@ -60,6 +63,7 @@ Config loading order: `--configPath` > `NEST_CONFIG_FILE` > `/etc/nest/nest.conf
 | `GET`  | `/nagios/honey-pot` | Honeypot status     |
 | `GET`  | `/plugins/<name>`   | Plugin check        |
 | `POST` | `/local-config`     | Local config preset |
+| `GET`  | `/admin`            | Admin config editor |
 
 Add `?help` to any route for documentation. Unknown routes return 404 (Nagios code=3).
 
@@ -97,6 +101,20 @@ debian_eol_warning=check-debian-eol warningEolRemainingDays=90 criticalEolRemain
 ```
 
 See `plugins/configs/local-presets.conf.example` for setup instructions and security considerations.
+
+### Admin UI (Local Config Editor)
+
+`/admin` is a web editor for `plugins/configs/local-presets.conf`. It is always
+mounted, and protected by `ADMIN_UI_PASSWORD` in addition to the global API key:
+holding the monitoring key alone can never rewrite the config file. Without a
+password every admin route renders a "not configured" help page and startup
+prints a warning.
+
+Saving never touches `plugins/plugin-whitelist.txt`. The presets in memory stay
+the whitelist-approved ones, the edited file waits on disk, and a persistent
+drift banner shows the exact `configs/local-presets.conf <sha256>` line to add
+to the whitelist plus a restart. "Revert to approved" restores the bytes
+captured at startup if the edit was accidental.
 
 ## Plugin Development
 

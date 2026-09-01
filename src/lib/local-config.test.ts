@@ -16,8 +16,10 @@ jest.mock('../config/env', () => ({
 // Import after mock
 const {
 	configKeyExists,
+	getConfigDrift,
 	getConfigFilePath,
 	getConfigKeys,
+	getApprovedConfigContent,
 	loadConfigAtStartup,
 	lookupConfig,
 	parseConfigFile,
@@ -1670,6 +1672,107 @@ test=duplicate`;
 
 			// Reset module state
 			resetModuleState();
+		});
+	});
+
+	describe('getConfigDrift', () => {
+		afterEach(() => {
+			resetModuleState();
+		});
+
+		it('reports no drift when the file is missing and nothing is approved', () => {
+			setWhitelistCache(new Map());
+			setHashFunction(() => 'unused');
+
+			const status = getConfigDrift();
+
+			expect(status).toEqual({
+				approvedHash: undefined,
+				currentHash: undefined,
+				drifted: false,
+			});
+		});
+
+		it('reports drift when the file is missing but a hash is approved', () => {
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', 'approved-hash']]),
+			);
+			setHashFunction(() => 'unused');
+
+			const status = getConfigDrift();
+
+			expect(status).toEqual({
+				approvedHash: 'approved-hash',
+				currentHash: undefined,
+				drifted: true,
+			});
+		});
+
+		it('reports no drift when the on-disk hash matches the approved hash', () => {
+			fs.writeFileSync(mockConfigPath, 'test=check-test');
+			setWhitelistCache(new Map([['configs/local-presets.conf', 'same-hash']]));
+			setHashFunction(() => 'same-hash');
+
+			const status = getConfigDrift();
+
+			expect(status).toEqual({
+				approvedHash: 'same-hash',
+				currentHash: 'same-hash',
+				drifted: false,
+			});
+		});
+
+		it('reports drift when the on-disk hash differs from the approved hash', () => {
+			fs.writeFileSync(mockConfigPath, 'test=check-test');
+			setWhitelistCache(
+				new Map([['configs/local-presets.conf', 'approved-hash']]),
+			);
+			setHashFunction(() => 'current-hash');
+
+			const status = getConfigDrift();
+
+			expect(status).toEqual({
+				approvedHash: 'approved-hash',
+				currentHash: 'current-hash',
+				drifted: true,
+			});
+		});
+	});
+
+	describe('getApprovedConfigContent', () => {
+		afterEach(() => {
+			resetModuleState();
+		});
+
+		it('returns null before an approved file has been loaded', () => {
+			resetModuleState();
+
+			expect(getApprovedConfigContent()).toBeNull();
+		});
+
+		it('captures the exact bytes when startup loads an approved file', () => {
+			const configContent = 'test=check-test';
+			fs.writeFileSync(mockConfigPath, configContent);
+
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.resetModules();
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => configHash),
+			}));
+
+			const fresh = require('./local-config');
+			fresh.setWhitelistCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
+			fresh.loadConfigAtStartup();
+
+			expect(fresh.getApprovedConfigContent()).toBe(configContent);
+
+			fresh.resetModuleState();
+			jest.resetModules();
 		});
 	});
 });

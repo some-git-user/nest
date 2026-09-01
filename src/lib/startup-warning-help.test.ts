@@ -16,6 +16,12 @@ describe('startup warning help', () => {
 
 		expect(
 			resolveStartupWarningTopicId(
+				'Security recommendation: ADMIN_UI_PASSWORD is not configured; the admin UI is mounted but no credential can grant access to it.',
+			),
+		).toBe('admin-ui-password-missing');
+
+		expect(
+			resolveStartupWarningTopicId(
 				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc.',
 			),
 		).toBe('plugin-not-whitelisted');
@@ -55,6 +61,12 @@ describe('startup warning help', () => {
 				'TLS certificate or key was missing. New self-signed certificate: /certs/nest-cert.pem. What to do now: nothing has to be configured.',
 			),
 		).toBe('cert-generated');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'Config drift: the local config presets file on disk is awaiting whitelist approval (sha256 abc).',
+			),
+		).toBe('config-drift-awaiting-approval');
 	});
 
 	test('falls back to unknown topic for unmatched warning text', () => {
@@ -147,5 +159,29 @@ describe('startup warning help', () => {
 
 	test('returns undefined for unknown help topic id', () => {
 		expect(getStartupWarningHelpTopic('no-such-topic')).toBeUndefined();
+	});
+
+	test('renders the admin UI password help topic', () => {
+		const topic = getStartupWarningHelpTopic('admin-ui-password-missing');
+		expect(topic).toBeDefined();
+		expect(getStartupWarningHelpPath('admin-ui-password-missing')).toBe(
+			'/help/startup-warnings/admin-ui-password-missing',
+		);
+
+		const html = renderStartupWarningHelpHtml(topic!);
+		expect(html).toContain('Admin UI Password Not Configured');
+		expect(html).toContain('How To Handle');
+	});
+
+	test('renders the config drift help topic', () => {
+		const topic = getStartupWarningHelpTopic('config-drift-awaiting-approval');
+		expect(topic).toBeDefined();
+		expect(getStartupWarningHelpPath('config-drift-awaiting-approval')).toBe(
+			'/help/startup-warnings/config-drift-awaiting-approval',
+		);
+
+		const html = renderStartupWarningHelpHtml(topic!);
+		expect(html).toContain('Config File Changed Since Approval');
+		expect(html).toContain('How To Handle');
 	});
 });

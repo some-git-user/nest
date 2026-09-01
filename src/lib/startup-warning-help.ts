@@ -19,9 +19,21 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 		description:
 			'Requests are not protected by a shared-secret API key, which weakens endpoint access control.',
 		handlingSteps: [
-			'Set a strong API_KEY and keep it out of source control.',
+			'Set a strong API_KEY in the service configuration file (/etc/nest/nest.conf).',
+			'Keep the configuration file readable only by the service account (chmod 600).',
 			'Optionally set API_KEY_HEADER if you need a custom header name.',
 			'Restart the service and update clients to send the configured header.',
+		],
+	},
+	'admin-ui-password-missing': {
+		id: 'admin-ui-password-missing',
+		title: 'Admin UI Password Not Configured',
+		description:
+			'The admin UI is always mounted, but ADMIN_UI_PASSWORD is empty, so no credential can grant access to it. Every admin route renders a "not configured" page until a password is set.',
+		handlingSteps: [
+			'Set a strong ADMIN_UI_PASSWORD in the service configuration file (/etc/nest/nest.conf).',
+			'Keep the configuration file readable only by the service account (chmod 600).',
+			'Restart the service, then open the /admin path to sign in.',
 		],
 	},
 	'allowed-ips-empty': {
@@ -173,6 +185,19 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Restart the service to load the updated plugin.',
 		],
 	},
+	'config-drift-awaiting-approval': {
+		id: 'config-drift-awaiting-approval',
+		title: 'Config File Changed Since Approval',
+		description:
+			'The local config presets file on disk no longer matches the hash stored in the whitelist file. The presets that are currently served are still the approved ones; the edited file is only loaded after the hash is approved and the service is restarted.',
+		handlingSteps: [
+			'Review the file contents, for example with: diff <file> <backup> or the admin UI editor.',
+			'Calculate the current hash: sha256sum plugins/configs/local-presets.conf',
+			'Add or update the entry "configs/local-presets.conf <sha256>" in plugins/plugin-whitelist.txt.',
+			'Restart the service so the approved file is loaded again.',
+			'If the edit was accidental, use "Revert to approved" in the admin UI instead of approving it.',
+		],
+	},
 	'cert-replaced': {
 		id: 'cert-replaced',
 		title: 'TLS Certificate Replaced Automatically',
@@ -213,6 +238,10 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 
 const CLASSIFIERS: StartupWarningClassifier[] = [
 	{id: 'api-key-missing', matcher: /API_KEY is not configured/i},
+	{
+		id: 'admin-ui-password-missing',
+		matcher: /ADMIN_UI_PASSWORD is not configured/i,
+	},
 	{id: 'allowed-ips-empty', matcher: /ALLOWED_IPS is not configured/i},
 	{
 		id: 'rate-limit-disabled',
@@ -257,6 +286,10 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		matcher: /Skipping plugin .* due to insecure permissions/i,
 	},
 	{id: 'plugin-hash-changed', matcher: /hash changed\. whitelist expects/i},
+	{
+		id: 'config-drift-awaiting-approval',
+		matcher: /presets file on disk is awaiting whitelist approval/i,
+	},
 	{id: 'cert-replaced', matcher: /TLS certificate replaced automatically/i},
 	{id: 'cert-generated', matcher: /TLS certificate or key was missing/i},
 ];

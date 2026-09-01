@@ -281,6 +281,11 @@ describe('server bootstrap', () => {
 			setWhitelistCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
+			getConfigDrift: jest.fn(() => ({
+				approvedHash: 'approved-hash',
+				currentHash: 'approved-hash',
+				drifted: false,
+			})),
 		}));
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -943,6 +948,11 @@ describe('server bootstrap', () => {
 			setWhitelistCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
+			getConfigDrift: jest.fn(() => ({
+				approvedHash: 'approved-hash',
+				currentHash: 'approved-hash',
+				drifted: false,
+			})),
 		}));
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1133,6 +1143,11 @@ describe('server bootstrap', () => {
 			setWhitelistCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => true), // Runtime validation failed
 			loadConfigAtStartup: jest.fn(),
+			getConfigDrift: jest.fn(() => ({
+				approvedHash: 'approved-hash',
+				currentHash: 'approved-hash',
+				drifted: false,
+			})),
 		}));
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1439,5 +1454,255 @@ describe('form submission filtering', () => {
 
 		processOnSpy.mockRestore();
 		processExitSpy.mockRestore();
+	});
+});
+
+describe('config drift warning on the overview page', () => {
+	const renderWithDrift = (drift: {
+		approvedHash: string | undefined;
+		currentHash: string | undefined;
+		drifted: boolean;
+	}): {renderListItems: jest.Mock; rootSend: jest.Mock} => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get};
+		const json = jest.fn(() => 'json-middleware');
+		const urlencoded = jest.fn(() => 'urlencoded-middleware');
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{
+				json,
+				urlencoded,
+			},
+		);
+		const listen = jest.fn(
+			(_port: number, _host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const close = jest.fn((callback?: () => void) => {
+			callback?.();
+		});
+		const on = jest.fn();
+		const createServer = jest.fn(() => ({listen, close, on}));
+		const existsSync = jest
+			.fn()
+			.mockReturnValueOnce(true) // whitelist exists
+			.mockReturnValueOnce(true) // config file exists
+			.mockReturnValueOnce(false) // TLS cert
+			.mockReturnValueOnce(false); // TLS key
+		const statSync = jest
+			.fn()
+			.mockReturnValueOnce({mode: 0o100644}) // whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}); // config stat
+		const readFileSync = jest.fn((filePath: string) => {
+			if (filePath.includes('nest-cert.pem')) {
+				return 'CERT_CONTENT';
+			}
+			if (filePath.includes('nest-key.pem')) {
+				return 'KEY_CONTENT';
+			}
+			return 'WHITELIST_CONTENT';
+		});
+		const readdirSync = jest.fn(() => ['check_test.ts', 'check_test.js']);
+		const renderListItems = jest.fn((warnings: string[]) =>
+			warnings.join('\n'),
+		);
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'helmet-middleware'),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'rate-limit-middleware'),
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				readFileSync,
+				readdirSync,
+				existsSync,
+				statSync,
+				mkdirSync: jest.fn(),
+			},
+			readFileSync,
+			readdirSync,
+			existsSync,
+			statSync,
+			mkdirSync: jest.fn(),
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				HOST: '127.0.0.1',
+				PORT: 5443,
+				NODE_ENV: 'production',
+				RATE_LIMIT_WINDOW_MS: 60_000,
+				RATE_LIMIT_MAX: 120,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+				ADMIN_UI_MOUNT_PATH: '/admin',
+			},
+		}));
+		jest.doMock('path', () => ({
+			__esModule: true,
+			default: {
+				dirname: jest.fn((p: string) => '/tmp/nest/' + p),
+				join: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				resolve: jest.fn((...args: string[]) => '/tmp/nest/' + args.join('/')),
+				relative: jest.fn((from: string, to: string) =>
+					to.replace(from + '/', ''),
+				),
+				cwd: jest.fn(() => '/tmp/nest'),
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({
+			logger: {info: jest.fn(), warn: jest.fn(), error: jest.fn()},
+		}));
+		jest.doMock('./lib/startup-check', () => ({validateStartup: jest.fn()}));
+		jest.doMock('./lib/startup-warning-registry', () => ({
+			recordStartupWarnings: jest.fn(),
+			getStartupWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/startup-warning-help', () => ({
+			getStartupWarningHelpTopic: jest.fn(() => null),
+			renderStartupWarningHelpHtml: jest.fn(() => ''),
+			renderStartupWarningListItems: renderListItems,
+		}));
+		jest.doMock('./lib/security', () => ({
+			validateFileSecurity: jest.fn(() => ({
+				ok: true,
+				reason: 'secure',
+				actualUid: 1000,
+				expectedUid: 1000,
+			})),
+			createAccessControlMiddleware: jest.fn(() => jest.fn()),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/plugin-whitelist', () => ({
+			verifyPluginWhitelist: jest.fn(() => ({
+				approvedFiles: new Map([['check_test.ts', 'hash123']]),
+				warnings: [],
+			})),
+			verifyConfigFiles: jest.fn(() => ({
+				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
+				warnings: [],
+			})),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({
+			scheduleCleanup: jest.fn(),
+			runScheduler: jest.fn(),
+		}));
+		jest.doMock('./routes/app-info', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+			registeredPluginRoutes: [],
+			registeredPluginRouteExamples: {},
+			pluginStartupWarnings: [],
+		}));
+		jest.doMock('./routes/local-config', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+		}));
+		jest.doMock('./lib/local-config', () => ({
+			__esModule: true,
+			parseConfigFile: jest.fn(() => new Map()),
+			setWhitelistCache: jest.fn(),
+			hasRuntimeValidationFailed: jest.fn(() => false),
+			loadConfigAtStartup: jest.fn(),
+			getConfigDrift: jest.fn(() => drift),
+		}));
+		jest.doMock('./lib/nagios', () => ({
+			createNagiosReturnMessage: jest.fn(() => ({
+				message: 'not-found',
+				code: 3,
+			})),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		const getCalls = get.mock.calls as [string, unknown][];
+		const rootCall = getCalls.find(([route]) => route === '/');
+		const [, rootHandler] = rootCall as [string, unknown];
+		const rootSend = jest.fn();
+		(rootHandler as (req: unknown, res: unknown) => void)(
+			{},
+			{setHeader: jest.fn(), send: rootSend, locals: {cspNonce: 'test'}},
+		);
+
+		return {renderListItems, rootSend};
+	};
+
+	it('adds a drift warning naming the current hash when the file changed', () => {
+		const {renderListItems} = renderWithDrift({
+			approvedHash: 'approved-hash',
+			currentHash: 'current-hash',
+			drifted: true,
+		});
+
+		expect(renderListItems).toHaveBeenCalledWith([
+			expect.stringContaining(
+				'configs/local-presets.conf current-hash" to plugins/plugin-whitelist.txt',
+			),
+		]);
+	});
+
+	it('adds a removal drift warning when the file is gone after startup', () => {
+		const {renderListItems, rootSend} = renderWithDrift({
+			approvedHash: 'approved-hash',
+			currentHash: undefined,
+			drifted: true,
+		});
+
+		expect(renderListItems).toHaveBeenCalledWith([
+			expect.stringContaining('the file was removed after startup'),
+		]);
+		// The admin UI link is always advertised on the overview page.
+		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/admin/local-config'),
+		);
 	});
 });

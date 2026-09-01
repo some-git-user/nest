@@ -8,6 +8,10 @@ import {
 	hasRuntimeValidationFailed,
 	safeLookupConfig,
 } from '../lib/local-config';
+import {
+	CONFIG_KEY_PATTERN,
+	MAX_CONFIG_KEY_LENGTH,
+} from '../lib/local-config-store';
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
 
@@ -20,10 +24,6 @@ interface LocalConfigQuery {
 	config?: string;
 	[key: string]: unknown;
 }
-
-// Allowed characters for config key: alphanumeric, underscore, hyphen
-const CONFIG_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const MAX_CONFIG_KEY_LENGTH = 128;
 
 /**
  * Execute a local config key with the specified HTTP method

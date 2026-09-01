@@ -61,6 +61,7 @@ export const resetModuleState = (): void => {
 	};
 	cachedWhitelistEntries = null;
 	cachedConfig = null;
+	approvedConfigContent = null;
 	startupLoadingCompleted = false;
 	startupValidationFailed = false;
 };
@@ -78,6 +79,11 @@ export interface LocalConfigEntry {
 const CONFIG_FILE_NAME = 'local-presets.conf';
 
 /**
+ * Key this file is registered under in `plugins/plugin-whitelist.txt`.
+ */
+const WHITELIST_RELATIVE_PATH = 'configs/local-presets.conf';
+
+/**
  * Cached whitelist entries for runtime verification
  * Populated at startup, used for runtime hash checks
  */
@@ -87,6 +93,16 @@ let cachedWhitelistEntries: Map<string, string> | null = null;
  * Cached config loaded at startup (memory-only after initial load)
  */
 let cachedConfig: Map<string, LocalConfigEntry> | null = null;
+
+/**
+ * Exact bytes of the whitelist-approved config file, captured at startup.
+ *
+ * The admin editor offers a revert action that restores these bytes, which is
+ * the escape hatch for an operator who saved a file they then chose not to
+ * whitelist. Without it they would have to hand-edit the file to get back to a
+ * restart-safe state.
+ */
+let approvedConfigContent: string | null = null;
 
 /**
  * Flag to track if startup loading completed successfully
@@ -287,7 +303,7 @@ export const loadConfigAtStartup = (): void => {
 	}
 
 	const configPath = getConfigFilePath();
-	const relativePath = 'configs/local-presets.conf';
+	const relativePath = WHITELIST_RELATIVE_PATH;
 
 	// File is optional - empty cache if missing
 	if (!fs.existsSync(configPath)) {
@@ -343,6 +359,10 @@ export const loadConfigAtStartup = (): void => {
 	// Load and parse config (only disk I/O point)
 	try {
 		cachedConfig = parseConfigFileInternal(configPath);
+		// Remember the exact bytes the whitelist hash covers. This is the restore
+		// target for the admin editor's revert action, and it is only ever captured
+		// here, from a file that passed the security and hash checks above.
+		approvedConfigContent = fs.readFileSync(configPath, 'utf-8');
 		startupLoadingCompleted = true;
 	} catch (error) {
 		const errorMessage = getErrorMessage(error);
@@ -456,4 +476,51 @@ export const safeLookupConfig = (
 
 	// Memory-only lookup
 	return cachedConfig!.get(configKey);
+};
+
+export type ConfigDriftStatus = {
+	/** Hash recorded in the whitelist; undefined when the file is not whitelisted. */
+	approvedHash: string | undefined;
+	/** Hash of the file as it is on disk right now; undefined when it is missing. */
+	currentHash: string | undefined;
+	/** True when the file on disk is not the bytes the whitelist approves. */
+	drifted: boolean;
+};
+
+/**
+ * Compare the config file on disk against the whitelist-approved hash.
+ *
+ * Strictly read-only: it never touches `cachedConfig` and never clears
+ * `startupValidationFailed`. Applying a changed file stays a restart, which is
+ * what keeps the whitelist a real approval gate - editing the file through the
+ * admin UI must not be able to make new presets executable on its own.
+ *
+ * Works regardless of the startup outcome, because a drifted file is exactly
+ * the situation where the startup cache is disabled.
+ */
+export const getConfigDrift = (): ConfigDriftStatus => {
+	const approvedHash = cachedWhitelistEntries?.get(WHITELIST_RELATIVE_PATH);
+	const configPath = getConfigFilePath();
+
+	if (!fs.existsSync(configPath)) {
+		// A missing file is only a deviation when an approved hash expects content.
+		return {
+			approvedHash,
+			currentHash: undefined,
+			drifted: approvedHash !== undefined,
+		};
+	}
+
+	const currentHash = hashPluginFileFn(configPath);
+	return {approvedHash, currentHash, drifted: currentHash !== approvedHash};
+};
+
+/**
+ * The exact bytes of the whitelist-approved config file, captured at startup.
+ *
+ * @returns The approved content, or null when startup never loaded an approved
+ *   file - in that case there is nothing safe to restore and revert is refused.
+ */
+export const getApprovedConfigContent = (): string | null => {
+	return approvedConfigContent;
 };

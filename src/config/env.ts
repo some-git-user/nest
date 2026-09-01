@@ -155,4 +155,14 @@ export const env = cleanEnv(process.env, {
 	ALLOWED_IPS: str({default: '127.0.0.1, ::1'}), // Loopback addresses by default for IPv4 and IPv6
 	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
 	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
+	// The admin UI is always mounted, but it is protected by its own credential
+	// and is only usable once ADMIN_UI_PASSWORD is set. Without a password every
+	// admin route renders a "not configured" page, and startup prints a warning.
+	// It is deliberately separate from API_KEY: holding the monitoring key must
+	// never be enough to rewrite the config file.
+	ADMIN_UI_PASSWORD: str({default: ''}),
+	ADMIN_SESSION_TTL_SECONDS: num({default: 900}), // 15 minutes
+	// Login is the only unauthenticated write endpoint, so it gets a much tighter
+	// bucket than RATE_LIMIT_MAX.
+	ADMIN_LOGIN_RATE_LIMIT_MAX: num({default: 5}),
 });

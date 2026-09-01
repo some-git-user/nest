@@ -19,6 +19,7 @@ export const HttpStatusCodes = {
 
 	// Server Errors
 	INTERNAL_SERVER_ERROR: 500,
+	BAD_GATEWAY: 502,
 } as const;
 
 /**
@@ -39,4 +40,5 @@ export const HttpStatusDescriptions = {
 
 	// Server Errors
 	[HttpStatusCodes.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
+	[HttpStatusCodes.BAD_GATEWAY]: 'Bad Gateway',
 } as const;
