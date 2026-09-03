@@ -49,13 +49,13 @@ describe('checkRebootRequired plugin', () => {
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => ['apt'],
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'apt\n',
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => ['apt'],
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'apt\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -80,13 +80,13 @@ describe('checkRebootRequired plugin', () => {
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => ['apt'],
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'apt\n',
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => ['apt'],
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'apt\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -98,7 +98,7 @@ describe('checkRebootRequired plugin', () => {
 		expect(result.message).toBe('WARNING: Reboot required');
 	});
 
-	test('returns WARNING when reboot is required, checkReasons is false, and reasons directory does not exist', () => {
+	test('returns WARNING when reboot is required, checkReasons is false, and pkgs file does not exist', () => {
 		jest.doMock('fs', () => ({
 			__esModule: true as const,
 			default: {
@@ -129,13 +129,13 @@ describe('checkRebootRequired plugin', () => {
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => ['apt', 'snapd', 'libc6'],
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'apt\nsnapd\nlibc6\n',
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => ['apt', 'snapd', 'libc6'],
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'apt\nsnapd\nlibc6\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -171,19 +171,62 @@ describe('checkRebootRequired plugin', () => {
 		]);
 	});
 
-	test('returns WARNING with empty reasons when directory exists but is empty', () => {
+	test('collapses duplicate package names from the pkgs file', () => {
 		jest.doMock('fs', () => ({
 			__esModule: true as const,
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => [],
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'apt\napt\nlibc6\napt\n',
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => [],
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'apt\napt\nlibc6\napt\n',
+		}));
+
+		const {checkRebootRequired: localCheckRebootRequired} =
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./check_reboot_required') as unknown as MockedModule;
+		const result = localCheckRebootRequired({checkReasons: 'true'});
+
+		expect(result.code).toBe(2);
+		expect(result.message).toBe(
+			'CRITICAL: Reboot required. Updates from: apt, libc6',
+		);
+		expect(result.performanceData).toEqual([
+			{
+				label: 'reboot_required',
+				value: 1,
+				uom: '',
+			},
+			{
+				label: 'reason_apt',
+				value: 1,
+				uom: '',
+			},
+			{
+				label: 'reason_libc6',
+				value: 1,
+				uom: '',
+			},
+		]);
+	});
+
+	test('returns WARNING with empty reasons when pkgs file exists but is empty', () => {
+		jest.doMock('fs', () => ({
+			__esModule: true as const,
+			default: {
+				existsSync: (path: string) =>
+					path === '/var/run/reboot-required' ||
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => '',
+			},
+			existsSync: (path: string) =>
+				path === '/var/run/reboot-required' ||
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => '',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -210,7 +253,7 @@ describe('checkRebootRequired plugin', () => {
 				}
 				return false;
 			}),
-			readdirSync: jest.fn(),
+			readFileSync: jest.fn(),
 		};
 
 		jest.doMock('fs', () => mockFs);
@@ -234,7 +277,7 @@ describe('checkRebootRequired plugin', () => {
 				}
 				return false;
 			}),
-			readdirSync: jest.fn(),
+			readFileSync: jest.fn(),
 		};
 
 		jest.doMock('fs', () => mockFs);
@@ -249,21 +292,21 @@ describe('checkRebootRequired plugin', () => {
 		expect(result.message).toContain('Permission error string');
 	});
 
-	test('handles error when reading reasons directory', () => {
+	test('handles error when reading the pkgs file', () => {
 		jest.doMock('fs', () => ({
 			__esModule: true as const,
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => {
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => {
 					throw new Error('Permission denied');
 				},
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => {
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => {
 				throw new Error('Permission denied');
 			},
 		}));
@@ -283,13 +326,13 @@ describe('checkRebootRequired plugin', () => {
 			default: {
 				existsSync: (path: string) =>
 					path === '/var/run/reboot-required' ||
-					path === '/var/run/reboot-required.reasons.d',
-				readdirSync: () => ['apt-updates', 'snapd.core20'],
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'apt-updates\nsnapd.core20\n',
 			},
 			existsSync: (path: string) =>
 				path === '/var/run/reboot-required' ||
-				path === '/var/run/reboot-required.reasons.d',
-			readdirSync: () => ['apt-updates', 'snapd.core20'],
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'apt-updates\nsnapd.core20\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -307,10 +350,10 @@ describe('checkRebootRequired plugin', () => {
 			__esModule: true as const,
 			default: {
 				existsSync: (path: string) => path === '/var/run/reboot-required',
-				readdirSync: () => ['apt'],
+				readFileSync: () => 'apt\n',
 			},
 			existsSync: (path: string) => path === '/var/run/reboot-required',
-			readdirSync: () => ['apt'],
+			readFileSync: () => 'apt\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =
@@ -329,15 +372,15 @@ describe('checkRebootRequired plugin', () => {
 		]);
 	});
 
-	test('returns WARNING when checkReasons is true but reasons directory does not exist', () => {
+	test('returns WARNING when checkReasons is true but pkgs file does not exist', () => {
 		jest.doMock('fs', () => ({
 			__esModule: true as const,
 			default: {
 				existsSync: (path: string) => path === '/var/run/reboot-required',
-				readdirSync: () => ['apt'],
+				readFileSync: () => 'apt\n',
 			},
 			existsSync: (path: string) => path === '/var/run/reboot-required',
-			readdirSync: () => ['apt'],
+			readFileSync: () => 'apt\n',
 		}));
 
 		const {checkRebootRequired: localCheckRebootRequired} =

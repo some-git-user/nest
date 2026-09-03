@@ -48,7 +48,7 @@ export const meta: PluginMeta = {
       <td><code>checkReasons</code></td>
       <td>boolean</td>
       <td>false</td>
-      <td>When true, also check <code>/var/run/reboot-required.reasons.d/</code> and include the reasons in the output</td>
+      <td>When true, also read <code>/var/run/reboot-required.pkgs</code> and include the offending packages in the output</td>
     </tr>
   </tbody>
 </table>
@@ -64,7 +64,7 @@ export const meta: PluginMeta = {
 <p>The check looks for the presence of <code>/var/run/reboot-required</code> marker file, which is created by the <code>update-notifier</code> package after system updates (especially kernel updates).</p>
 
 <h2>Reboot reasons</h2>
-<p>When <code>checkReasons=true</code>, the plugin also checks the <code>/var/run/reboot-required.reasons.d/</code> directory, which contains files named after the package that requires the reboot (e.g., <code>apt</code>, <code>snapd</code>, <code>libc6</code>).</p>
+<p>When <code>checkReasons=true</code>, the plugin also reads the <code>/var/run/reboot-required.pkgs</code> file, which lists one package per line for each package that triggered the reboot (e.g., <code>linux-image-amd64</code>, <code>libc6</code>). Both files are written by the <code>update-notifier-common</code> package. Duplicate package names are collapsed.</p>
 
 <h2>Example</h2>
 <pre><code>GET /plugins/check-reboot-required?checkReasons=true</code></pre>
@@ -72,7 +72,7 @@ export const meta: PluginMeta = {
 };
 
 const REBOOT_MARKER_FILE = '/var/run/reboot-required';
-const REBOOT_REASONS_DIR = '/var/run/reboot-required.reasons.d';
+const REBOOT_PKGS_FILE = '/var/run/reboot-required.pkgs';
 
 export const checkRebootRequired = (params: {
 	checkReasons?: string;
@@ -109,16 +109,20 @@ export const checkRebootRequired = (params: {
 
 	// Reboot is required
 	if (checkReasons) {
-		// Try to read the reasons directory
+		// Try to read the list of packages that triggered the reboot
 		try {
-			if (fs.existsSync(REBOOT_REASONS_DIR)) {
-				const entries = fs.readdirSync(REBOOT_REASONS_DIR);
-				reasons.push(
-					...entries.map((entry) => entry.trim()).filter((e) => e.length > 0),
-				);
+			if (fs.existsSync(REBOOT_PKGS_FILE)) {
+				const raw = fs.readFileSync(REBOOT_PKGS_FILE, 'utf-8');
+				const pkgs = raw
+					.split('\n')
+					.map((line) => line.trim())
+					.filter((line) => line.length > 0);
+				// The .pkgs file is appended to on every trigger, so it can
+				// contain the same package many times. Collapse duplicates.
+				reasons.push(...[...new Set(pkgs)]);
 			}
 		} catch {
-			// If we can't read reasons, continue with just the basic warning
+			// If we can't read the package list, continue with just the basic warning
 		}
 	}
 
