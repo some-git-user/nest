@@ -1,4 +1,8 @@
-import {APP_STYLESHEET, DESIGN_TOKENS_CSS} from './ui-theme';
+import {
+	APP_STYLESHEET,
+	DARK_THEME_TOKENS_CSS,
+	DESIGN_TOKENS_CSS,
+} from './ui-theme';
 
 describe('DESIGN_TOKENS_CSS', () => {
 	it('declares every palette token as a CSS custom property', () => {
@@ -23,6 +27,7 @@ describe('DESIGN_TOKENS_CSS', () => {
 			'--warn-text:',
 			'--warn-bg:',
 			'--info:',
+			'--focus:',
 			'--radius:',
 			'--radius-sm:',
 			'--radius-pill:',
@@ -33,9 +38,58 @@ describe('DESIGN_TOKENS_CSS', () => {
 	});
 });
 
+describe('DARK_THEME_TOKENS_CSS', () => {
+	it('overrides the same palette tokens the light theme defines', () => {
+		// Every colour the light theme exposes has to be redefined here, or a
+		// dark page leaks a light surface through the gap.
+		for (const token of [
+			'--bg:',
+			'--surface:',
+			'--surface-subtle:',
+			'--surface-hover:',
+			'--border:',
+			'--border-strong:',
+			'--text:',
+			'--text-muted:',
+			'--accent:',
+			'--accent-hover:',
+			'--danger:',
+			'--danger-text:',
+			'--danger-bg:',
+			'--ok:',
+			'--ok-text:',
+			'--ok-bg:',
+			'--warn:',
+			'--warn-text:',
+			'--warn-bg:',
+			'--info:',
+			'--info-bg:',
+			'--focus:',
+		]) {
+			expect(DARK_THEME_TOKENS_CSS).toContain(token);
+		}
+	});
+
+	it('only redefines colours, never structural tokens', () => {
+		// Radius, pill radius and the mono stack are theme-independent and must
+		// keep inheriting from :root.
+		expect(DARK_THEME_TOKENS_CSS).not.toContain('--radius:');
+		expect(DARK_THEME_TOKENS_CSS).not.toContain('--mono:');
+	});
+});
+
 describe('APP_STYLESHEET', () => {
 	it('scopes the tokens to :root so every page inherits them', () => {
 		expect(APP_STYLESHEET.startsWith(`:root{${DESIGN_TOKENS_CSS}}`)).toBe(true);
+	});
+
+	it('scopes the dark palette to [data-theme=dark] after :root', () => {
+		// The dark block must come after :root so it wins when the attribute
+		// is set, while :root alone still yields the light palette.
+		expect(APP_STYLESHEET).toContain('[data-theme=dark]{');
+		expect(APP_STYLESHEET.indexOf('[data-theme=dark]{')).toBeGreaterThan(
+			APP_STYLESHEET.indexOf(':root{'),
+		);
 	});
 
 	it('has exactly one body rule so pages cannot override the theme', () => {
@@ -66,9 +120,14 @@ describe('APP_STYLESHEET', () => {
 			'.entry-head{',
 			'.params{',
 			'.entry-actions{',
+			'.entry-command{',
+			'.entry-command-line{',
 			'.test-result.show{',
 			'.login{',
+			'.route-section{',
+			'.route-section>h2{',
 			'.route-list{',
+			'.route-list--single{',
 			'.route-header{',
 			'.route-help{',
 			'.plugin-example-form{',
@@ -78,6 +137,10 @@ describe('APP_STYLESHEET', () => {
 			'.startup-warning-whitelist-entry{',
 			'.shell-auth-hint{',
 			'.sandbox-frame{',
+			'.theme-toggle{',
+			'.theme-toggle:hover{',
+			'.theme-toggle:focus-visible{',
+			'.theme-toggle-icon{',
 		]) {
 			expect(APP_STYLESHEET).toContain(selector);
 		}

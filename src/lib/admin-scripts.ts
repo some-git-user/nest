@@ -47,15 +47,29 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			.replace(/'/g, '&#39;');
 	};
 
+	// POSIX single-quote quoting for a value shown inside a copyable shell
+	// command. Wrapping in single quotes makes every character literal; the only
+	// trick is an embedded single quote, which is closed, escaped, and reopened.
+	// The result is HTML-escaped too, since it is rendered inside <code>.
+	var shellQuote = function (value) {
+		var text = value === undefined || value === null ? '' : String(value);
+		return escapeHtml("'" + text.replace(/'/g, "'\\\\''") + "'");
+	};
+
 	// Working copy of the document. Every edit mutates this array; the server is
 	// only contacted on validate / test / save, so editing stays responsive and
 	// nothing is written by accident.
+	//
+	// The "stored" flag marks the entries that came from the config file on disk.
+	// Only those have a key the running service will resolve, so only they get the
+	// "run this preset" command line; a freshly added draft has no saved key yet.
 	var draft = entries.map(function (entry) {
 		return {
 			key: entry.key,
 			command: entry.command,
 			params: entry.params || {},
 			secretParams: Array.isArray(entry.secretParams) ? entry.secretParams : [],
+			stored: true,
 		};
 	});
 
@@ -211,6 +225,16 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 
 		entriesHost.innerHTML = draft
 			.map(function (entry, index) {
+				// A stored preset has a key the running service resolves, so it can be
+				// invoked straight from the Nagios server through the shared wrapper.
+				// The key is shell-quoted so a key with spaces or metacharacters stays
+				// one argument when the line is copied into a shell.
+				var commandHtml = entry.stored
+					? '<div class="entry-command"><span class="field-label">Run from Nagios</span>' +
+						'<code class="entry-command-line">./check_nest.sh --local-config ' +
+						shellQuote(entry.key) +
+						'</code></div>'
+					: '';
 				return (
 					'<div class="entry" data-index="' + index + '">' +
 					'<div class="entry-head">' +
@@ -222,6 +246,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					'<select id="c' + index + '" data-role="command">' + commandOptions(entry) + '</select></label>' +
 					'</div>' +
 					'<div class="params">' + paramRows(entry, index) + '</div>' +
+					commandHtml +
 					'<div class="entry-actions">' +
 					'<button type="button" data-action="test">Test</button>' +
 					'<button type="button" data-action="remove" class="danger">Remove</button>' +
@@ -383,6 +408,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				command: commands.length > 0 ? commands[0].command : '',
 				params: {},
 				secretParams: [],
+				stored: false,
 			});
 			render();
 		});

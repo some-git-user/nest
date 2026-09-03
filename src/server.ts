@@ -10,6 +10,8 @@ import {ADMIN_UI_MOUNT_PATH} from './lib/admin-auth';
 import {
 	EXTERNAL_LINK_GUARD_SCRIPT,
 	PLUGIN_EXAMPLE_FORM_SCRIPT,
+	THEME_TOGGLE_SCRIPT,
+	THEME_TOGGLE_SCRIPT_PATH,
 } from './lib/client-scripts';
 import {runScheduler} from './lib/cron/scheduler';
 import {createCsrfGuardMiddleware} from './lib/csrf-guard';
@@ -243,14 +245,24 @@ const buildOverviewPageHtml = (
 			{label: 'Base URL', valueHtml: `<code>${baseUrl}</code>`},
 		]),
 		contentHtml: `${warningsHtml}
+<section class="route-section">
 <h2>Built-in Routes</h2>
-<ul class="route-list">${staticRouteItems}</ul>${
+<ul class="route-list">${staticRouteItems}</ul>
+</section>${
 			localConfigItems
-				? `<h2>Local Config Presets</h2>\n<ul class="route-list">${localConfigItems}</ul>`
+				? `
+<section class="route-section">
+<h2>Local Config Presets</h2>
+<ul class="route-list">${localConfigItems}</ul>
+</section>`
 				: ''
 		}
+<section class="route-section">
 <h2>Plugin Routes</h2>
-<ul class="route-list">${pluginRouteItems || '<li>No plugins found</li>'}</ul>`,
+<ul class="route-list route-list--single">${
+			pluginRouteItems || '<li>No plugins found</li>'
+		}</ul>
+</section>`,
 	});
 };
 
@@ -338,6 +350,10 @@ app.get(EXTERNAL_LINK_GUARD_SCRIPT_PATH, (_req: Request, res: Response) => {
 app.get(PLUGIN_EXAMPLE_FORM_SCRIPT_PATH, (_req: Request, res: Response) => {
 	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
 	return res.send(PLUGIN_EXAMPLE_FORM_SCRIPT);
+});
+app.get(THEME_TOGGLE_SCRIPT_PATH, (_req: Request, res: Response) => {
+	res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+	return res.send(THEME_TOGGLE_SCRIPT);
 });
 app.get('/help/startup-warnings/:warningId', (req: Request, res: Response) => {
 	const warningId = String(req.params?.warningId ?? '');

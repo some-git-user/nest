@@ -1,6 +1,8 @@
 import {
 	EXTERNAL_LINK_GUARD_SCRIPT,
 	PLUGIN_EXAMPLE_FORM_SCRIPT,
+	THEME_TOGGLE_SCRIPT,
+	THEME_TOGGLE_SCRIPT_PATH,
 } from './client-scripts';
 
 describe('client-scripts', () => {
@@ -123,6 +125,57 @@ describe('client-scripts', () => {
 
 		it('should use capture phase for event listener', () => {
 			expect(PLUGIN_EXAMPLE_FORM_SCRIPT).toContain('true,');
+		});
+	});
+
+	describe('THEME_TOGGLE_SCRIPT_PATH', () => {
+		it('should be served from a same-origin path', () => {
+			expect(THEME_TOGGLE_SCRIPT_PATH).toBe('/theme-toggle.js');
+		});
+	});
+
+	describe('THEME_TOGGLE_SCRIPT', () => {
+		it('should be a non-empty string', () => {
+			expect(typeof THEME_TOGGLE_SCRIPT).toBe('string');
+			expect(THEME_TOGGLE_SCRIPT.length).toBeGreaterThan(0);
+		});
+
+		it('should be wrapped in an IIFE', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain('(function () {');
+			expect(THEME_TOGGLE_SCRIPT).toContain('})();');
+		});
+
+		it('should persist the theme in a nest_theme cookie', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain("COOKIE_NAME = 'nest_theme'");
+			expect(THEME_TOGGLE_SCRIPT).toContain('document.cookie');
+			expect(THEME_TOGGLE_SCRIPT).toContain('Path=/');
+			expect(THEME_TOGGLE_SCRIPT).toContain('SameSite=Lax');
+		});
+
+		it('should fall back to the OS preference when no cookie is set', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain(
+				"matchMedia('(prefers-color-scheme: dark)')",
+			);
+		});
+
+		it('should apply the theme to the root element before paint', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain(
+				"document.documentElement.setAttribute('data-theme', theme)",
+			);
+			// Applied eagerly at parse time, before the DOMContentLoaded wiring.
+			expect(THEME_TOGGLE_SCRIPT).toContain('applyTheme(currentTheme());');
+		});
+
+		it('should wire the toggle button and flip the theme on click', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain(
+				"document.getElementById('theme-toggle')",
+			);
+			expect(THEME_TOGGLE_SCRIPT).toContain("addEventListener('click'");
+		});
+
+		it('should defer wiring until the DOM is ready', () => {
+			expect(THEME_TOGGLE_SCRIPT).toContain("readyState === 'loading'");
+			expect(THEME_TOGGLE_SCRIPT).toContain("'DOMContentLoaded'");
 		});
 	});
 });

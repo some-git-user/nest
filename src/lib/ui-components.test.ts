@@ -256,4 +256,33 @@ describe('renderHtmlDocument', () => {
 		expect(html).toContain('<title>&lt;script&gt;x&lt;/script&gt;</title>');
 		expect(html).not.toContain('<title><script>');
 	});
+
+	it('loads the theme script in the head so it runs before paint', () => {
+		const html = renderHtmlDocument({
+			title: 'Overview',
+			contentHtml: '<p>Body</p>',
+		});
+
+		expect(html).toContain('<script src="/theme-toggle.js"></script>');
+		// No `defer`: the theme must be applied before first paint.
+		expect(html).not.toContain('<script src="/theme-toggle.js" defer>');
+		// The script sits in <head>, ahead of <body>.
+		expect(html.indexOf('/theme-toggle.js')).toBeLessThan(
+			html.indexOf('<body>'),
+		);
+	});
+
+	it('renders the theme toggle as the first element in the body', () => {
+		const html = renderHtmlDocument({
+			title: 'Overview',
+			contentHtml: '<p>Body</p>',
+		});
+
+		expect(html).toContain(
+			'<body>\n<button id="theme-toggle" class="theme-toggle"',
+		);
+		expect(html).toContain('aria-pressed="false"');
+		expect(html).toContain('<span class="theme-toggle-icon"');
+		expect(html).toContain('<span class="theme-toggle-label">Dark</span>');
+	});
 });

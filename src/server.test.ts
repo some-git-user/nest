@@ -300,6 +300,9 @@ describe('server bootstrap', () => {
 		const pluginExampleFormScriptCall = getCalls.find(
 			([route]) => route === '/help/plugin-example-form.js',
 		);
+		const themeToggleScriptCall = getCalls.find(
+			([route]) => route === '/theme-toggle.js',
+		);
 		const warningHelpCall = getCalls.find(
 			([route]) => route === '/help/startup-warnings/:warningId',
 		);
@@ -314,6 +317,8 @@ describe('server bootstrap', () => {
 		const guardScriptSend = jest.fn();
 		const pluginExampleFormScriptSetHeader = jest.fn();
 		const pluginExampleFormScriptSend = jest.fn();
+		const themeToggleScriptSetHeader = jest.fn();
+		const themeToggleScriptSend = jest.fn();
 		const rootSetHeader = jest.fn();
 		const rootSend = jest.fn();
 		const warningHelpSetHeader = jest.fn();
@@ -329,6 +334,7 @@ describe('server bootstrap', () => {
 		expect(faviconCall).toBeDefined();
 		expect(guardScriptCall).toBeDefined();
 		expect(pluginExampleFormScriptCall).toBeDefined();
+		expect(themeToggleScriptCall).toBeDefined();
 		expect(warningHelpCall).toBeDefined();
 		expect(rootCall).toBeDefined();
 		expect(notFoundCall).toBeDefined();
@@ -339,6 +345,10 @@ describe('server bootstrap', () => {
 			GuardScriptHandler,
 		];
 		const [, pluginExampleFormScriptHandler] = pluginExampleFormScriptCall as [
+			string,
+			GuardScriptHandler,
+		];
+		const [, themeToggleScriptHandler] = themeToggleScriptCall as [
 			string,
 			GuardScriptHandler,
 		];
@@ -369,6 +379,13 @@ describe('server bootstrap', () => {
 			{
 				setHeader: pluginExampleFormScriptSetHeader,
 				send: pluginExampleFormScriptSend,
+			},
+		);
+		themeToggleScriptHandler(
+			{},
+			{
+				setHeader: themeToggleScriptSetHeader,
+				send: themeToggleScriptSend,
 			},
 		);
 		warningHelpHandler(
@@ -416,6 +433,7 @@ describe('server bootstrap', () => {
 			'/help/plugin-example-form.js',
 			expect.any(Function),
 		);
+		expect(get).toHaveBeenCalledWith('/theme-toggle.js', expect.any(Function));
 		expect(get).toHaveBeenCalledWith(
 			'/help/startup-warnings/:warningId',
 			expect.any(Function),
@@ -447,6 +465,11 @@ describe('server bootstrap', () => {
 			'application/javascript; charset=utf-8',
 		);
 		expect(pluginExampleFormScriptSend).toHaveBeenCalled();
+		expect(themeToggleScriptSetHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'application/javascript; charset=utf-8',
+		);
+		expect(themeToggleScriptSend).toHaveBeenCalled();
 		expect(warningHelpSetHeader).toHaveBeenCalledWith(
 			'Content-Type',
 			'text/html; charset=utf-8',

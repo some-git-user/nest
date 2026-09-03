@@ -74,6 +74,27 @@ describe('admin-scripts', () => {
 				expect(ADMIN_CONFIG_SCRIPT).toContain(call);
 			}
 		});
+
+		it('shows a copyable check_nest.sh command for a stored preset', () => {
+			// A preset that exists on disk has a key the service resolves, so the
+			// editor surfaces the exact wrapper invocation for it.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('./check_nest.sh --local-config ');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('shellQuote(entry.key)');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('entry-command-line');
+		});
+
+		it('shell-quotes the key so it stays one argument', () => {
+			// A key with a space or metacharacter must not split or execute when the
+			// line is pasted into a shell: wrap in single quotes, escaping any quote.
+			expect(ADMIN_CONFIG_SCRIPT).toContain("text.replace(/'/g, \"'\\\\''\")");
+		});
+
+		it('omits the command line for a freshly added draft', () => {
+			// A new preset has no saved key yet, so there is nothing to run.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('entry.stored');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('stored: false');
+		});
+
 		it('contains no inline </script> sequence', () => {
 			expect(ADMIN_CONFIG_SCRIPT).not.toContain('</script>');
 		});

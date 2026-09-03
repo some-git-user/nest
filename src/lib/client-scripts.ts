@@ -141,3 +141,104 @@ export const PLUGIN_EXAMPLE_FORM_SCRIPT = `// Form submission handler for plugin
 	);
 })();
 `;
+
+/**
+ * Theme toggle client script.
+ *
+ * Served as a static string rather than inlined, because every page's CSP is
+ * `script-src 'self'` and an inline script would be blocked. It is loaded in
+ * `<head>` *without* `defer` so the stored theme is applied to the root element
+ * before first paint, which avoids a flash of the wrong theme.
+ *
+ * The chosen theme is persisted in a `nest_theme` cookie (not localStorage) so
+ * it survives across pages and reloads; the value is read back on every load.
+ * With no cookie yet, the OS `prefers-color-scheme` decides the initial theme.
+ */
+export const THEME_TOGGLE_SCRIPT_PATH = '/theme-toggle.js';
+
+export const THEME_TOGGLE_SCRIPT = `// Theme toggle client script
+// Applies the cookie-stored theme before paint and wires the toggle control.
+/* global document, window, Element, HTMLElement, HTMLButtonElement */
+
+(function () {
+	var COOKIE_NAME = 'nest_theme';
+	var COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+	function readThemeCookie() {
+		var parts = document.cookie ? document.cookie.split(';') : [];
+		for (var i = 0; i < parts.length; i++) {
+			var pair = parts[i].trim();
+			if (pair.indexOf(COOKIE_NAME + '=') === 0) {
+				return decodeURIComponent(pair.slice(COOKIE_NAME.length + 1));
+			}
+		}
+		return '';
+	}
+
+	function writeThemeCookie(theme) {
+		document.cookie =
+			COOKIE_NAME +
+			'=' +
+			encodeURIComponent(theme) +
+			'; Max-Age=' +
+			COOKIE_MAX_AGE +
+			'; Path=/; SameSite=Lax';
+	}
+
+	function systemTheme() {
+		if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+			return 'dark';
+		}
+		return 'light';
+	}
+
+	function currentTheme() {
+		var stored = readThemeCookie();
+		return stored === 'dark' || stored === 'light' ? stored : systemTheme();
+	}
+
+	function applyTheme(theme) {
+		document.documentElement.setAttribute('data-theme', theme);
+	}
+
+	// Apply immediately, before the body exists, so there is no flash.
+	applyTheme(currentTheme());
+
+	function syncButton(button, theme) {
+		var dark = theme === 'dark';
+		button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+		button.title = dark ? 'Switch to light theme' : 'Switch to dark theme';
+		var icon = button.querySelector('.theme-toggle-icon');
+		if (icon instanceof Element) {
+			icon.textContent = dark ? '\\u2600' : '\\u263D';
+		}
+		var label = button.querySelector('.theme-toggle-label');
+		if (label instanceof Element) {
+			label.textContent = dark ? 'Light' : 'Dark';
+		}
+	}
+
+	function init() {
+		var button = document.getElementById('theme-toggle');
+		if (!(button instanceof HTMLButtonElement)) {
+			return;
+		}
+		syncButton(button, currentTheme());
+		button.addEventListener('click', function () {
+			var next =
+				document.documentElement.getAttribute('data-theme') === 'dark'
+					? 'light'
+					: 'dark';
+			applyTheme(next);
+			writeThemeCookie(next);
+			syncButton(button, next);
+		});
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', init);
+	} else {
+		init();
+	}
+})();
+`;

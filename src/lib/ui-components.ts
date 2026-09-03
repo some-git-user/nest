@@ -15,8 +15,20 @@
  * - `*Html` suffixed options are pre-rendered fragments from these functions,
  *   never user input.
  */
+import {THEME_TOGGLE_SCRIPT_PATH} from './client-scripts';
 import {escapeHtml} from './html-escape';
 import {APP_STYLESHEET} from './ui-theme';
+
+/**
+ * The floating dark/light toggle rendered on every page.
+ *
+ * It is a `<button>` (keyboard-operable, focusable) rather than a checkbox, and
+ * the theme client script keeps `aria-pressed`, the icon and the label in sync
+ * with the active theme. The button is inert without the script, so it is only
+ * emitted together with the script tag that drives it.
+ */
+export const renderThemeToggle = (): string =>
+	`<button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false"><span class="theme-toggle-icon" aria-hidden="true">&#x263D;</span><span class="theme-toggle-label">Dark</span></button>`;
 
 export type ButtonVariant = 'default' | 'primary' | 'danger';
 
@@ -204,6 +216,10 @@ export const renderHtmlDocument = (options: PageOptions): string => {
 		: `<header class="page-header"><h1>${escapeHtml(
 				options.title,
 			)}</h1>${options.metaHtml ?? ''}</header>`;
+	// The theme script is loaded without `defer` so it runs before first paint
+	// and applies the stored theme without a flash. It must therefore sit in
+	// <head>; the toggle button it drives is the first element in <body>.
+	const themeScriptHtml = `<script src="${THEME_TOGGLE_SCRIPT_PATH}"></script>`;
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -213,9 +229,10 @@ export const renderHtmlDocument = (options: PageOptions): string => {
 <title>${escapeHtml(options.title)}</title>
 <style>${APP_STYLESHEET}${
 		options.extraStyles ?? ''
-	}</style>${styleOverride}${options.headHtml ?? ''}
+	}</style>${styleOverride}${options.headHtml ?? ''}${themeScriptHtml}
 </head>
 <body>
+${renderThemeToggle()}
 ${backHtml}${headerHtml}
 ${subtitleHtml}${options.contentHtml}
 </body>
