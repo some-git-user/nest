@@ -1,5 +1,5 @@
 import type {ExecSyncOptions as ChildProcessExecSyncOptions} from 'child_process';
-import {execSync as defaultExecSync} from 'child_process';
+import {execFileSync as defaultExecFileSync} from 'child_process';
 import type {NagiosReturnCode} from '../src/types/nagios';
 import {NagiosReturnCodes} from '../src/types/nagios';
 import type {HtmlTemplateString, PluginMeta} from '../src/types/plugin';
@@ -195,13 +195,24 @@ export const meta: PluginMeta = {
 	],
 };
 
+/**
+ * Shape of the `child_process.execFileSync` seam used for testing.
+ * The command is always executed without a shell, so arguments containing
+ * shell metacharacters are passed through to `smartctl` verbatim.
+ */
+export type ExecFileFn = (
+	file: string,
+	args: string[],
+	options?: ChildProcessExecSyncOptions,
+) => string;
+
 export const checkSmartStatus = (params: {
 	device: string;
 	checkType?: 'all' | 'health' | 'attributes' | 'errors' | 'selftest';
 	warningTemp?: number;
 	criticalTemp?: number;
 	skipPowerModeCheck?: boolean;
-	execSync?: (command: string, options?: ChildProcessExecSyncOptions) => string;
+	execFile?: ExecFileFn;
 }): PluginReturn => {
 	const {
 		device,
@@ -209,7 +220,7 @@ export const checkSmartStatus = (params: {
 		warningTemp = 50,
 		criticalTemp = 60,
 		skipPowerModeCheck = false,
-		execSync: injectedExecSync,
+		execFile: injectedExecFile,
 	} = params;
 
 	// Validate device path
@@ -240,13 +251,15 @@ export const checkSmartStatus = (params: {
 		};
 	}
 
-	// Execute smartctl command with JSON output
-	const exec = injectedExecSync || defaultExecSync;
+	// Execute smartctl command with JSON output.
+	// The device path is passed as a separate argv entry, never interpolated into
+	// a shell command string, so it cannot be used to inject shell commands.
+	const exec = injectedExecFile || defaultExecFileSync;
 	let smartctlJson: unknown;
 	let smartctlExitCode: number = 0;
 
 	try {
-		const output = exec(`smartctl -a --json=c ${device}`, {
+		const output = exec('smartctl', ['-a', '--json=c', device], {
 			encoding: 'utf8',
 			maxBuffer: 10 * 1024 * 1024, // 10MB buffer
 			timeout: 30000, // 30 second timeout

@@ -11,13 +11,13 @@ describe('checkSmartStatus Plugin', () => {
 		});
 	});
 
-	describe('Default execSync fallback', () => {
-		it('should use default execSync when not provided (coverage for line 243)', async () => {
-			// This test ensures line 243 is covered: `const exec = injectedExecSync || defaultExecSync;`
-			// When execSync is not provided, it should fall back to the default
+	describe('Default execFile fallback', () => {
+		it('should use default execFileSync when not provided (coverage for the execFile fallback)', async () => {
+			// Covers the fallback: `const exec = injectedExecFile || defaultExecFileSync;`
+			// When execFile is not provided, it should fall back to the default
 			const result = checkSmartStatus({
 				device: '/dev/nvme0n1',
-				// execSync is intentionally not provided to test the fallback
+				// execFile is intentionally not provided to test the fallback
 			});
 
 			// Should fail because smartctl is not available in test environment
@@ -29,7 +29,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return UNKNOWN for invalid device path (empty)', async () => {
 			const result = await checkSmartStatus({
 				device: '',
-				execSync: jest.fn(),
+				execFile: jest.fn(),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
@@ -39,7 +39,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return UNKNOWN for invalid device path (not starting with /dev/)', async () => {
 			const result = await checkSmartStatus({
 				device: '/invalid/path',
-				execSync: jest.fn(),
+				execFile: jest.fn(),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
@@ -50,7 +50,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'invalid' as any,
-				execSync: jest.fn(),
+				execFile: jest.fn(),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
@@ -62,7 +62,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 60,
 				criticalTemp: 50,
-				execSync: jest.fn(),
+				execFile: jest.fn(),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
@@ -74,7 +74,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 50,
-				execSync: jest.fn(),
+				execFile: jest.fn(),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
@@ -84,7 +84,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return UNKNOWN when smartctl command fails and JSON parsing fails', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockImplementation(() => {
+				execFile: jest.fn().mockImplementation(() => {
 					throw new Error('Command failed with output: invalid json');
 				}),
 			});
@@ -127,7 +127,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return OK for healthy NVMe drive', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -141,7 +141,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 30,
 				criticalTemp: 40,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -154,7 +154,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 30,
 				criticalTemp: 35,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -173,7 +173,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeFailed)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeFailed)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -193,7 +193,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeMediaErrors)),
 			});
@@ -213,7 +213,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeCriticalWarning)),
 			});
@@ -235,7 +235,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeLowSpare)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeLowSpare)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -253,7 +253,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeMediaDegraded)),
 			});
@@ -273,7 +273,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeVolatileMemoryFailed)),
 			});
@@ -293,7 +293,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeReadOnly)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeReadOnly)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -311,7 +311,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeStatusError)),
 			});
@@ -323,7 +323,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should include all performance data for NVMe drive', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHealthy)),
 			});
 
 			const perfDataLabels = result.performanceData?.map((pd) => pd.label);
@@ -405,7 +405,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return OK for healthy ATA drive', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaHealthy)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -425,7 +425,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaReallocated)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaReallocated)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -445,7 +445,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaPending)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaPending)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -465,7 +465,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockAtaUncorrectable)),
 			});
@@ -487,7 +487,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaCrcErrors)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaCrcErrors)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -504,7 +504,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaFailed)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaFailed)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -516,7 +516,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should include ATA performance data', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/sda',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaHealthy)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaHealthy)),
 			});
 
 			const perfDataLabels = result.performanceData?.map((pd) => pd.label);
@@ -533,7 +533,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return UNKNOWN when smartctl command fails with invalid JSON', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockImplementation(() => {
+				execFile: jest.fn().mockImplementation(() => {
 					throw {
 						stdout: '',
 						stderr: 'smartctl: command not found',
@@ -550,7 +550,7 @@ describe('checkSmartStatus Plugin', () => {
 			const partialJson = '{"smartctl": {"exit_status": 1}}';
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockImplementation(() => {
+				execFile: jest.fn().mockImplementation(() => {
 					throw {
 						stdout: partialJson,
 						stderr: '',
@@ -563,8 +563,8 @@ describe('checkSmartStatus Plugin', () => {
 			expect(result.code).toBe(NagiosReturnCodes.OK);
 		});
 
-		it('should use provided execSync function', async () => {
-			const mockExecSync = jest.fn().mockReturnValue(
+		it('should use provided execFile function', async () => {
+			const mockExecFile = jest.fn().mockReturnValue(
 				JSON.stringify({
 					json_format_version: [1, 0],
 					smartctl: {version: [7, 4], exit_status: 0},
@@ -584,11 +584,24 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: mockExecSync,
+				execFile: mockExecFile,
 			});
 
-			expect(mockExecSync).toHaveBeenCalled();
+			expect(mockExecFile).toHaveBeenCalled();
 			expect(result.code).toBe(NagiosReturnCodes.OK);
+		});
+
+		it('should pass the device as an argv entry instead of a shell string', async () => {
+			const mockExecFile = jest.fn().mockReturnValue('{}');
+
+			await checkSmartStatus({
+				device: '/dev/null;touch /tmp/pwned',
+				execFile: mockExecFile,
+			});
+
+			const [file, args] = mockExecFile.mock.calls[0] ?? [];
+			expect(file).toBe('smartctl');
+			expect(args).toEqual(['-a', '--json=c', '/dev/null;touch /tmp/pwned']);
 		});
 	});
 
@@ -616,7 +629,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'all',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -626,7 +639,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'health',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -636,7 +649,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'attributes',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -646,7 +659,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'errors',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -656,7 +669,7 @@ describe('checkSmartStatus Plugin', () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
 				checkType: 'selftest',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -686,7 +699,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 55,
 				criticalTemp: 60,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -698,7 +711,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 60,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -710,7 +723,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 40,
 				criticalTemp: 50,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -722,7 +735,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 40,
 				criticalTemp: 45,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -743,7 +756,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 60,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHot)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeHot)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -774,7 +787,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 60,
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeCritical)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeCritical)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -800,7 +813,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeMediaErrors)),
 			});
@@ -830,7 +843,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 60,
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeMultipleIssues)),
 			});
@@ -864,7 +877,7 @@ describe('checkSmartStatus Plugin', () => {
 				device: '/dev/nvme0n1',
 				warningTemp: 50,
 				criticalTemp: 60,
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeWithPerfData)),
 			});
@@ -882,7 +895,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should include available_spare with thresholds', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeWithPerfData)),
 			});
@@ -900,7 +913,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should include media_errors with critical threshold', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest
+				execFile: jest
 					.fn()
 					.mockReturnValue(JSON.stringify(mockNvmeWithPerfData)),
 			});
@@ -938,7 +951,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should use default warningTemp=50 and criticalTemp=60', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -952,7 +965,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should use default checkType=all', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -961,7 +974,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should use default skipPowerModeCheck=false', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -981,7 +994,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/unknown',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockUnknownDevice)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockUnknownDevice)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1010,7 +1023,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNoTemp)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNoTemp)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1036,7 +1049,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNoPowerTime)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNoPowerTime)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1065,7 +1078,7 @@ describe('checkSmartStatus Plugin', () => {
 
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				execSync: jest.fn().mockReturnValue(JSON.stringify(mockNoModel)),
+				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNoModel)),
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1093,8 +1106,8 @@ describe('Branch Coverage - Error Handling', () => {
 			temperature: {current: 30},
 		};
 
-		// Mock execSync that throws an error with status
-		const mockExecSync = jest.fn().mockImplementation(() => {
+		// Mock execFile that throws an error with status
+		const mockExecFile = jest.fn().mockImplementation(() => {
 			const error: any = new Error('Command failed');
 			error.status = 1;
 			error.stdout = JSON.stringify(mockNvmeData);
@@ -1104,7 +1117,7 @@ describe('Branch Coverage - Error Handling', () => {
 
 		const result = await checkSmartStatus({
 			device: '/dev/nvme0n1',
-			execSync: mockExecSync,
+			execFile: mockExecFile,
 		});
 
 		// Should still parse the JSON from stdout even with error
@@ -1145,7 +1158,7 @@ describe('Branch Coverage - ATA Performance Data', () => {
 
 		const result = await checkSmartStatus({
 			device: '/dev/sda',
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaMinimal)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaMinimal)),
 		});
 
 		expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1168,7 +1181,7 @@ describe('Branch Coverage - ATA Performance Data', () => {
 
 		const result = await checkSmartStatus({
 			device: '/dev/sda',
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockAtaNoAttributes)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockAtaNoAttributes)),
 		});
 
 		expect(result.code).toBe(NagiosReturnCodes.OK);
@@ -1203,7 +1216,7 @@ describe('Branch Coverage - Temperature Escalation', () => {
 			device: '/dev/nvme0n1',
 			warningTemp: 50,
 			criticalTemp: 60,
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 		});
 
 		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -1232,7 +1245,7 @@ describe('Branch Coverage - Temperature Escalation', () => {
 			device: '/dev/nvme0n1',
 			warningTemp: 50,
 			criticalTemp: 60,
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 		});
 
 		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
@@ -1258,8 +1271,8 @@ describe('Branch Coverage - execError without status', () => {
 			temperature: {current: 30},
 		};
 
-		// Mock execSync that throws an error without status
-		const mockExecSync = jest.fn().mockImplementation(() => {
+		// Mock execFile that throws an error without status
+		const mockExecFile = jest.fn().mockImplementation(() => {
 			const error: any = new Error('Command failed');
 			error.stdout = JSON.stringify(mockNvmeData);
 			error.stderr = '';
@@ -1269,7 +1282,7 @@ describe('Branch Coverage - execError without status', () => {
 
 		const result = await checkSmartStatus({
 			device: '/dev/nvme0n1',
-			execSync: mockExecSync,
+			execFile: mockExecFile,
 		});
 
 		// Should still parse the JSON from stdout even with error
@@ -1277,8 +1290,8 @@ describe('Branch Coverage - execError without status', () => {
 	});
 });
 
-describe('Branch Coverage - injectedExecSync parameter', () => {
-	it('should use injectedExecSync when provided', async () => {
+describe('Branch Coverage - injectedExecFile parameter', () => {
+	it('should use injectedExecFile when provided', async () => {
 		const mockNvmeData = {
 			json_format_version: [1, 0] as [number, number],
 			smartctl: {version: [7, 4] as [number, number], exit_status: 0},
@@ -1296,16 +1309,16 @@ describe('Branch Coverage - injectedExecSync parameter', () => {
 			temperature: {current: 30},
 		};
 
-		const mockExecSync = jest
+		const mockExecFile = jest
 			.fn()
 			.mockReturnValue(JSON.stringify(mockNvmeData));
 
 		const result = await checkSmartStatus({
 			device: '/dev/nvme0n1',
-			execSync: mockExecSync,
+			execFile: mockExecFile,
 		});
 
-		expect(mockExecSync).toHaveBeenCalled();
+		expect(mockExecFile).toHaveBeenCalled();
 		expect(result.code).toBe(NagiosReturnCodes.OK);
 	});
 });
@@ -1333,7 +1346,7 @@ describe('Branch Coverage - Temperature at warning threshold', () => {
 			device: '/dev/nvme0n1',
 			warningTemp: 50,
 			criticalTemp: 60,
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 		});
 
 		expect(result.code).toBe(NagiosReturnCodes.WARNING);
@@ -1362,7 +1375,7 @@ describe('Branch Coverage - Temperature at warning threshold', () => {
 			device: '/dev/nvme0n1',
 			warningTemp: 50,
 			criticalTemp: 60,
-			execSync: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
+			execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeWithTemp)),
 		});
 
 		// SMART failure returns CRITICAL (2), temperature warning maintains CRITICAL

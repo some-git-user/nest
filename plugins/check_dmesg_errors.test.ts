@@ -776,9 +776,29 @@ describe('checkDmesgErrors', () => {
 			});
 
 			expect(mockedExecSync).toHaveBeenCalled();
-			const callArgs = (mockedExecSync.mock.calls[0] as [string])[0];
+			const callArgs = (mockedExecSync.mock.calls[0] as [string, string[]])[1];
 			expect(callArgs).toContain('--since');
 			expect(callArgs).toContain('7200 seconds ago');
+		});
+
+		it('should pass timeRange as a separate argv entry, not shell syntax', async () => {
+			mockedExecSync.mockReturnValue('');
+
+			await checkDmesgErrors({
+				level: 'err',
+				timeRange: 7200,
+				execSync: mockedExecSync,
+			});
+
+			const [file, args] = mockedExecSync.mock.calls[0] as [string, string[]];
+			expect(file).toBe('dmesg');
+			expect(args).toEqual([
+				'--level=err+',
+				'--time-format=iso',
+				'--nopager',
+				'--since',
+				'7200 seconds ago',
+			]);
 		});
 
 		it('should use correct level flag in dmesg command', async () => {
@@ -790,7 +810,7 @@ describe('checkDmesgErrors', () => {
 				execSync: mockedExecSync,
 			});
 
-			const callArgs = (mockedExecSync.mock.calls[0] as [string])[0];
+			const callArgs = (mockedExecSync.mock.calls[0] as [string, string[]])[1];
 			expect(callArgs).toContain('--level=warn+');
 		});
 

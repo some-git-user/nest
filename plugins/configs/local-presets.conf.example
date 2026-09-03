@@ -7,7 +7,7 @@
 # SETUP INSTRUCTIONS:
 # 1. Copy this file to: plugins/configs/local-presets.conf
 # 2. Edit the config entries as needed
-# 3. Set file permissions: chmod 644 plugins/configs/local-presets.conf
+# 3. Set file permissions: chmod 600 plugins/configs/local-presets.conf
 # 4. Calculate SHA-256 hash: sha256sum plugins/configs/local-presets.conf
 # 5. Add hash to plugins/plugin-whitelist.txt:
 #    local-presets.conf <sha256-hash-from-step-4>

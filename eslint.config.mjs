@@ -32,6 +32,10 @@ const noSrcImports = (
 	await import(path.join(__dirname, 'eslint-rules/no-src-imports.mjs'))
 ).default;
 
+const noShellExec = (
+	await import(path.join(__dirname, 'eslint-rules/no-shell-exec.mjs'))
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -127,12 +131,15 @@ export default [
 			custom: {
 				rules: {
 					'enforce-get-error-message': enforceGetErrorMessage,
+					'no-shell-exec': noShellExec,
 				},
 			},
 		},
 		rules: {
 			// Enforce use of shared getErrorMessage() function (src only)
 			'custom/enforce-get-error-message': 'error',
+			// Forbid shell-based child_process execution (command injection)
+			'custom/no-shell-exec': 'error',
 			// Only require explicit return types on exported functions (module boundaries)
 			// This allows internal helper functions to use type inference
 			'@typescript-eslint/explicit-module-boundary-types': [
@@ -156,6 +163,7 @@ export default [
 				rules: {
 					'enforce-plugin-meta-type': enforcePluginMetaType,
 					'no-src-imports': noSrcImports,
+					'no-shell-exec': noShellExec,
 				},
 			},
 		},
@@ -164,6 +172,8 @@ export default [
 			'custom/enforce-plugin-meta-type': 'error',
 			// Prevent plugins from importing from src folder
 			'custom/no-src-imports': 'error',
+			// Forbid shell-based child_process execution (command injection)
+			'custom/no-shell-exec': 'error',
 		},
 	},
 ];

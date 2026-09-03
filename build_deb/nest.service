@@ -2,6 +2,25 @@
 Description=Nest Service
 After=network.target
 
+# SECURITY NOTE (accepted risk):
+# This unit intentionally runs as root and does not enable systemd
+# sandboxing (User=, ProtectSystem=, PrivateTmp=, etc.). The service's
+# purpose is to run arbitrary monitoring plugins (smartctl, nvidia-smi,
+# dmesg, systemctl, ...) that require broad read access to hardware and
+# kernel state, and it writes to /tmp/logs, /tmp/cache and the plugins
+# directory. Enforcing a sandbox would break those checks.
+#
+# Residual risk is mitigated in application code instead:
+#   - plugins must be SHA-256 whitelisted to be registered
+#   - exec uses argv arrays (no shell) to avoid command injection, enforced
+#     at lint time by the custom no-shell-exec ESLint rule
+#   - the admin write API requires a password + header and is rate limited
+#   - request IP is taken from the socket unless TRUST_PROXY is enabled
+#   - the presets file is written owner-only (0600) and read back with
+#     type/size bounds
+# If a deployment does not need root-only plugins, run this unit under a
+# dedicated unprivileged account and grant only the required capabilities.
+
 [Service]
 Type=simple
 ExecStart=/usr/bin/nest --configPath /etc/nest/nest.conf

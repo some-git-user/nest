@@ -42,6 +42,7 @@ Create `.env` from `.env.example`:
 | `API_KEY_HEADER`             | `x-api-key`           | API key header name                        |
 | `API_KEY`                    | (empty)               | API key for authentication                 |
 | `ALLOWED_IPS`                | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all |
+| `TRUST_PROXY`                | `false`               | Honour `X-Forwarded-For` (see note below)  |
 | `RATE_LIMIT_WINDOW_MS`       | `60000`               | Rate limit window (ms)                     |
 | `RATE_LIMIT_MAX`             | `120`                 | Max requests per window                    |
 | `ADMIN_UI_PASSWORD`          | (empty)               | Password for the `/admin` config editor    |
@@ -232,6 +233,11 @@ Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST
 - Plugin/config file ownership/permission validation in production
 - CSP headers and HTML sanitization on help pages
 - Default `ALLOWED_IPS` restricted to loopback only
+- `X-Forwarded-For` is ignored by default: the IP allowlist always matches the
+  real socket address, so a client cannot spoof its way past `ALLOWED_IPS`.
+  Only set `TRUST_PROXY` when Nest runs behind a reverse proxy you control —
+  `true` trusts every peer, a number sets the number of proxy hops, or a
+  comma-separated list of IPs/CIDRs restricts which peers may supply the header.
 
 ## License
 

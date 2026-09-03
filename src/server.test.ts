@@ -63,7 +63,7 @@ describe('server bootstrap', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const helmetMiddleware = 'helmet-middleware';
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
@@ -614,7 +614,7 @@ describe('server bootstrap', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const helmetMiddleware = 'helmet-middleware';
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
@@ -784,7 +784,7 @@ describe('server bootstrap', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const helmetMiddleware = 'helmet-middleware';
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
@@ -982,7 +982,7 @@ describe('server bootstrap', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const helmetMiddleware = 'helmet-middleware';
 		const rateLimitMiddleware = 'rate-limit-middleware';
 		const accessControlMiddleware = 'access-control-middleware';
@@ -1236,7 +1236,7 @@ describe('form submission filtering', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const json = jest.fn(() => 'json-middleware');
 		const urlencoded = jest.fn(() => 'urlencoded-middleware');
 		const expressFactory = Object.assign(
@@ -1467,7 +1467,7 @@ describe('config drift warning on the overview page', () => {
 
 		const use = jest.fn();
 		const get = jest.fn();
-		const app = {use, get};
+		const app = {use, get, set: jest.fn()};
 		const json = jest.fn(() => 'json-middleware');
 		const urlencoded = jest.fn(() => 'urlencoded-middleware');
 		const expressFactory = Object.assign(
@@ -1700,9 +1700,13 @@ describe('config drift warning on the overview page', () => {
 		expect(renderListItems).toHaveBeenCalledWith([
 			expect.stringContaining('the file was removed after startup'),
 		]);
-		// The admin UI link is always advertised on the overview page.
+		// The admin UI link is always advertised on the overview page, and it is
+		// the only static route without a help link: the editor page is its own
+		// destination, so a second link to it would be a dead end.
 		expect(rootSend).toHaveBeenCalledWith(
-			expect.stringContaining('/admin/local-config'),
+			expect.stringContaining(
+				'<div class="route-header"><a class="route-path" href="/admin">/admin</a></div>',
+			),
 		);
 	});
 });

@@ -1,8 +1,12 @@
-import {createHash} from 'crypto';
+import {createHash, randomBytes} from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import {getErrorMessage} from './error-message';
-import {getConfigFilePath, validateConfigFilePath} from './local-config';
+import {
+	getConfigFilePath,
+	validateConfigFilePath,
+	validateConfigFileSecurity,
+} from './local-config';
 import {logger} from './logger';
 
 /**
@@ -259,6 +263,13 @@ export const readConfigDocument = (): ReadConfigDocumentResult => {
 		};
 	}
 
+	// Guard against reading a non-regular file (directory, FIFO, device) or an
+	// oversized one: a FIFO would block readFileSync indefinitely, and a huge
+	// file would be pulled fully into memory before the parser rejects it. The
+	// same checks startup applies, so the editor never offers a file the next
+	// restart would refuse.
+	validateConfigFileSecurity(configPath);
+
 	const rawContent = fs.readFileSync(configPath, 'utf-8');
 	return {doc: parseConfigDocument(rawContent), rawContent, exists: true};
 };
@@ -275,20 +286,24 @@ export const writeConfigDocument = (content: string): void => {
 	validateConfigFilePath(configPath);
 
 	const directory = path.dirname(configPath);
+	// Unpredictable suffix: pid + timestamp alone are guessable, which lets a
+	// local attacker pre-create the temp path (O_EXCL / 'wx' then fails, or a
+	// symlink is planted) between our write and rename. Random hex removes that.
 	const tempPath = path.join(
 		directory,
-		`.${path.basename(configPath)}.${process.pid}.${Date.now()}.tmp`,
+		`.${path.basename(configPath)}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`,
 	);
 
 	try {
 		fs.writeFileSync(tempPath, content, {
 			encoding: 'utf-8',
-			mode: 0o640,
+			mode: 0o600,
 			flag: 'wx',
 		});
 		// umask can raise the mode requested above; enforce it explicitly so the
 		// file never lands group- or world-writable, which startup would reject.
-		fs.chmodSync(tempPath, 0o640);
+		// 0o600 keeps the presets - which can hold credentials - owner-only.
+		fs.chmodSync(tempPath, 0o600);
 		fs.renameSync(tempPath, configPath);
 	} catch (error) {
 		try {
@@ -335,10 +350,14 @@ export const mergeMaskedParams = (
  * Names that look like credentials and must never be sent to the browser.
  *
  * Used as a fallback for presets whose command is unknown (plugin removed or
- * renamed), where the example field schema is unavailable.
+ * renamed), where the example field schema is unavailable. Deliberately broad:
+ * a false positive only hides a value in the editor, while a false negative
+ * leaks it to the browser. Bare `key` is excluded on purpose — it matches too
+ * many harmless parameter names — but `api-key`, `access_key`, `authkey`,
+ * `private_key` and friends are all covered.
  */
 const SECRET_NAME_PATTERN =
-	/(password|passwd|secret|token|apikey|api_key|credential)/i;
+	/(password|passwd|passphrase|secret|token|apikey|api[-_]key|api_secret|credential|authkey|auth[-_]key|access[-_]key|accesskey|private[-_]key|privatekey|client[-_]secret|clientsecret|bearer|session[-_]?(id|key|token)|sessionid|cert)/i;
 
 export const isSecretParamName = (name: string): boolean =>
 	SECRET_NAME_PATTERN.test(name);

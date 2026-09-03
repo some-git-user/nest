@@ -48,18 +48,18 @@ describe('honey-pot lib', () => {
 	});
 
 	describe('getClientIp', () => {
-		test('uses first entry from array x-forwarded-for header', () => {
+		test('ignores a spoofed x-forwarded-for array and uses req.ip', () => {
 			recordHoneypotSignal(
 				makeReq({
 					headers: {
 						'user-agent': 'jest',
 						'x-forwarded-for': ['10.1.2.3', '10.9.9.9'],
 					},
-					ip: undefined,
+					ip: '8.8.8.8',
 				}),
 				'unknown-route',
 			);
-			expect(getHoneypotStats().latest?.ip).toBe('10.1.2.3');
+			expect(getHoneypotStats().latest?.ip).toBe('8.8.8.8');
 		});
 
 		test('falls through whitespace-only x-forwarded-for to req.ip', () => {

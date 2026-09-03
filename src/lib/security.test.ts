@@ -33,8 +33,12 @@ describe('security middleware', () => {
 		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
-	test('denies non-loopback request when allowedIps is not configured', async () => {
-		const app = makeApp(createAccessControlMiddleware({}));
+	test('denies a request whose real socket IP is outside the allowlist even when x-forwarded-for claims an allowed address', async () => {
+		// The allowlist only contains a non-loopback address, so the real
+		// loopback socket must be rejected despite the spoofed header.
+		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: '198.51.100.10'}),
+		);
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '198.51.100.10');
@@ -79,14 +83,16 @@ describe('security middleware', () => {
 		expect(String(body.message)).toContain('not allowed');
 	});
 
-	test('allows request when x-forwarded-for first IP is in allowlist', async () => {
+	test('ignores x-forwarded-for when deciding allowlist access', async () => {
+		// The allowlist only contains the forwarded address, but the real socket
+		// is loopback, so the request must be denied: the header cannot grant access.
 		const app = makeApp(
 			createAccessControlMiddleware({allowedIps: '203.0.113.10'}),
 		);
 		const res = await request(app)
 			.get('/ok')
 			.set('x-forwarded-for', '203.0.113.10, 198.51.100.20');
-		expect(res.status).toBe(HttpStatusCodes.OK);
+		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 	});
 
 	test('normalizes IPv4-mapped IPv6 addresses for allowlist comparison', async () => {
@@ -230,20 +236,18 @@ describe('security middleware', () => {
 			createAccessControlMiddleware({
 				apiKey: 'correct-key',
 				apiKeyHeader: 'x-api-key',
-				allowedIps: '10.0.0.1',
+				allowedIps: '127.0.0.1',
 			}),
 		);
-		const res = await request(app)
-			.get('/ok')
-			.set('x-forwarded-for', '10.0.0.1')
-			.set('x-api-key', 'correct-key');
+		const res = await request(app).get('/ok').set('x-api-key', 'correct-key');
 		expect(res.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── IP allowlist with spoofed forwarded-for chain ────────────────
 
-	test('uses only the first x-forwarded-for IP, not a later trusted one', async () => {
-		// Client claims: attacker_ip, trusted_ip — only attacker_ip should count
+	test('ignores a spoofed x-forwarded-for chain and uses the real socket IP', async () => {
+		// Client claims a trusted address in the chain, but the real socket is
+		// loopback and the allowlist only trusts 10.0.0.1, so access is denied.
 		const app = makeApp(
 			createAccessControlMiddleware({allowedIps: '10.0.0.1'}),
 		);
@@ -263,9 +267,11 @@ describe('security middleware', () => {
 		expect(res.status).toBe(HttpStatusCodes.FORBIDDEN);
 	});
 
-	test('allows IPv4-mapped IPv6 address that normalizes to an allowlisted IP', async () => {
+	test('normalizes an IPv4-mapped IPv6 socket address for allowlist comparison', async () => {
+		// The real socket normalizes to loopback, which is allowlisted; the
+		// spoofed forwarded-for value is irrelevant.
 		const app = makeApp(
-			createAccessControlMiddleware({allowedIps: '10.0.0.1'}),
+			createAccessControlMiddleware({allowedIps: '127.0.0.1'}),
 		);
 		const res = await request(app)
 			.get('/ok')
@@ -276,19 +282,18 @@ describe('security middleware', () => {
 	// ──────────────── Whitespace-only allowlist entries are dropped ────────────────
 
 	test('ignores whitespace-only entries in allowedIps and enforces real restriction', async () => {
-		// " , , 10.0.0.1" — only 10.0.0.1 should be the accepted IP
+		// " , , 127.0.0.1" — only the loopback entry survives, matching the socket.
 		const app = makeApp(
+			createAccessControlMiddleware({allowedIps: ' , , 127.0.0.1'}),
+		);
+		const allowed = await request(app).get('/ok');
+		expect(allowed.status).toBe(HttpStatusCodes.OK);
+
+		const blockedApp = makeApp(
 			createAccessControlMiddleware({allowedIps: ' , , 10.0.0.1'}),
 		);
-		const blocked = await request(app)
-			.get('/ok')
-			.set('x-forwarded-for', '127.0.0.1');
+		const blocked = await request(blockedApp).get('/ok');
 		expect(blocked.status).toBe(HttpStatusCodes.FORBIDDEN);
-
-		const allowed = await request(app)
-			.get('/ok')
-			.set('x-forwarded-for', '10.0.0.1');
-		expect(allowed.status).toBe(HttpStatusCodes.OK);
 	});
 
 	// ──────────────── HTTP Basic Auth ────────────────
@@ -418,13 +423,10 @@ describe('security middleware', () => {
 			createAccessControlMiddleware({
 				apiKey: 'secret',
 				apiKeyHeader: 'x-api-key',
-				allowedIps: '198.51.100.10',
+				allowedIps: '127.0.0.1',
 			}),
 		);
-		const res = await request(app)
-			.get('/ok')
-			.set('x-forwarded-for', '198.51.100.10')
-			.set('x-api-key', 'secret');
+		const res = await request(app).get('/ok').set('x-api-key', 'secret');
 		expect(res.status).toBe(HttpStatusCodes.OK);
 		expect(mockRecordHoneypotSignal).not.toHaveBeenCalled();
 	});

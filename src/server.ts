@@ -20,6 +20,7 @@ import {
 	applyHelpPageSecurityHeaders,
 } from './lib/help-page';
 import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
+import {escapeHtml} from './lib/html-escape';
 import {sendNagiosUnknownError} from './lib/http-nagios';
 import {HttpStatusCodes} from './lib/http-status-codes';
 import {
@@ -31,6 +32,7 @@ import {
 } from './lib/local-config';
 import {logger} from './lib/logger';
 import {verifyConfigFiles} from './lib/plugin-whitelist';
+import {parseTrustProxy} from './lib/request-ip';
 import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
@@ -46,6 +48,12 @@ import {
 	recordStartupWarnings,
 } from './lib/startup-warning-registry';
 import {ensureTlsCertificate} from './lib/tls';
+import {
+	renderButton,
+	renderField,
+	renderHtmlDocument,
+	renderMetaList,
+} from './lib/ui-components';
 import {getAppVersion} from './lib/version';
 import adminLocalConfig from './routes/admin-local-config';
 import appInfo from './routes/app-info';
@@ -61,40 +69,45 @@ import type {PluginRouteExample} from './types/plugin';
 validateStartup();
 
 const app: Application = express();
+// Only honour `X-Forwarded-For` when the operator declares a reverse proxy
+// (TRUST_PROXY). Otherwise Express keeps `req.ip` on the real socket address,
+// so the ALLOWED_IPS allowlist cannot be bypassed with a spoofed header.
+app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
 const PLUGIN_EXAMPLE_FORM_SCRIPT_PATH = '/help/plugin-example-form.js';
 const APP_VERSION = getAppVersion();
 
-const escapeHtml = (value: string): string =>
-	value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;');
-
+/**
+ * One runnable example for a plugin route.
+ *
+ * The `plugin-example-form` class and the `method`/`action` attribute order are
+ * load-bearing: the client script dispatches on the class, and the overview
+ * page is the only place that markup is produced. Everything visual comes from
+ * the shared stylesheet, so an example form is the same card everywhere.
+ */
 const renderExampleFormHtml = (example: PluginRouteExample): string => {
 	if (example.kind === 'link') {
 		return `<a class="plugin-example-link" href="${example.href}">${escapeHtml(example.label)}</a>`;
 	}
 
 	const fieldsHtml = example.fields
-		.map((field) => {
-			const requiredAttr = field.required ? ' required' : '';
-			const valueAttr = field.defaultValue
-				? ` value="${escapeHtml(field.defaultValue)}"`
-				: '';
-			const requiredLabel = field.required
-				? ' <span class="plugin-example-required" title="Required field">*</span>'
-				: '';
-			return `<label class="plugin-example-field"><span class="plugin-example-field-label">${escapeHtml(
-				field.label,
-			)}${requiredLabel}</span><input name="${escapeHtml(
-				field.name,
-			)}" type="${escapeHtml(field.type)}"${requiredAttr}${valueAttr}></label>`;
-		})
+		.map((field) =>
+			renderField({
+				name: field.name,
+				type: field.type,
+				label: field.label,
+				required: field.required,
+				value: field.defaultValue,
+			}),
+		)
 		.join('');
 
-	return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions"><button type="submit">Run</button></div></form>`;
+	return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions">${renderButton(
+		{
+			label: 'Run',
+			type: 'submit',
+		},
+	)}</div></form>`;
 };
 
 /**
@@ -146,15 +159,37 @@ const buildOverviewPageHtml = (
 		{path: '/nagios/honey-pot', helpPath: '/nagios/honey-pot?help'},
 		// The admin UI is always mounted; when no password is configured it
 		// serves a "not configured" page rather than 404, so the link is always
-		// reachable.
-		{path: adminUiPath, helpPath: `${adminUiPath}/local-config`},
+		// reachable. It has no `?help` page of its own, so no helpPath is set:
+		// pointing one at the editor would just duplicate the path link.
+		{path: adminUiPath},
 	];
 
+	/**
+	 * The heading row of a route list item: the route path, linking to a runnable
+	 * URL, plus a link to whatever explains it. Callers wrap it in their own
+	 * `<li>`, which may also hold example forms for the same route.
+	 */
+	const renderRouteHeader = (options: {
+		path: string;
+		href?: string;
+		helpPath?: string;
+	}): string => {
+		const helpHtml = options.helpPath
+			? `<a class="route-help" href="${options.helpPath}">help</a>`
+			: '';
+
+		return `<div class="route-header"><a class="route-path" href="${
+			options.href ?? options.path
+		}">${options.path}</a>${helpHtml}</div>`;
+	};
+
 	const staticRouteItems = staticRoutes
-		.map(
-			(routeInfo) =>
-				`<li><a href="${routeInfo.path}">${routeInfo.path}</a> - <a href="${routeInfo.helpPath}">help</a></li>`,
-		)
+		.map((routeInfo) => {
+			return `<li>${renderRouteHeader({
+				path: routeInfo.path,
+				helpPath: routeInfo.helpPath,
+			})}</li>`;
+		})
 		.join('');
 
 	// Local Config Presets section - hidden if runtime validation failed
@@ -163,8 +198,9 @@ const buildOverviewPageHtml = (
 		: localConfigPresets && localConfigPresets.size > 0
 			? Array.from(localConfigPresets.keys())
 					.map((key) => {
-						const routePath = `/local-config?config=${escapeHtml(key)}`;
-						return `<li><a href="${routePath}">${routePath}</a></li>`;
+						return `<li>${renderRouteHeader({
+							path: `/local-config?config=${escapeHtml(key)}`,
+						})}</li>`;
 					})
 					.join('')
 			: '';
@@ -172,13 +208,18 @@ const buildOverviewPageHtml = (
 	const pluginRouteItems = pluginRoutes
 		.map((routePath) => {
 			const examples = examplesByRoute[routePath] ?? [];
+			// A plugin that offers a link example has a sensible no-argument call, so
+			// the route name itself becomes that shortcut.
 			const firstLinkExample = examples.find(
 				(example) => example.kind === 'link',
 			);
-			const primaryHref = firstLinkExample ? firstLinkExample.href : routePath;
 			const examplesHtml = examples.map(renderExampleFormHtml).join('');
 
-			return `<li class="plugin-route-item"><div class="plugin-route-header"><a href="${primaryHref}">${routePath}</a> - <a href="${routePath}?help">help</a></div>${examplesHtml ? `<div class="plugin-examples">${examplesHtml}</div>` : ''}</li>`;
+			return `<li>${renderRouteHeader({
+				path: routePath,
+				href: firstLinkExample?.href,
+				helpPath: `${routePath}?help`,
+			})}${examplesHtml ? `<div class="plugin-examples">${examplesHtml}</div>` : ''}</li>`;
 		})
 		.join('');
 
@@ -190,51 +231,27 @@ const buildOverviewPageHtml = (
 </section>`
 			: '';
 
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Nest Route Overview</title>
-<style>
-body{font-family:sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;line-height:1.5}
-h1,h2{margin-bottom:.5rem}
-.title-row{display:flex;align-items:center;gap:.6rem}
-code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
-li{margin:.35rem 0}
-.plugin-route-item{margin-bottom:.8rem}
-.plugin-route-header{font-weight:600}
-.plugin-examples{margin-top:.5rem;display:grid;grid-template-columns:1fr;gap:.5rem}
-.plugin-example-link{display:inline-block;padding:.35rem .55rem;background:#f7f7f7;border:1px solid #d9d9d9;border-radius:6px;text-decoration:none}
-.plugin-example-form{display:grid;grid-template-columns:1fr;gap:.5rem;background:#f7f7f7;border:1px solid #d9d9d9;border-radius:8px;padding:.6rem .7rem;max-width:100%}
-.plugin-example-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
-.plugin-example-title{font-weight:600}
-.plugin-example-method{font-size:.82rem;letter-spacing:.02em;padding:.12rem .45rem;border:1px solid #c8c8c8;border-radius:999px;background:#fff}
-.plugin-example-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.45rem .7rem}
-.plugin-example-field{display:grid;grid-template-columns:1fr;gap:.2rem}
-.plugin-example-field-label{font-size:.9rem;color:#333}
-.plugin-example-required{display:inline-block;margin-left:.28rem;font-size:1rem;line-height:1;color:#b3261e;vertical-align:middle;font-weight:700}
-.plugin-example-field input{width:100%;box-sizing:border-box;padding:.34rem .42rem}
-.plugin-example-actions{display:flex;justify-content:flex-end}
-.plugin-example-actions button{padding:.3rem .75rem}
-.warnings{background:#fff8e1;border-left:4px solid #f9a825;padding:.75rem 1rem;margin:1rem 0}
-.warnings h2{color:#7b5800;margin-top:0}
-.warnings ul{margin:.5rem 0;padding-left:1.5rem}
-.startup-warning-whitelist-entry{background:#fff3cd;border:1px solid #f2d28b;border-radius:4px;padding:.55rem .7rem;overflow-x:auto;white-space:pre;margin:.5rem 0}
-.startup-warning-whitelist-entry code{background:transparent;padding:0}
-</style>
-	<script src="${PLUGIN_EXAMPLE_FORM_SCRIPT_PATH}" defer></script>
-</head>
-<body>
-<h1 class="title-row">Nest Route Overview</h1>
-<p>Project Origin: <a href="${PROJECT_ORIGIN_URL}">${PROJECT_ORIGIN_URL}</a></p>
-<p>Version: <code>${APP_VERSION}</code></p>
-<p>Base URL: <code>${baseUrl}</code></p>
-${warningsHtml}
+	return renderHtmlDocument({
+		title: 'Nest Route Overview',
+		headHtml: `\n<script src="${PLUGIN_EXAMPLE_FORM_SCRIPT_PATH}" defer></script>`,
+		metaHtml: renderMetaList([
+			{
+				label: 'Project Origin',
+				valueHtml: `<a href="${PROJECT_ORIGIN_URL}">${PROJECT_ORIGIN_URL}</a>`,
+			},
+			{label: 'Version', valueHtml: `<code>${APP_VERSION}</code>`},
+			{label: 'Base URL', valueHtml: `<code>${baseUrl}</code>`},
+		]),
+		contentHtml: `${warningsHtml}
 <h2>Built-in Routes</h2>
-<ul>${staticRouteItems}</ul>${localConfigItems ? `<h2>Local Config Presets</h2><ul>${localConfigItems}</ul>` : ''}<h2>Plugin Routes</h2>
-<ul>${pluginRouteItems || '<li>No plugins found</li>'}</ul>
-</body>
-</html>`;
+<ul class="route-list">${staticRouteItems}</ul>${
+			localConfigItems
+				? `<h2>Local Config Presets</h2>\n<ul class="route-list">${localConfigItems}</ul>`
+				: ''
+		}
+<h2>Plugin Routes</h2>
+<ul class="route-list">${pluginRouteItems || '<li>No plugins found</li>'}</ul>`,
+	});
 };
 
 app.use(

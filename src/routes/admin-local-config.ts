@@ -38,6 +38,22 @@ const loginRateLimiter = rateLimit({
 });
 
 /**
+ * Guards every authenticated admin route against brute-forcing the password
+ * header. Without this, `POST /login` is the only throttled entry point and an
+ * attacker could hammer any admin endpoint with guessed `x-nest-admin-password`
+ * values at the (much higher) global rate limit. Only failed attempts count, so
+ * a legitimately authenticated client is never throttled.
+ */
+const adminAuthRateLimiter = rateLimit({
+	windowMs: env.RATE_LIMIT_WINDOW_MS,
+	max: env.ADMIN_LOGIN_RATE_LIMIT_MAX,
+	skipSuccessfulRequests: true,
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: 'Too many failed admin authentication attempts. Try again later.',
+});
+
+/**
  * Session cookie or admin password header - either is enough.
  *
  * The page itself is served to a header-authenticated caller too, because every
@@ -105,9 +121,14 @@ router.get(
 router.get('/', getAdminConfigPage);
 router.get('/local-config', getAdminConfigPage);
 
+// Login is the one POST that cannot require the admin API header or a session:
+// it runs before either exists. Its CSRF surface is accepted risk and covered
+// three ways - the global CSRF guard rejects cross-origin state changes, the
+// session cookie is SameSite=Strict, and a successful login still needs the
+// out-of-band ADMIN_UI_PASSWORD, which a cross-site form cannot supply.
 router.post('/login', loginRateLimiter, postAdminLogin);
 
-router.use(requireAdminAuth);
+router.use(adminAuthRateLimiter, requireAdminAuth);
 
 router.post('/logout', postAdminLogout);
 

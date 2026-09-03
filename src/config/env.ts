@@ -153,6 +153,14 @@ export const env = cleanEnv(process.env, {
 	API_KEY_HEADER: str({default: 'x-api-key'}),
 	API_KEY: str({default: ''}),
 	ALLOWED_IPS: str({default: '127.0.0.1, ::1'}), // Loopback addresses by default for IPv4 and IPv6
+	// When Nest runs behind a reverse proxy, the real client address only
+	// reaches us through `X-Forwarded-For`. Trusting that header is dangerous
+	// unless the immediate peer really is our proxy, so it stays disabled by
+	// default and the allowlist matches the socket address. Set TRUST_PROXY to
+	// enable it: `true` trusts every peer (rarely correct), a number sets the
+	// number of proxy hops to trust, or a comma-separated list of CIDR/entries
+	// restricts which peers may supply the header.
+	TRUST_PROXY: str({default: 'false'}),
 	RATE_LIMIT_WINDOW_MS: num({default: 60_000}), // 60 seconds
 	RATE_LIMIT_MAX: num({default: 120}), // 120 requests per window
 	// The admin UI is always mounted, but it is protected by its own credential

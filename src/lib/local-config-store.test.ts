@@ -1,7 +1,11 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import {getErrorMessage} from './error-message';
-import {getConfigFilePath, validateConfigFilePath} from './local-config';
+import {
+	getConfigFilePath,
+	validateConfigFilePath,
+	validateConfigFileSecurity,
+} from './local-config';
 import {
 	MAX_CONFIG_DOCUMENT_BYTES,
 	type PresetEntry,
@@ -27,6 +31,9 @@ jest.mock('./logger');
 
 const mockedGetConfigFilePath = jest.mocked(getConfigFilePath);
 const mockedValidateConfigFilePath = jest.mocked(validateConfigFilePath);
+const mockedValidateConfigFileSecurity = jest.mocked(
+	validateConfigFileSecurity,
+);
 const mockedFs = jest.mocked(fs);
 const mockedLoggerWarn = jest.mocked(logger.warn);
 
@@ -341,6 +348,37 @@ describe('local-config-store', () => {
 				{key: 'check_test', command: 'check_test', params: {}},
 			]);
 		});
+
+		it('validates file security before reading an existing file', () => {
+			mockedFs.existsSync.mockReturnValue(true);
+			mockedFs.readFileSync.mockReturnValue('check_test=check_test\n');
+
+			readConfigDocument();
+
+			expect(mockedValidateConfigFileSecurity).toHaveBeenCalledWith(
+				CONFIG_PATH,
+			);
+		});
+
+		it('skips the security check when the file is missing', () => {
+			mockedFs.existsSync.mockReturnValue(false);
+
+			readConfigDocument();
+
+			expect(mockedValidateConfigFileSecurity).not.toHaveBeenCalled();
+		});
+
+		it('propagates a security error instead of reading the file', () => {
+			mockedFs.existsSync.mockReturnValue(true);
+			mockedValidateConfigFileSecurity.mockImplementation(() => {
+				throw new Error('Config file is not a regular file');
+			});
+
+			expect(() => readConfigDocument()).toThrow(
+				'Config file is not a regular file',
+			);
+			expect(mockedFs.readFileSync).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('writeConfigDocument', () => {
@@ -350,16 +388,28 @@ describe('local-config-store', () => {
 			expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
 				expect.stringContaining('.local-presets.conf.'),
 				'check_test=check_test\n',
-				{encoding: 'utf-8', mode: 0o640, flag: 'wx'},
+				{encoding: 'utf-8', mode: 0o600, flag: 'wx'},
 			);
 			expect(mockedFs.chmodSync).toHaveBeenCalledWith(
 				expect.stringContaining('.local-presets.conf.'),
-				0o640,
+				0o600,
 			);
 			expect(mockedFs.renameSync).toHaveBeenCalledWith(
 				expect.stringContaining('.local-presets.conf.'),
 				CONFIG_PATH,
 			);
+		});
+
+		it('uses an unpredictable temp file name across calls', () => {
+			writeConfigDocument('a=check_test\n');
+			writeConfigDocument('b=check_test\n');
+
+			const first = mockedFs.writeFileSync.mock.calls[0][0] as string;
+			const second = mockedFs.writeFileSync.mock.calls[1][0] as string;
+			// A random suffix means two writes never collide on the same path,
+			// even within the same process and millisecond.
+			expect(first).not.toBe(second);
+			expect(first).toMatch(/\.local-presets\.conf\.\d+\.[0-9a-f]{16}\.tmp$/);
 		});
 
 		it('cleans up the temp file and rethrows when the write fails', () => {
@@ -470,12 +520,42 @@ describe('local-config-store', () => {
 			}
 		});
 
+		it('recognises credential names added when broadening the pattern', () => {
+			for (const name of [
+				'passphrase',
+				'api-key',
+				'api_secret',
+				'authkey',
+				'auth_key',
+				'auth-key',
+				'access_key',
+				'accesskey',
+				'private_key',
+				'privatekey',
+				'client_secret',
+				'clientsecret',
+				'bearer',
+				'session_id',
+				'session-token',
+				'sessionid',
+				'cert',
+			]) {
+				expect(isSecretParamName(name)).toBe(true);
+			}
+		});
+
 		it('is case insensitive', () => {
 			expect(isSecretParamName('API_TOKEN')).toBe(true);
 		});
 
 		it('rejects non-secret names', () => {
 			expect(isSecretParamName('warn')).toBe(false);
+		});
+
+		it('does not match bare key or harmless words', () => {
+			for (const name of ['key', 'keyword', 'author', 'authority']) {
+				expect(isSecretParamName(name)).toBe(false);
+			}
 		});
 	});
 

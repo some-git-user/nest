@@ -69,6 +69,8 @@ describe('/nagios/honey-pot route', () => {
 	});
 
 	test('flags probable route scan when one IP probes many unknown paths', async () => {
+		// The x-forwarded-for header is deliberately spoofed to prove it is
+		// ignored: every probe is attributed to the real loopback socket.
 		const scanHeaders = {'x-forwarded-for': '198.51.100.44'};
 		await request(app).get('/a1').set(scanHeaders);
 		await request(app).get('/a2').set(scanHeaders);
@@ -89,7 +91,7 @@ describe('/nagios/honey-pot route', () => {
 		expect(body.code).toBe(1);
 		expect(String(body.message)).toContain('scan_ips=1');
 		expect(String(body.message)).toContain('max_paths_per_ip=6');
-		expect(String(body.message)).toContain('most_active_ip=198.51.100.44');
+		expect(String(body.message)).toContain('most_active_ip=127.0.0.1');
 		expect(String(body.performanceData)).toContain(
 			"'honeypot_probable_scan_ips'=1c",
 		);

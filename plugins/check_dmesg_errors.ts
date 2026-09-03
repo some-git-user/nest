@@ -136,15 +136,25 @@ interface ExecSyncOptions {
 	env?: NodeJS.ProcessEnv;
 	uid?: number;
 	gid?: number;
-	shell?: string | boolean;
 }
+
+/**
+ * Shape of the `child_process.execFileSync` seam used for testing.
+ * The command is always executed without a shell, so no argument can be
+ * interpreted as shell syntax.
+ */
+export type ExecFileFn = (
+	file: string,
+	args: string[],
+	options?: ExecSyncOptions,
+) => string;
 
 export const checkDmesgErrors = async (params: {
 	level?: 'emerg' | 'alert' | 'crit' | 'err' | 'warn';
 	pattern?: string;
 	timeRange?: number;
 	ignorePatterns?: string;
-	execSync?: (command: string, options?: ExecSyncOptions) => string;
+	execSync?: ExecFileFn;
 }): Promise<PluginReturn> => {
 	const {
 		level = 'err',
@@ -257,11 +267,13 @@ export const checkDmesgErrors = async (params: {
 	// Reference: https://man7.org/linux/man-pages/man1/dmesg.1.html
 	const levelFlag = getLevelFlag(selectedLevel);
 
-	let dmesgCommand = `dmesg --level=${levelFlag}+ --time-format=iso --nopager 2>/dev/null`;
+	// Every option is a separate argv entry: nothing is ever interpolated into a
+	// shell command string, so user input cannot inject shell commands.
+	const dmesgArgs = [`--level=${levelFlag}+`, '--time-format=iso', '--nopager'];
 
 	// Add time filtering if specified
 	if (timeRange > 0) {
-		dmesgCommand += ` --since="${timeRange} seconds ago"`;
+		dmesgArgs.push('--since', `${timeRange} seconds ago`);
 	}
 
 	// Execute dmesg command
@@ -269,9 +281,10 @@ export const checkDmesgErrors = async (params: {
 	let dmesgExitCode: number = 1;
 
 	try {
-		// Use injected execSync for testing, otherwise use dynamic import
-		const exec = injectedExecSync || (await import('child_process')).execSync;
-		dmesgOutput = exec(dmesgCommand, {
+		// Use injected execFileSync for testing, otherwise use dynamic import
+		const exec =
+			injectedExecSync || (await import('child_process')).execFileSync;
+		dmesgOutput = exec('dmesg', dmesgArgs, {
 			encoding: 'utf8',
 			maxBuffer: 10 * 1024 * 1024, // 10MB buffer
 		}) as string;

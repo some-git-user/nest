@@ -1,5 +1,6 @@
 import type {NextFunction, Request, Response} from 'express';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import * as controller from '../controllers/admin-local-config';
 import {ADMIN_API_HEADER} from '../controllers/admin-local-config';
@@ -17,7 +18,12 @@ jest.mock('../lib/admin-scripts', () => ({
 }));
 jest.mock('express-rate-limit', () => ({
 	__esModule: true,
-	default: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+	// A jest.fn so tests can assert the limiter options the router configures.
+	default: jest.fn(
+		(_options: Record<string, unknown>) =>
+			(_req: Request, _res: Response, next: NextFunction) =>
+				next(),
+	),
 }));
 jest.mock('../config/env', () => ({
 	env: {
@@ -142,6 +148,26 @@ describe('admin-local-config route', () => {
 
 			expect(res.status).toBe(HttpStatusCodes.NO_CONTENT);
 			expect(controller.getAdminCommands).toHaveBeenCalled();
+		});
+
+		it('rate-limits failed admin auth attempts (skipSuccessfulRequests)', () => {
+			// Re-import the router so the module-level rateLimit() calls are
+			// observed on a freshly reset mock.
+			jest.clearAllMocks();
+			jest.isolateModules(() => {
+				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				require('./admin-local-config');
+			});
+
+			const mockedRateLimit = jest.mocked(rateLimit);
+			const options = mockedRateLimit.mock.calls.map(
+				([optionsArg]) => optionsArg,
+			);
+			// One limiter for login, one for the authenticated admin surface.
+			expect(options.length).toBeGreaterThanOrEqual(2);
+			const authLimiter = options.find((opt) => opt?.skipSuccessfulRequests);
+			expect(authLimiter).toBeDefined();
+			expect(authLimiter?.max).toBe(5);
 		});
 	});
 
