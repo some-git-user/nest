@@ -75,9 +75,12 @@ const REBOOT_MARKER_FILE = '/var/run/reboot-required';
 const REBOOT_PKGS_FILE = '/var/run/reboot-required.pkgs';
 
 export const checkRebootRequired = (params: {
-	checkReasons?: string;
+	checkReasons?: boolean | string;
 }): PluginReturn => {
-	const checkReasons = params.checkReasons === 'true';
+	// The HTTP layer coerces "true"/"false" query params to booleans, but the
+	// plugin can also be called directly (or via tests) with the raw string.
+	const checkReasons =
+		params.checkReasons === true || params.checkReasons === 'true';
 
 	const returnObject: PluginReturn = {
 		message: 'Should not be here',

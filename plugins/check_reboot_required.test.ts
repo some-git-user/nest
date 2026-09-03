@@ -2,7 +2,7 @@ import {meta} from './check_reboot_required';
 
 // Define type for the mocked module's exports
 type MockedModule = {
-	checkRebootRequired: (params: {checkReasons?: string}) => {
+	checkRebootRequired: (params: {checkReasons?: boolean | string}) => {
 		message: string;
 		code: number;
 		performanceData: Array<{
@@ -169,6 +169,32 @@ describe('checkRebootRequired plugin', () => {
 				uom: '',
 			},
 		]);
+	});
+
+	test('returns CRITICAL when checkReasons is the coerced boolean true (HTTP layer)', () => {
+		jest.doMock('fs', () => ({
+			__esModule: true as const,
+			default: {
+				existsSync: (path: string) =>
+					path === '/var/run/reboot-required' ||
+					path === '/var/run/reboot-required.pkgs',
+				readFileSync: () => 'linux-image-amd64\n',
+			},
+			existsSync: (path: string) =>
+				path === '/var/run/reboot-required' ||
+				path === '/var/run/reboot-required.pkgs',
+			readFileSync: () => 'linux-image-amd64\n',
+		}));
+
+		const {checkRebootRequired: localCheckRebootRequired} =
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			require('./check_reboot_required') as unknown as MockedModule;
+		const result = localCheckRebootRequired({checkReasons: true});
+
+		expect(result.code).toBe(2);
+		expect(result.message).toBe(
+			'CRITICAL: Reboot required. Updates from: linux-image-amd64',
+		);
 	});
 
 	test('collapses duplicate package names from the pkgs file', () => {
