@@ -10,10 +10,12 @@ import {
 	sanitizeHelpHtml,
 	wrapFullHelpDocumentInSandbox,
 } from '../lib/help-page';
+import {escapeHtml} from '../lib/html-escape';
 import {sendNagiosUnknownError} from '../lib/http-nagios';
 import {logger} from '../lib/logger';
 import {createNagiosReturnMessage} from '../lib/nagios';
 import {buildPluginSandbox} from '../lib/plugin-sandbox';
+import {renderHtmlDocument} from '../lib/ui-components';
 import {vmApi} from '../routes/dynamic-routes';
 import {NagiosReturnCode, NagiosReturnCodes} from '../types/nagios';
 import type {HtmlTemplateString} from '../types/plugin';
@@ -35,13 +37,6 @@ export type PluginHelpContext = {
 };
 
 const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
-
-const escapeHtml = (str: string): string =>
-	str
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;');
 
 const SHELL_AUTH_PREFIX = 'NEST_HOST=SERVER_IP_OR_DNS NEST_API_KEY=API_KEY ';
 
@@ -115,17 +110,17 @@ const buildPluginHelpHtml = (ctx: PluginHelpContext): string => {
 			);
 		}
 
-		// Plugin provides a partial HTML fragment — wrap in a minimal shell
+		// Plugin provides a partial HTML fragment — wrap in the shared shell. The
+		// fragment brings its own `<h1>`, so the page header stays hidden.
 		const sanitizedFragment = sanitizeHelpHtml(normalizedHelpHtml);
-		return appendExternalLinkGuard(`<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}pre{background:#f4f4f4;padding:1rem;border-radius:4px;overflow-x:auto}code{background:#f4f4f4;padding:.2em .4em;border-radius:3px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.5rem;text-align:left}th{background:#f4f4f4}.shell-auth-hint{margin-top:1.5rem;padding:1rem;border-left:4px solid #2c7a7b;background:#f3fbfb}</style>
-</head><body>
-<p><a href="/">Back to route overview</a></p>
-${sanitizedFragment}
-${shellHintSection}
-</body></html>`);
+		return appendExternalLinkGuard(
+			renderHtmlDocument({
+				title,
+				backHref: '/',
+				hideHeader: true,
+				contentHtml: `${sanitizedFragment}${shellHintSection}`,
+			}),
+		);
 	}
 
 	// Auto-generate a fallback page from usage metadata
@@ -138,16 +133,13 @@ ${shellHintSection}
 	const usageSection =
 		httpRow || shellRow ? `<h2>Usage</h2><dl>${httpRow}${shellRow}</dl>` : '';
 
-	return appendExternalLinkGuard(`<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>body{font-family:sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem}dt{font-weight:bold;margin-top:1rem}code{background:#f4f4f4;padding:.2em .4em;border-radius:3px}.shell-auth-hint{margin-top:1.5rem;padding:1rem;border-left:4px solid #2c7a7b;background:#f3fbfb}</style>
-</head><body>
-<p><a href="/">Back to route overview</a></p>
-<h1>${escapeHtml(title)}</h1>
-${usageSection}<p>No extended help is available for this plugin.</p>
-${shellHintSection}</body>
-</html>`);
+	return appendExternalLinkGuard(
+		renderHtmlDocument({
+			title,
+			backHref: '/',
+			contentHtml: `${usageSection}<p>No extended help is available for this plugin.</p>${shellHintSection}`,
+		}),
+	);
 };
 
 const parseBodyParams = (body: unknown): {[key: string]: string} => {

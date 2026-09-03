@@ -5,24 +5,17 @@ import {
 } from '../lib/help-page';
 import {getHoneypotStats} from '../lib/honey-pot';
 import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
+import {renderHtmlDocument} from '../lib/ui-components';
 import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 
 const getHoneypotHelpHtml = (): string => {
-	return appendExternalLinkGuard(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Help: /nagios/honey-pot</title>
-<style>
-body{font-family:sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.5}
-code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
-li{margin:.35rem 0}
-</style>
-</head>
-<body>
-<p><a href="/">Back to route overview</a></p>
-<h1>Built-in Help: /nagios/honey-pot</h1>
+	return appendExternalLinkGuard(
+		renderHtmlDocument({
+			title: 'Help: /nagios/honey-pot',
+			backHref: '/',
+			hideHeader: true,
+			contentHtml: `<h1>Built-in Help: /nagios/honey-pot</h1>
 <p>Returns honeypot probe metrics and detection severity as Nagios JSON.</p>
 <h2>Endpoint</h2>
 <ul>
@@ -45,9 +38,9 @@ li{margin:.35rem 0}
 <li><code>/nagios/honey-pot</code></li>
 <li><code>/nagios/honey-pot?warnHits=2&critHits=8&warnSuspicious=2&critSuspicious=4</code></li>
 </ul>
-<p>Use these thresholds to tune warning and critical transitions for probe activity.</p>
-</body>
-</html>`);
+<p>Use these thresholds to tune warning and critical transitions for probe activity.</p>`,
+		}),
+	);
 };
 
 const parseThreshold = (value: unknown, fallback: number): number => {

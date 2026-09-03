@@ -32,6 +32,48 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain("'x-nest-admin': '1'");
 		});
 
+		it('tolerates a command without declared fields', () => {
+			// A freshly added preset has no known command; looking the command up
+			// must not throw, or the whole form fails to render.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'fieldsByCommand[entry.command] || []',
+			);
+		});
+
+		it('prefills a new preset with a loaded command', () => {
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"command: commands.length > 0 ? commands[0].command : ''",
+			);
+		});
+		it('marks the command of an entry as selected', () => {
+			// Rebuilding the option list without "selected" would silently switch
+			// every entry to the first plugin on the next render.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var isSelected = value === entry.command',
+			);
+		});
+
+		it('escapes every value interpolated into the form', () => {
+			// Preset keys, parameter names/values and plugin metadata all end up in
+			// HTML on a page that carries the admin session.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var escapeHtml = function (value)',
+			);
+			for (const call of [
+				'escapeHtml(field.label)',
+				'escapeHtml(field.name)',
+				'escapeHtml(value)',
+				'escapeHtml(placeholder)',
+				'escapeHtml(name)',
+				'escapeHtml(entry.params[name])',
+				'escapeHtml(entry.key)',
+				'escapeHtml(label)',
+				'escapeHtml(drift.currentHash',
+				'escapeHtml(drift.approvedHash)',
+			]) {
+				expect(ADMIN_CONFIG_SCRIPT).toContain(call);
+			}
+		});
 		it('contains no inline </script> sequence', () => {
 			expect(ADMIN_CONFIG_SCRIPT).not.toContain('</script>');
 		});

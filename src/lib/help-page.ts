@@ -1,6 +1,7 @@
 import {Response} from 'express';
 import sanitizeHtml, {type Attributes, type IOptions} from 'sanitize-html';
 import {EXTERNAL_LINK_GUARD_SCRIPT} from './client-scripts';
+import {renderHtmlDocument} from './ui-components';
 
 export const EXTERNAL_LINK_WARNING_MESSAGE =
 	'You are about to leave this Nest app and open an external website. Continue?';
@@ -98,24 +99,15 @@ export const wrapFullHelpDocumentInSandbox = (
 	title: string,
 	fullHtml: string,
 ): string => {
-	const safeTitle = escapeHtmlAttribute(title);
-	const safeSrcdoc = escapeHtmlAttribute(fullHtml);
-
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>${safeTitle}</title>
-<style>
-body{font-family:sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;line-height:1.5}
-iframe{width:100%;min-height:70vh;border:1px solid #dcdcdc;border-radius:6px;background:#fff}
-</style>
-</head>
-<body>
-<p><a href="${ROUTE_OVERVIEW_PATH}">Back to route overview</a></p>
-<h1>${safeTitle}</h1>
-<p>This plugin help document is rendered in a sandbox for safety.</p>
-<iframe sandbox="allow-popups" srcdoc="${safeSrcdoc}"></iframe>
-</body>
-</html>`;
+	return renderHtmlDocument({
+		title,
+		backHref: ROUTE_OVERVIEW_PATH,
+		maxPageWidth: '64rem',
+		subtitle: 'This plugin help document is rendered in a sandbox for safety.',
+		// The document itself is untrusted plugin output, so it stays inside a
+		// sandboxed frame; only the chrome around it comes from this app.
+		contentHtml: `<iframe class="sandbox-frame" sandbox="allow-popups" srcdoc="${escapeHtmlAttribute(
+			fullHtml,
+		)}"></iframe>`,
+	});
 };

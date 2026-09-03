@@ -31,6 +31,22 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		fieldsByCommand[command.command] = Array.isArray(command.fields) ? command.fields : [];
 	});
 
+	// Everything interpolated into the form below comes from the stored config
+	// file or from plugin metadata, neither of which is trusted here: a preset key
+	// or parameter value could otherwise close an attribute and inject markup into
+	// a page that holds the admin session.
+	var escapeHtml = function (value) {
+		if (value === undefined || value === null) {
+			return '';
+		}
+		return String(value)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	};
+
 	// Working copy of the document. Every edit mutates this array; the server is
 	// only contacted on validate / test / save, so editing stays responsive and
 	// nothing is written by accident.
@@ -74,26 +90,26 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		}
 		if (!drift.drifted) {
 			driftHost.innerHTML =
-				'<div class="banner ok"><h2>File matches the whitelist</h2>' +
-				'<p>The config file on disk is the one the service approved at startup.</p></div>';
+				'<section class="banner ok"><h2>File matches the whitelist</h2>' +
+				'<p>The config file on disk is the one the service approved at startup.</p></section>';
 			return;
 		}
 
 		var whitelistLine =
-			'configs/local-presets.conf ' + (drift.currentHash || 'unknown');
+			'configs/local-presets.conf ' + escapeHtml(drift.currentHash || 'unknown');
 		var approved = drift.approvedHash
-			? 'Whitelist approves <code>' + drift.approvedHash + '</code>.'
+			? 'Whitelist approves <code>' + escapeHtml(drift.approvedHash) + '</code>.'
 			: 'The file is not in the whitelist at all.';
 
 		driftHost.innerHTML =
-			'<div class="banner"><h2>Changes are waiting for manual approval</h2>' +
+			'<section class="banner"><h2>Changes are waiting for manual approval</h2>' +
 			'<p>The file on disk is not the file the whitelist approves, so a restart ' +
 			'would disable <strong>every</strong> local preset until the hash is updated. ' +
 			'The presets that were approved at startup are still the ones being served.</p>' +
 			'<p>' + approved + '</p>' +
 			'<pre>' + whitelistLine + '</pre>' +
 			'<p>Add that line to <code>plugins/plugin-whitelist.txt</code>, then restart ' +
-			'the service. Use <em>Revert to approved</em> to discard the changes instead.</p></div>';
+			'the service. Use <em>Revert to approved</em> to discard the changes instead.</p></section>';
 	};
 
 	// Values the server masked away. A secret never leaves the server, so the
@@ -106,7 +122,11 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 	var paramRows = function (entry, index) {
 		var rows = '';
 		var fieldNames = {};
-		fieldsByCommand[entry.command].forEach(function (field) {
+		// A command that is not loaded (or not chosen yet) has no declared fields.
+		// Falling back to an empty list keeps the render alive, so the undeclared
+		// parameters below are still shown instead of the whole form disappearing.
+		var fields = fieldsByCommand[entry.command] || [];
+		fields.forEach(function (field) {
 			fieldNames[field.name] = field;
 			var secret = isSecret(entry, field.name) || field.type === 'password';
 			var stored = isSecret(entry, field.name);
@@ -116,12 +136,14 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			}
 			var placeholder = stored ? 'stored - leave empty to keep' : '';
 			rows +=
-				'<div class="field"><label for="p' + index + '_' + field.name + '">' +
-				field.label + (field.required ? ' *' : '') + '</label>' +
-				'<input id="p' + index + '_' + field.name + '" data-param="' + field.name + '" type="' +
-				(secret ? 'password' : 'text') + '" value="' + value + '"' +
-				(placeholder ? ' placeholder="' + placeholder + '"' : '') +
-				'></div>';
+				'<label class="field"><span class="field-label">' +
+				escapeHtml(field.label) +
+				(field.required ? '<span class="required" title="Required field">*</span>' : '') +
+				'</span><input id="p' + index + '_' + escapeHtml(field.name) +
+				'" data-param="' + escapeHtml(field.name) + '" type="' +
+				(secret ? 'password' : 'text') + '" value="' + escapeHtml(value) + '"' +
+				(placeholder ? ' placeholder="' + escapeHtml(placeholder) + '"' : '') +
+				'></label>';
 		});
 
 		// Parameters that the selected plugin does not declare are still shown, so a
@@ -132,29 +154,46 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			}
 			var secret = isSecret(entry, name);
 			rows +=
-				'<div class="field"><label for="x' + index + '_' + name + '">' + name +
-				' <span class="hint">(undeclared)</span></label>' +
-				'<input id="x' + index + '_' + name + '" data-param="' + name + '" type="' +
-				(secret ? 'password' : 'text') + '" value="' + entry.params[name] + '"></div>';
+				'<label class="field"><span class="field-label">' + escapeHtml(name) +
+				'<span class="hint"> (undeclared)</span></span><input id="x' + index + '_' +
+				escapeHtml(name) + '" data-param="' + escapeHtml(name) + '" type="' +
+				(secret ? 'password' : 'text') + '" value="' + escapeHtml(entry.params[name]) + '"></label>';
 		});
 
 		return rows;
 	};
 
 	var commandOptions = function (entry) {
+		// The selected option has to be marked explicitly: the option list is
+		// rebuilt on every render, so without "selected" the browser would show
+		// (and later collect) the first command instead of the entry's own one.
+		var option = function (value, label) {
+			var isSelected = value === entry.command ? ' selected' : '';
+			return (
+				'<option value="' +
+				escapeHtml(value) +
+				'"' +
+				isSelected +
+				'>' +
+				escapeHtml(label) +
+				'</option>'
+			);
+	};
 		var known = false;
 		var options = commands
 			.map(function (command) {
 				if (command.command === entry.command) {
 					known = true;
 				}
-				return '<option value="' + command.command + '">' + command.command + '</option>';
+				return option(command.command, command.command);
 			})
 			.join('');
 		if (!known) {
 			options =
-				'<option value="' + entry.command + '">' + entry.command + ' (not loaded)</option>' +
-				options;
+				option(
+					entry.command,
+					entry.command + ' (not loaded)',
+				) + options;
 		}
 		return options;
 	};
@@ -175,10 +214,12 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				return (
 					'<div class="entry" data-index="' + index + '">' +
 					'<div class="entry-head">' +
-					'<div class="field"><label for="k' + index + '">Key</label>' +
-					'<input id="k' + index + '" data-role="key" type="text" value="' + entry.key + '"></div>' +
-					'<div class="field"><label for="c' + index + '">Plugin command</label>' +
-					'<select id="c' + index + '" data-role="command">' + commandOptions(entry) + '</select></div>' +
+					'<label class="field"><span class="field-label">Key</span>' +
+					'<input id="k' + index + '" data-role="key" type="text" value="' +
+					escapeHtml(entry.key) +
+					'"></label>' +
+					'<label class="field"><span class="field-label">Plugin command</span>' +
+					'<select id="c' + index + '" data-role="command">' + commandOptions(entry) + '</select></label>' +
 					'</div>' +
 					'<div class="params">' + paramRows(entry, index) + '</div>' +
 					'<div class="entry-actions">' +
@@ -334,7 +375,15 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 	if (addButton instanceof HTMLElement) {
 		addButton.addEventListener('click', function () {
 			collectDraft();
-			draft.push({key: '', command: '', params: {}, secretParams: []});
+			// Start from the first loaded plugin so the new row immediately shows the
+			// parameter fields that belong to it. An empty command would be rejected
+			// by the validator anyway.
+			draft.push({
+				key: '',
+				command: commands.length > 0 ? commands[0].command : '',
+				params: {},
+				secretParams: [],
+			});
 			render();
 		});
 	}

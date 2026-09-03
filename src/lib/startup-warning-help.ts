@@ -1,3 +1,6 @@
+import {escapeHtml} from './html-escape';
+import {renderHtmlDocument} from './ui-components';
+
 export type StartupWarningHelpTopic = {
 	id: string;
 	title: string;
@@ -294,13 +297,6 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 	{id: 'cert-generated', matcher: /TLS certificate or key was missing/i},
 ];
 
-const escapeHtml = (value: string): string =>
-	value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;');
-
 type RenderedStartupWarning = {
 	message: string;
 	whitelistEntry?: string;
@@ -367,24 +363,11 @@ export const renderStartupWarningListItems = (warnings: string[]): string => {
 export const renderStartupWarningHelpHtml = (
 	topic: StartupWarningHelpTopic,
 ): string => {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Startup Warning Help: ${escapeHtml(topic.title)}</title>
-<style>
-body{font-family:sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;line-height:1.6}
-code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
-li{margin:.4rem 0}
-.crumbs{margin-bottom:1rem}
-</style>
-</head>
-<body>
-<p class="crumbs"><a href="/">Back to route overview</a></p>
-<h1>${escapeHtml(topic.title)}</h1>
-<p>${escapeHtml(topic.description)}</p>
-<h2>How To Handle</h2>
-<ol>${topic.handlingSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
-</body>
-</html>`;
+	return renderHtmlDocument({
+		title: `Startup Warning Help: ${topic.title}`,
+		backHref: '/',
+		subtitle: topic.description,
+		contentHtml: `<h2>How To Handle</h2>
+<ol>${topic.handlingSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ol>`,
+	});
 };

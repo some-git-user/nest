@@ -5,25 +5,18 @@ import {
 	applyHelpPageSecurityHeaders,
 } from '../lib/help-page';
 import {createNagiosReturnMessage, getNagiosStatusText} from '../lib/nagios';
+import {renderHtmlDocument} from '../lib/ui-components';
 import {getAppVersion} from '../lib/version';
 import type {NagiosPerformanceData, NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 
 const getAppInfoHelpHtml = (): string => {
-	return appendExternalLinkGuard(`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Help: /nagios</title>
-<style>
-body{font-family:sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.5}
-code{background:#f4f4f4;padding:.2rem .4rem;border-radius:4px}
-li{margin:.35rem 0}
-</style>
-</head>
-<body>
-<p><a href="/">Back to route overview</a></p>
-<h1>Built-in Help: /nagios</h1>
+	return appendExternalLinkGuard(
+		renderHtmlDocument({
+			title: 'Help: /nagios',
+			backHref: '/',
+			hideHeader: true,
+			contentHtml: `<h1>Built-in Help: /nagios</h1>
 <p>Returns process and host health as a Nagios JSON payload.</p>
 <h2>Endpoint</h2>
 <ul>
@@ -42,9 +35,9 @@ li{margin:.35rem 0}
 <li><code>/nagios</code></li>
 <li><code>/nagios?cpuWarn=60&cpuCrit=85&memWarn=70&memCrit=90</code></li>
 </ul>
-<p>The route emits performance data for CPU load, memory, uptime, and process RSS.</p>
-</body>
-</html>`);
+<p>The route emits performance data for CPU load, memory, uptime, and process RSS.</p>`,
+		}),
+	);
 };
 
 export const getAppInfo = (req: Request, res: Response): Response => {
