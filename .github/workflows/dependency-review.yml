@@ -20,7 +20,7 @@ jobs:
       - name: Dependency Review (same-repo PRs)
         id: review
         if: ${{ !github.event.pull_request.head.repo.fork }}
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           vulnerability-check: true
           license-check: false
@@ -30,7 +30,7 @@ jobs:
 
       - name: Dependency Review (fork PRs)
         if: ${{ github.event.pull_request.head.repo.fork }}
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           vulnerability-check: true
           license-check: false
