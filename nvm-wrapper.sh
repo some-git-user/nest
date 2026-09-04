@@ -7,6 +7,12 @@
 # silently building with whatever Node.js happens to be on PATH.
 set -o pipefail
 
+# In CI, Node.js is managed by the environment (e.g. actions/setup-node) and is
+# already on PATH; nvm has no knowledge of those installs, so skip 'nvm use'.
+if [[ "${CI:-}" == "true" ]]; then
+	exec "$@"
+fi
+
 NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 
 if [[ ! -f "${NVM_DIR}/nvm.sh" ]]; then
