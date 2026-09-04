@@ -318,7 +318,13 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				})
 				.then(function (body) {
 					if (!response.ok) {
-						throw new Error(body.message || 'Request failed with status ' + response.status);
+						// Validation failures return { ok: false, problems: [...] } with no
+						// 'message'; show the real reasons instead of a bare status code.
+						var detail = body.message;
+						if (!detail && body.problems && body.problems.length) {
+							detail = body.problems.join(' ');
+						}
+						throw new Error(detail || 'Request failed with status ' + response.status);
 					}
 					return body;
 				});

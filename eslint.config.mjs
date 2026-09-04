@@ -36,6 +36,12 @@ const noShellExec = (
 	await import(path.join(__dirname, 'eslint-rules/no-shell-exec.mjs'))
 ).default;
 
+const noUnsafeExampleDefault = (
+	await import(
+		path.join(__dirname, 'eslint-rules/no-unsafe-example-default.mjs')
+	)
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -164,6 +170,7 @@ export default [
 					'enforce-plugin-meta-type': enforcePluginMetaType,
 					'no-src-imports': noSrcImports,
 					'no-shell-exec': noShellExec,
+					'no-unsafe-example-default': noUnsafeExampleDefault,
 				},
 			},
 		},
@@ -174,6 +181,8 @@ export default [
 			'custom/no-src-imports': 'error',
 			// Forbid shell-based child_process execution (command injection)
 			'custom/no-shell-exec': 'error',
+			// Example defaultValues must be saveable as local presets (no space/#)
+			'custom/no-unsafe-example-default': 'error',
 		},
 	},
 ];

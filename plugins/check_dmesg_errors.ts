@@ -115,7 +115,10 @@ export const meta: PluginMeta = {
 				{
 					name: 'pattern',
 					label: 'Pattern',
-					defaultValue: 'I/O error|OOM|panic',
+					// No literal space: a preset value must survive the config-file
+					// grammar (no whitespace) and encodeURIComponent when the preset is
+					// executed, so '.' is used to match the space in "I/O error".
+					defaultValue: 'I/O.error|OOM|panic',
 				},
 				{
 					name: 'level',

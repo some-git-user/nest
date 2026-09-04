@@ -66,7 +66,7 @@ export const meta: PluginMeta = {
 				{
 					name: 'nagiosReturnMessage',
 					label: 'Message',
-					defaultValue: 'Example OK',
+					defaultValue: 'Example-OK',
 				},
 				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '0'},
 				{
@@ -84,7 +84,7 @@ export const meta: PluginMeta = {
 				{
 					name: 'nagiosReturnMessage',
 					label: 'Message',
-					defaultValue: 'Example Warning',
+					defaultValue: 'Example-Warning',
 				},
 				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '1'},
 			],
