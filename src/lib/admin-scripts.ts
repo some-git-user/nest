@@ -447,6 +447,15 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				stored: false,
 			});
 			render();
+			// The new entry is appended at the bottom of the list, which is often
+			// off-screen. Scroll it into view so the operator sees the fresh row
+			// instead of wondering whether the click did anything.
+			if (entriesHost instanceof HTMLElement) {
+				var added = entriesHost.lastElementChild;
+				if (added instanceof HTMLElement) {
+					added.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+				}
+			}
 		});
 	}
 

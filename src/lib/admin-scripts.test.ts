@@ -32,6 +32,13 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain("'x-nest-admin': '1'");
 		});
 
+		it('scrolls a newly added preset into view', () => {
+			// The new row is appended at the bottom of the list and is often
+			// off-screen, so the add handler scrolls it into view after rendering.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('scrollIntoView');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('entriesHost.lastElementChild');
+		});
+
 		it('drops untouched defaults when the plugin command changes', () => {
 			// Switching a preset's command must not carry the previous plugin's
 			// prefilled default values over as bogus undeclared params. The
