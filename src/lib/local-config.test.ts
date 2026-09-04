@@ -1753,6 +1753,9 @@ test=duplicate`;
 		it('captures the exact bytes when startup loads an approved file', () => {
 			const configContent = 'test=check-test';
 			fs.writeFileSync(mockConfigPath, configContent);
+			// This test intentionally uses the real file-security check, so pin
+			// the mode explicitly - the default umask may make files group-writable.
+			fs.chmodSync(mockConfigPath, 0o644);
 
 			const configHash = crypto
 				.createHash('sha256')
