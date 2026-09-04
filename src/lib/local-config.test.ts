@@ -1762,6 +1762,12 @@ test=duplicate`;
 				.update(configContent)
 				.digest('hex');
 			jest.resetModules();
+			// Earlier tests register a jest.doMock('fs', ...) with hardcoded
+			// statSync results (uid 1000). doMock registrations survive
+			// resetModules, so explicitly un-mock fs here - otherwise the real
+			// file-security check sees the fake uid and fails on runners
+			// whose uid is not 1000 (GitHub runners use 1001).
+			jest.dontMock('fs');
 			jest.doMock('./plugin-whitelist', () => ({
 				hashPluginFile: jest.fn(() => configHash),
 			}));
