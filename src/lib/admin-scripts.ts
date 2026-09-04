@@ -258,12 +258,30 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			.join('');
 	};
 
-	var collectEntry = function (element) {
+	// Collect the visible form back into the draft entry.
+	//
+	// When commandChanged is set the caller is the command dropdown handler:
+	// the DOM still shows the PREVIOUS command's fields, and switching plugins
+	// must not smuggle the old plugin's untouched default values into the new
+	// one as bogus undeclared params. So a param is dropped when it was declared
+	// by the previous command and its input still holds that field's default
+	// (i.e. the operator never touched it). Anything else - a value the operator
+	// edited, or a param the previous command never declared (added by hand or
+	// loaded from a stored preset) - is kept.
+	var collectEntry = function (element, commandChanged) {
 		var index = Number(element.getAttribute('data-index'));
 		var entry = draft[index];
 		if (!entry) {
 			return undefined;
 		}
+
+		// The command select is harvested below and overwrites entry.command,
+		// so remember which plugin's fields are currently rendered.
+		var previousCommand = entry.command;
+		var previousFields = {};
+		(fieldsByCommand[previousCommand] || []).forEach(function (field) {
+			previousFields[field.name] = field;
+		});
 
 		var params = {};
 
@@ -281,7 +299,19 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			if (!(input instanceof HTMLInputElement)) {
 				return;
 			}
-			params[input.getAttribute('data-param') || ''] = input.value;
+			var name = input.getAttribute('data-param') || '';
+			if (commandChanged) {
+				var declared = previousFields[name];
+				if (
+					declared !== undefined &&
+					input.value === (declared.defaultValue || '')
+				) {
+					// A field the previous plugin declared that the operator never
+					// changed: pure prefill, not worth carrying to the new plugin.
+					return;
+				}
+			}
+			params[name] = input.value;
 		});
 
 		entry.params = params;
@@ -397,7 +427,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			}
 			var entryElement = event.target.closest('.entry');
 			if (entryElement instanceof HTMLElement) {
-				collectEntry(entryElement);
+				collectEntry(entryElement, true);
 				render();
 			}
 		});

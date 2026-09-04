@@ -32,6 +32,18 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain("'x-nest-admin': '1'");
 		});
 
+		it('drops untouched defaults when the plugin command changes', () => {
+			// Switching a preset's command must not carry the previous plugin's
+			// prefilled default values over as bogus undeclared params. The
+			// command-change handler flags the collection, and a declared field
+			// still sitting at its default is skipped.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('collectEntry(entryElement, true)');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('if (commandChanged) {');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"input.value === (declared.defaultValue || '')",
+			);
+		});
+
 		it('tolerates a command without declared fields', () => {
 			// A freshly added preset has no known command; looking the command up
 			// must not throw, or the whole form fails to render.
