@@ -23,6 +23,7 @@ jobs:
       - name: Setup Node (from .nvmrc) + enable npm cache
         uses: actions/setup-node@v5
         with:
+          node-version: '26' # Major version fallback
           node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: package-lock.json
@@ -43,6 +44,7 @@ jobs:
       - name: Setup Node (from .nvmrc) + enable npm cache
         uses: actions/setup-node@v5
         with:
+          node-version: '26' # Major version fallback
           node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: package-lock.json
@@ -64,6 +66,7 @@ jobs:
       - name: Setup Node (from .nvmrc) + enable npm cache
         uses: actions/setup-node@v5
         with:
+          node-version: '26' # Major version fallback
           node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: package-lock.json
@@ -93,6 +96,7 @@ jobs:
       - name: Setup Node (from .nvmrc) + enable npm cache
         uses: actions/setup-node@v5
         with:
+          node-version: '26' # Major version fallback
           node-version-file: .nvmrc
           cache: 'npm'
           cache-dependency-path: package-lock.json
