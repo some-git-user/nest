@@ -41,6 +41,8 @@ export const applyAdminPageSecurityHeaders = (res: Response): void => {
 const ADMIN_EXTRA_STYLES = `
 .entry{background:var(--surface-subtle)}
 .entry .test-result{background:var(--surface)}
+.key-warning{display:none;color:var(--danger-text);font-size:0.85rem;margin:0.25rem 0 0}
+.key-warning.show{display:block}
 `;
 
 /**

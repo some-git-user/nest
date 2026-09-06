@@ -245,10 +245,12 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					'<label class="field"><span class="field-label">Plugin command</span>' +
 					'<select id="c' + index + '" data-role="command">' + commandOptions(entry) + '</select></label>' +
 					'</div>' +
+					'<div class="key-warning" data-role="keyWarning"></div>' +
 					'<div class="params">' + paramRows(entry, index) + '</div>' +
 					commandHtml +
 					'<div class="entry-actions">' +
 					'<button type="button" data-action="test">Test</button>' +
+					'<button type="button" data-action="copy">Copy</button>' +
 					'<button type="button" data-action="remove" class="danger">Remove</button>' +
 					'</div>' +
 					'<div class="test-result" data-role="testResult"></div>' +
@@ -256,6 +258,52 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				);
 			})
 			.join('');
+		updateDuplicateKeyWarnings();
+	};
+
+	// Flag every preset whose key is used more than once, before the operator
+	// ever hits Validate or Save. The server rejects duplicate keys on both
+	// validate and save (and startup treats one as a fatal parse error), so this
+	// only mirrors that rule live to save a round-trip. Keys are compared
+	// exactly as typed, matching the server; an empty key is left to the
+	// required-field rule instead.
+	var updateDuplicateKeyWarnings = function () {
+		if (!(entriesHost instanceof HTMLElement)) {
+			return;
+		}
+		var keyInputs = entriesHost.querySelectorAll('[data-role="key"]');
+		var counts = {};
+		keyInputs.forEach(function (input) {
+			if (!(input instanceof HTMLInputElement)) {
+				return;
+			}
+			var key = input.value.trim();
+			if (key.length > 0) {
+				counts[key] = (counts[key] || 0) + 1;
+			}
+		});
+		keyInputs.forEach(function (input) {
+			if (!(input instanceof HTMLInputElement)) {
+				return;
+			}
+			var entryElement = input.closest('.entry');
+			if (!(entryElement instanceof HTMLElement)) {
+				return;
+			}
+			var warningHost = entryElement.querySelector('[data-role="keyWarning"]');
+			if (!(warningHost instanceof HTMLElement)) {
+				return;
+			}
+			var key = input.value.trim();
+			if (key.length > 0 && counts[key] > 1) {
+				warningHost.className = 'key-warning show';
+				warningHost.textContent =
+					'Duplicate key: another preset uses the same key. Keys must be unique.';
+			} else {
+				warningHost.className = 'key-warning';
+				warningHost.textContent = '';
+			}
+		});
 	};
 
 	// Collect the visible form back into the draft entry.
@@ -392,6 +440,57 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			});
 	};
 
+	// Build a key for a copied preset: the source key with a counter appended,
+	// bumped until it no longer collides with an existing preset. Keys must be
+	// unique (the server rejects duplicates), so a plain duplicate would be
+	// rejected on the next validate/save; the counter makes the copy usable as-is.
+	var uniqueCopyKey = function (baseKey) {
+		var used = {};
+		draft.forEach(function (existing) {
+			if (existing.key.length > 0) {
+				used[existing.key] = true;
+			}
+		});
+		var counter = 1;
+		var candidate = baseKey + '-' + counter;
+		while (used[candidate]) {
+			counter += 1;
+			candidate = baseKey + '-' + counter;
+		}
+		return candidate;
+	};
+
+	// Duplicate a preset: harvest its current form, clone it with a fresh
+	// counter-suffixed key, and insert the clone right below the original so the
+	// operator can tweak it in place. The clone is a draft (stored:false) since it
+	// is not on disk yet, so it does not claim a runnable Nagios command line.
+	var onCopy = function (element) {
+		collectEntry(element);
+		var index = Number(element.getAttribute('data-index'));
+		var source = draft[index];
+		if (!source) {
+			return;
+		}
+		var params = {};
+		Object.keys(source.params).forEach(function (name) {
+			params[name] = source.params[name];
+		});
+		draft.splice(index + 1, 0, {
+			key: uniqueCopyKey(source.key),
+			command: source.command,
+			params: params,
+			secretParams: source.secretParams.slice(),
+			stored: false,
+		});
+		render();
+		if (entriesHost instanceof HTMLElement) {
+			var copied = entriesHost.children[index + 1];
+			if (copied instanceof HTMLElement) {
+				copied.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+			}
+		}
+	};
+
 	if (entriesHost instanceof HTMLElement) {
 		entriesHost.addEventListener('click', function (event) {
 			if (!(event.target instanceof HTMLElement)) {
@@ -409,6 +508,10 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				var index = Number(entryElement.getAttribute('data-index'));
 				draft.splice(index, 1);
 				render();
+				return;
+			}
+			if (action === 'copy') {
+				onCopy(entryElement);
 				return;
 			}
 			if (action === 'test') {
@@ -430,6 +533,22 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				collectEntry(entryElement, true);
 				render();
 			}
+		});
+
+		// A key edit does not change the form structure, so update the duplicate
+		// warnings in place instead of re-rendering, which would steal focus.
+		entriesHost.addEventListener('input', function (event) {
+			if (!(event.target instanceof HTMLElement)) {
+				return;
+			}
+			if (event.target.getAttribute('data-role') !== 'key') {
+				return;
+			}
+			var entryElement = event.target.closest('.entry');
+			if (entryElement instanceof HTMLElement) {
+				collectEntry(entryElement);
+			}
+			updateDuplicateKeyWarnings();
 		});
 	}
 

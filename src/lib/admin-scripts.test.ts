@@ -114,6 +114,38 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('stored: false');
 		});
 
+		it('warns about duplicate keys before validate or save', () => {
+			// The server rejects duplicate keys on validate and save; the editor
+			// mirrors that rule live so the operator sees it while typing.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var updateDuplicateKeyWarnings = function ()',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'counts[key] = (counts[key] || 0) + 1',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('counts[key] > 1');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('data-role="keyWarning"');
+			// Rendered per entry, refreshed after render and on every key edit.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('updateDuplicateKeyWarnings();');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"event.target.getAttribute('data-role') !== 'key'",
+			);
+		});
+
+		it('duplicates a preset with a counter-suffixed unique key', () => {
+			// Copying an existing preset must produce a usable draft, not a
+			// duplicate the server would reject: the key gets a counter appended
+			// and bumped until it is unique among the current presets.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'<button type="button" data-action="copy">Copy</button>',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('var uniqueCopyKey = function');
+			expect(ADMIN_CONFIG_SCRIPT).toContain("baseKey + '-' + counter");
+			expect(ADMIN_CONFIG_SCRIPT).toContain('while (used[candidate])');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('draft.splice(index + 1, 0, {');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('key: uniqueCopyKey(source.key)');
+		});
+
 		it('contains no inline </script> sequence', () => {
 			expect(ADMIN_CONFIG_SCRIPT).not.toContain('</script>');
 		});
