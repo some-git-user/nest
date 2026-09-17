@@ -10,6 +10,9 @@ BASE_URL="https://${HOST}:${PORT}"
 # /etc/nest) and TLS material under a certs/ directory. A plain /tmp scratch
 # dir is rejected by those validators, so the E2E workspace is created under
 # the repo's certs/ tree, which satisfies both, and removed on exit.
+# certs/ is gitignored and absent in clean checkouts (e.g. CI), and mktemp
+# does not create parent directories, so ensure it exists first.
+mkdir -p "${ROOT_DIR%/}/certs"
 TMP_DIR=$(mktemp -d "${ROOT_DIR%/}/certs/e2e.XXXXXX")
 SERVER_LOG="$TMP_DIR/server.log"
 SERVER_PID=""
