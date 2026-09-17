@@ -56,6 +56,15 @@ describe('local-config', () => {
 		) {
 			fs.rmSync(fixturesDir, {recursive: true, force: true});
 		}
+		// Remove the top-level test directory if empty, so the fixtures scratch
+		// space never leaves a stray empty `test/` folder in the repo root.
+		const testRootDir = path.join(__dirname, '../../test');
+		if (
+			fs.existsSync(testRootDir) &&
+			fs.readdirSync(testRootDir).length === 0
+		) {
+			fs.rmSync(testRootDir, {recursive: true, force: true});
+		}
 	});
 
 	describe('parseConfigLine', () => {
