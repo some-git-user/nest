@@ -109,3 +109,36 @@ jobs:
 
       - name: Run unit tests
         run: npm run test:ci
+
+  honeypot-e2e-nmap:
+    needs: [build-check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node (from .nvmrc) + enable npm cache
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install nmap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nmap
+
+      - name: Install deps
+        run: |
+          npm ci
+
+      - name: Run honeypot nmap E2E
+        # The E2E builds the app, starts it on a free loopback port, and drives
+        # it with real nmap scans. Privileged scan types (SYN/UDP) skip
+        # gracefully when the runner cannot open raw sockets; the unprivileged
+        # TCP-connect scan must still be detected and attributed to the real
+        # caller IP, which is the behaviour this job guards.
+        env:
+          NEST_E2E_STRICT: 'true'
+        run: npm run test:e2e:nmap

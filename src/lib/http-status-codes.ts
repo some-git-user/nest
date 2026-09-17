@@ -16,6 +16,7 @@ export const HttpStatusCodes = {
 	FORBIDDEN: 403,
 	NOT_FOUND: 404,
 	CONFLICT: 409,
+	TOO_MANY_REQUESTS: 429,
 
 	// Server Errors
 	INTERNAL_SERVER_ERROR: 500,
@@ -37,6 +38,7 @@ export const HttpStatusDescriptions = {
 	[HttpStatusCodes.FORBIDDEN]: 'Forbidden',
 	[HttpStatusCodes.NOT_FOUND]: 'Not Found',
 	[HttpStatusCodes.CONFLICT]: 'Conflict',
+	[HttpStatusCodes.TOO_MANY_REQUESTS]: 'Too Many Requests',
 
 	// Server Errors
 	[HttpStatusCodes.INTERNAL_SERVER_ERROR]: 'Internal Server Error',

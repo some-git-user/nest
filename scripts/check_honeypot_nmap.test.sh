@@ -6,7 +6,11 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 PORT="${NEST_E2E_PORT:-55443}"
 HOST="127.0.0.1"
 BASE_URL="https://${HOST}:${PORT}"
-TMP_DIR=$(mktemp -d)
+# The server enforces that config files live under the project root (or
+# /etc/nest) and TLS material under a certs/ directory. A plain /tmp scratch
+# dir is rejected by those validators, so the E2E workspace is created under
+# the repo's certs/ tree, which satisfies both, and removed on exit.
+TMP_DIR=$(mktemp -d "${ROOT_DIR%/}/certs/e2e.XXXXXX")
 SERVER_LOG="$TMP_DIR/server.log"
 SERVER_PID=""
 STRICT_MODE="${NEST_E2E_STRICT:-true}"
@@ -269,13 +273,28 @@ run_scan_case() {
 	port_scan_ips=${port_scan_ips:-0}
 	protocol_errors=${protocol_errors:-0}
 
+	# Attribution is best-effort for raw port scans: nmap's connect+immediate-RST
+	# pattern closes the socket before Node's `connection` callback runs, so the
+	# peer address is genuinely gone (getpeername on the closed handle is
+	# impossible). A recorded "unknown" for those probes is therefore acceptable.
+	# What is NOT acceptable is misattribution: if the honeypot names an address,
+	# it must be the real caller (${HOST}), never some other host.
+	local recorded_ip
+	recorded_ip=$(echo "$after_message" | sed -n 's/.*most_active_ip=\([^ ]*\).*/\1/p')
+	recorded_ip=${recorded_ip:-$(echo "$after_message" | sed -n 's/.* ip=\([^ ]*\).*/\1/p')}
+
 	if [[ "$after_code" != "0" && ( "$port_scan_ips" -gt 0 || "$protocol_errors" -gt 0 ) ]]; then
 		local scan_finished_at
 		local scan_elapsed_seconds
 		scan_finished_at=$(date +%s)
 		scan_elapsed_seconds=$((scan_finished_at - scan_started_at))
-		echo "DETECTED: ${name} -> code=${after_code}, port_scan_ips=${port_scan_ips}, protocol_errors=${protocol_errors}"
+		echo "DETECTED: ${name} -> code=${after_code}, port_scan_ips=${port_scan_ips}, protocol_errors=${protocol_errors}, recorded_ip=${recorded_ip:-none}"
 		echo "Elapsed: ${scan_elapsed_seconds}s"
+		if [[ -n "$recorded_ip" && "$recorded_ip" != "unknown" && "$recorded_ip" != "$HOST" ]]; then
+			echo "FAIL: ${name} misattributed the probe to ${recorded_ip}, expected the real caller ${HOST}"
+			stop_server
+			exit 1
+		fi
 		DETECTED_SCANS+=("$name")
 	else
 		local scan_finished_at
@@ -295,6 +314,48 @@ for entry in "${SCAN_CASES[@]}"; do
 	args=${entry#*|}
 	run_scan_case "$name" "$args"
 done
+
+# Deterministic real-IP proof.
+#
+# Raw port scans can close the socket before Node reads the peer address, so
+# their attribution is best-effort (checked above for misattribution only). A
+# full HTTP request to an unknown path always completes the handshake, so the
+# honeypot must record the caller's real address. This is the assertion that
+# proves the "log the attacker by IP" goal actually works end to end.
+verify_http_real_ip() {
+	echo ""
+	echo "=== HTTP wrong-URL real-IP check ==="
+	start_server
+
+	local before_code
+	before_code=$(curl -sk --max-time 5 "$BASE_URL/nagios/honey-pot" | jq -r '.code')
+	if [[ "$before_code" != "0" ]]; then
+		echo "FAIL: expected baseline honeypot code=0 before HTTP probe, got code=$before_code"
+		stop_server
+		exit 1
+	fi
+
+	# A request for a path that does not exist is recorded as an unknown-route
+	# honeypot signal carrying the caller IP.
+	curl -sk --max-time 5 "$BASE_URL/definitely-not-a-real-path-$$" >/dev/null 2>&1
+	sleep 1
+
+	local after_message
+	after_message=$(curl -sk --max-time 5 "$BASE_URL/nagios/honey-pot" | jq -r '.message')
+	local http_ip
+	http_ip=$(echo "$after_message" | sed -n 's/.* ip=\([^ ]*\).*/\1/p')
+
+	echo "Honeypot message: $after_message"
+	if [[ "$http_ip" != "$HOST" ]]; then
+		echo "FAIL: HTTP wrong-URL probe recorded ip=${http_ip:-empty}, expected the real caller ${HOST}"
+		stop_server
+		exit 1
+	fi
+	echo "PASS: HTTP wrong-URL probe attributed the caller to ${http_ip}"
+	stop_server
+}
+
+verify_http_real_ip
 
 echo ""
 echo "=== Nmap Honeypot E2E Summary ==="

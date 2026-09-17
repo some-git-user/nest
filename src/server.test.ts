@@ -52,10 +52,19 @@ describe('server bootstrap', () => {
 	) => unknown;
 	type GetRouteCall = [string, FaviconHandler | RootHandler];
 	type UseCall = [string | NotFoundHandler | MiddlewareHandler, unknown?];
+	type RateLimitOptions = {
+		skip?: (req: {path: string}) => boolean;
+		handler?: (req: unknown, res: unknown) => unknown;
+		message?: unknown;
+	};
+	// Captures the options object passed to each express-rate-limit factory call
+	// so individual tests can inspect the skip/handler callbacks wired in server.ts.
+	const capturedRateLimitOptions: RateLimitOptions[] = [];
 
 	afterEach(() => {
 		jest.restoreAllMocks();
 		jest.resetModules();
+		capturedRateLimitOptions.length = 0;
 	});
 
 	it('creates an HTTPS server, listens with configured host and port, and starts the scheduler', () => {
@@ -141,7 +150,10 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
-			default: jest.fn(() => rateLimitMiddleware),
+			default: jest.fn((options: RateLimitOptions) => {
+				capturedRateLimitOptions.push(options);
+				return rateLimitMiddleware;
+			}),
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
@@ -265,9 +277,11 @@ describe('server bootstrap', () => {
 		}));
 		const recordHoneypotSignal = jest.fn();
 		const recordNetworkProbeSignal = jest.fn();
+		const stashSocketIp = jest.fn();
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal,
 			recordNetworkProbeSignal,
+			stashSocketIp,
 		}));
 		jest.doMock('./lib/nagios', () => ({
 			createNagiosReturnMessage: jest.fn(() => ({
@@ -563,41 +577,76 @@ describe('server bootstrap', () => {
 		);
 		expect(on).toHaveBeenCalledWith('tlsClientError', expect.any(Function));
 		expect(on).toHaveBeenCalledWith('clientError', expect.any(Function));
+		expect(on).toHaveBeenCalledWith('connection', expect.any(Function));
 
-		// Invoke the registered server event callbacks to cover getRemoteIp branches
-		type ServerOnCall = [string, (_err: unknown, socket: unknown) => void];
+		// The handlers forward the raw socket to the honeypot lib, which owns IP
+		// resolution and de-duplication. `connection` stashes the peer address
+		// while it is still readable, so a probe that fails immediately stays
+		// attributable.
+		type ServerOnCall = [string, (...args: unknown[]) => void];
 		const serverOnCalls = on.mock.calls as ServerOnCall[];
 		const tlsHandler = serverOnCalls.find(([e]) => e === 'tlsClientError')?.[1];
 		const httpHandler = serverOnCalls.find(([e]) => e === 'clientError')?.[1];
+		const connectionHandler = serverOnCalls.find(
+			([e]) => e === 'connection',
+		)?.[1];
 		expect(tlsHandler).toBeDefined();
 		expect(httpHandler).toBeDefined();
+		expect(connectionHandler).toBeDefined();
 
-		// Branch: non-object primitive
-		tlsHandler!(new Error('tls'), 'not-an-object');
-		// Branch: null
-		tlsHandler!(new Error('tls'), null);
-		// Branch: object without remoteAddress
-		tlsHandler!(new Error('tls'), {});
-		// Branch: object with non-string remoteAddress
-		tlsHandler!(new Error('tls'), {remoteAddress: 0});
-		// Branch: object with empty string remoteAddress
-		tlsHandler!(new Error('tls'), {remoteAddress: ''});
-		// Branch: object with valid remoteAddress (tls)
-		tlsHandler!(new Error('tls'), {remoteAddress: '10.0.0.1'});
-		// Branch: clientError handler with valid socket
-		httpHandler!(new Error('http'), {remoteAddress: '10.0.0.2'});
+		const tlsSocket = {remoteAddress: '10.0.0.1'};
+		const httpSocket = {remoteAddress: '10.0.0.2'};
+		const rawSocket = {remoteAddress: '10.0.0.3'};
+		tlsHandler!(new Error('tls'), tlsSocket);
+		httpHandler!(new Error('http'), httpSocket);
+		connectionHandler!(rawSocket);
 
 		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
-			'unknown',
+			tlsSocket,
 			'tls-client-error',
 		);
 		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
-			'10.0.0.1',
-			'tls-client-error',
-		);
-		expect(recordNetworkProbeSignal).toHaveBeenCalledWith(
-			'10.0.0.2',
+			httpSocket,
 			'http-client-error',
+		);
+		expect(stashSocketIp).toHaveBeenCalledWith(rawSocket);
+
+		// The two rate limiters are configured with custom skip/handler callbacks.
+		// Read them back from the mocked module's captured options. The admin
+		// router registers its own limiters too, so select by shape rather than
+		// index: the generic limiter is the one that skips /nagios, and the Nagios
+		// limiter is the one whose handler replies without recording a signal.
+		const genericLimiter = capturedRateLimitOptions.find(
+			(options) => typeof options.skip === 'function',
+		);
+		const nagiosLimiter = capturedRateLimitOptions.find(
+			(options) =>
+				typeof options.handler === 'function' &&
+				typeof options.skip !== 'function' &&
+				typeof options.message === 'undefined',
+		);
+
+		expect(genericLimiter).toBeDefined();
+		expect(nagiosLimiter).toBeDefined();
+
+		expect(genericLimiter?.skip?.({path: '/nagios/honey-pot'})).toBe(true);
+		expect(genericLimiter?.skip?.({path: '/plugins/check-test'})).toBe(false);
+
+		const rateLimitStatus = jest.fn(() => ({send: jest.fn()}));
+		genericLimiter?.handler?.({path: '/missing'}, {status: rateLimitStatus});
+		expect(recordHoneypotSignal).toHaveBeenCalledWith(
+			{path: '/missing'},
+			'rate-limited',
+		);
+		expect(rateLimitStatus).toHaveBeenCalledWith(
+			HttpStatusCodes.TOO_MANY_REQUESTS,
+		);
+
+		expect(nagiosLimiter?.skip).toBeUndefined();
+		const nagiosStatus = jest.fn(() => ({send: jest.fn()}));
+		nagiosLimiter?.handler?.({path: '/nagios'}, {status: nagiosStatus});
+		expect(nagiosStatus).toHaveBeenCalledWith(
+			HttpStatusCodes.TOO_MANY_REQUESTS,
 		);
 
 		expect(readFileSync).toHaveBeenCalledWith('/tmp/nest-cert.pem', 'utf8');
@@ -690,7 +739,10 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
-			default: jest.fn(() => rateLimitMiddleware),
+			default: jest.fn((options: RateLimitOptions) => {
+				capturedRateLimitOptions.push(options);
+				return rateLimitMiddleware;
+			}),
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
@@ -877,7 +929,10 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
-			default: jest.fn(() => rateLimitMiddleware),
+			default: jest.fn((options: RateLimitOptions) => {
+				capturedRateLimitOptions.push(options);
+				return rateLimitMiddleware;
+			}),
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,
@@ -1075,7 +1130,10 @@ describe('server bootstrap', () => {
 		}));
 		jest.doMock('express-rate-limit', () => ({
 			__esModule: true,
-			default: jest.fn(() => rateLimitMiddleware),
+			default: jest.fn((options: RateLimitOptions) => {
+				capturedRateLimitOptions.push(options);
+				return rateLimitMiddleware;
+			}),
 		}));
 		jest.doMock('fs', () => ({
 			__esModule: true,

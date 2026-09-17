@@ -38,7 +38,21 @@ const getHoneypotHelpHtml = (): string => {
 <li><code>/nagios/honey-pot</code></li>
 <li><code>/nagios/honey-pot?warnHits=2&critHits=8&warnSuspicious=2&critSuspicious=4</code></li>
 </ul>
-<p>Use these thresholds to tune warning and critical transitions for probe activity.</p>`,
+<p>Use these thresholds to tune warning and critical transitions for probe activity.</p>
+<h2>What this check can and cannot see</h2>
+<p>
+The honeypot only observes traffic that actually reaches this HTTPS listener. It
+records unknown URL paths, failed TLS/HTTP handshakes (protocol errors), calls
+from an IP outside <code>ALLOWED_IPS</code>, and rate-limit rejections, each
+attributed to the caller&apos;s real socket address and written to the log.
+</p>
+<p>
+It cannot see <code>ICMP</code> pings or scans aimed at <em>other</em> ports,
+because that traffic never opens a connection to this service. Detecting those
+requires firewall-level logging (for example <code>nftables</code>/<code>iptables</code>
+<code>LOG</code> rules or fail2ban) in front of the host; this check is not a
+substitute for it.
+</p>`,
 		}),
 	);
 };

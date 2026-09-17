@@ -101,9 +101,14 @@ describe('/nagios/honey-pot route', () => {
 	});
 
 	test('flags probable port scan from repeated protocol errors on one IP', async () => {
-		recordNetworkProbeSignal('203.0.113.9', 'tls-client-error');
-		recordNetworkProbeSignal('203.0.113.9', 'http-client-error');
-		recordNetworkProbeSignal('203.0.113.9', 'tls-client-error');
+		// recordNetworkProbeSignal takes a socket, not an address string, and
+		// resolves the peer address from it. Each failed handshake is its own
+		// socket (the WeakSet dedups a single connection's paired events), but
+		// they all carry the same address, so the errors aggregate onto one IP.
+		const attackerSockets = () => ({remoteAddress: '203.0.113.9'});
+		recordNetworkProbeSignal(attackerSockets(), 'tls-client-error');
+		recordNetworkProbeSignal(attackerSockets(), 'http-client-error');
+		recordNetworkProbeSignal(attackerSockets(), 'tls-client-error');
 
 		const res = await request(app).get('/nagios/honey-pot');
 		const body = res.body as NagiosBody;

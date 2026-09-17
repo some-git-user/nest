@@ -164,6 +164,12 @@ export const createAccessControlMiddleware = (config: AccessControlConfig) => {
 			);
 		}
 		if (!hasWildcard && !allowedIps.has(requesterIp)) {
+			// A caller outside the allowlist is an access-control rejection, but
+			// it is also exactly the kind of unexpected source the honeypot should
+			// log. Without this the default config (no API key, loopback-only)
+			// answers external probes with 403 before the 404 handler ever runs,
+			// so the probe leaves no trace at all.
+			recordHoneypotSignal(req, 'ip-denied');
 			return sendNagiosUnknownError(
 				res,
 				HttpStatusCodes.FORBIDDEN,

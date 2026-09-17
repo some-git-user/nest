@@ -21,7 +21,11 @@ import {
 	appendExternalLinkGuard,
 	applyHelpPageSecurityHeaders,
 } from './lib/help-page';
-import {recordHoneypotSignal, recordNetworkProbeSignal} from './lib/honey-pot';
+import {
+	recordHoneypotSignal,
+	recordNetworkProbeSignal,
+	stashSocketIp,
+} from './lib/honey-pot';
 import {escapeHtml} from './lib/html-escape';
 import {sendNagiosUnknownError} from './lib/http-nagios';
 import {HttpStatusCodes} from './lib/http-status-codes';
@@ -75,6 +79,9 @@ const app: Application = express();
 // (TRUST_PROXY). Otherwise Express keeps `req.ip` on the real socket address,
 // so the ALLOWED_IPS allowlist cannot be bypassed with a spoofed header.
 app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
+// Every monitoring check lives under `/nagios`; the rate limiters use this to
+// keep scanner traffic and plugin polling in separate budgets.
+const isNagiosPath = (path: string): boolean => path.startsWith('/nagios');
 const PROJECT_ORIGIN_URL = 'https://github.com/some-git-user/nest';
 const PLUGIN_EXAMPLE_FORM_SCRIPT_PATH = '/help/plugin-example-form.js';
 const APP_VERSION = getAppVersion();
@@ -279,12 +286,45 @@ app.use(
 );
 app.use(helmet());
 
+// Two limiters, deliberately separated:
+//
+// - The generic one covers everything except `/nagios`. Its default handler
+//   answers 429 with plain text, which no Nagios plugin can parse, and a flood
+//   of unknown routes would otherwise be rejected before the honeypot ever saw
+//   it. So the handler records the flood as a signal and replies in Nagios JSON.
+// - `/nagios` gets its own bucket. It is how an operator learns about the flood,
+//   so letting scanner traffic exhaust the shared budget would blind the
+//   monitoring exactly when it is needed.
 app.use(
 	rateLimit({
 		windowMs: env.RATE_LIMIT_WINDOW_MS,
 		max: env.RATE_LIMIT_MAX,
 		standardHeaders: true,
 		legacyHeaders: false,
+		skip: (req: Request) => isNagiosPath(req.path),
+		handler: (req: Request, res: Response): Response => {
+			recordHoneypotSignal(req, 'rate-limited');
+			return sendNagiosUnknownError(
+				res,
+				HttpStatusCodes.TOO_MANY_REQUESTS,
+				'Too many requests',
+			);
+		},
+	}),
+);
+app.use(
+	'/nagios',
+	rateLimit({
+		windowMs: env.RATE_LIMIT_WINDOW_MS,
+		max: env.RATE_LIMIT_MAX,
+		standardHeaders: true,
+		legacyHeaders: false,
+		handler: (_req: Request, res: Response): Response =>
+			sendNagiosUnknownError(
+				res,
+				HttpStatusCodes.TOO_MANY_REQUESTS,
+				'Too many requests',
+			),
 	}),
 );
 app.use(
@@ -415,29 +455,20 @@ const server = https.createServer(
 	app,
 );
 
-const getRemoteIp = (socket: unknown): string => {
-	if (typeof socket !== 'object' || socket === null) {
-		return 'unknown';
-	}
-
-	if (!('remoteAddress' in socket)) {
-		return 'unknown';
-	}
-
-	const remoteAddress = (socket as {remoteAddress?: unknown}).remoteAddress;
-	if (typeof remoteAddress === 'string' && remoteAddress.length > 0) {
-		return remoteAddress;
-	}
-
-	return 'unknown';
-};
+// Node fires `connection` on the raw socket before the TLS handshake, which is
+// the last moment the peer address is guaranteed to be readable. Probes that
+// fail immediately hand `clientError`/`tlsClientError` a destroyed socket with
+// no address of its own, so the address has to be captured here.
+server.on('connection', (socket) => {
+	stashSocketIp(socket);
+});
 
 server.on('tlsClientError', (_err, socket) => {
-	recordNetworkProbeSignal(getRemoteIp(socket), 'tls-client-error');
+	recordNetworkProbeSignal(socket, 'tls-client-error');
 });
 
 server.on('clientError', (_err, socket) => {
-	recordNetworkProbeSignal(getRemoteIp(socket), 'http-client-error');
+	recordNetworkProbeSignal(socket, 'http-client-error');
 });
 
 server.listen(env.PORT, env.HOST, () => {
