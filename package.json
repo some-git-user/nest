@@ -16,6 +16,7 @@
 		"lint:check": "eslint . --report-unused-disable-directives --max-warnings 0",
 		"lint:fix": "eslint . --report-unused-disable-directives --max-warnings 0 --fix",
 		"test:shell": "bash scripts/check_nest.test.sh",
+		"test:e2e:realip": "bash scripts/check_honeypot_realip.test.sh",
 		"test:e2e:nmap": "bash scripts/check_honeypot_nmap.test.sh",
 		"check:vulnerabilities": "npm audit --omit=dev",
 		"fix:vulnerabilities": "npm audit fix --omit=dev --ignore-scripts",

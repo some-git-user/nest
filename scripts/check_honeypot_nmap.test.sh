@@ -17,11 +17,15 @@ TMP_DIR=$(mktemp -d "${ROOT_DIR%/}/certs/e2e.XXXXXX")
 SERVER_LOG="$TMP_DIR/server.log"
 SERVER_PID=""
 STRICT_MODE="${NEST_E2E_STRICT:-true}"
-NMAP_TIMEOUT_SECONDS="${NEST_E2E_NMAP_TIMEOUT_SECONDS:-600}" # 10 minutes, based on empirical nmap runtime observations with -sV --version-intensity 9
+NMAP_TIMEOUT_SECONDS="${NEST_E2E_NMAP_TIMEOUT_SECONDS:-120}" # hard wall-clock cap per scan; the scan cases below also carry nmap-native --host-timeout limits so CI stays well bounded
 
 SCAN_CASES=(
 	"tcp-connect|-sT -Pn -T4"
-	"service-version|-sV --version-intensity 9 -Pn -T4"
+	# Intensity 5 + max-retries 1 + host-timeout: intensity 9 with default retries
+	# can run many minutes against a single TLS port (probe/response stalls),
+	# which blew the CI job budget. Intensity 5 still sends enough probes for
+	# honeypot detection while finishing in seconds.
+	"service-version|-sV --version-intensity 5 --max-retries 1 --host-timeout 60s -Pn -T4"
 	"syn-scan|-sS -Pn -T4"
 	"ack-scan|-sA -Pn -T4"
 	"fin-scan|-sF -Pn -T4"
@@ -40,7 +44,7 @@ print_runtime_expectations() {
 	local max_scan_minutes=$(((max_scan_seconds + 59) / 60))
 
 	echo "INFO: nmap E2E can be long-running; this is expected."
-	echo "INFO: service-version uses '-sV --version-intensity 9' and may take up to ${NMAP_TIMEOUT_SECONDS}s before timeout/skip."
+	echo "INFO: each scan is capped at ${NMAP_TIMEOUT_SECONDS}s wall-clock before timeout/skip."
 	echo "INFO: scan phase worst-case budget is about ${max_scan_seconds}s (~${max_scan_minutes} min), plus server start/wait overhead."
 
 	if ! command -v timeout >/dev/null 2>&1; then
