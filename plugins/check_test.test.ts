@@ -11,21 +11,15 @@ describe('check-test plugin', () => {
 			expect(meta.usage.shell).toContain('./check_nest.sh check-test');
 			expect(meta.help).toBeDefined();
 			expect(meta.help).toContain('check-test');
-			expect(meta.examples).toBeDefined();
-			expect(meta.examples.length).toBeGreaterThan(0);
+			expect(meta.params).toBeDefined();
+			expect(meta.params.length).toBeGreaterThan(0);
 		});
 
-		it('should have GET example', () => {
-			const getExample = meta.examples?.find((ex) => ex.method === 'GET');
-			expect(getExample).toBeDefined();
-			expect(getExample?.path).toBe('/plugins/check-test');
-			expect(getExample?.fields).toHaveLength(3);
-		});
-
-		it('should have POST example', () => {
-			const postExample = meta.examples?.find((ex) => ex.method === 'POST');
-			expect(postExample).toBeDefined();
-			expect(postExample?.path).toBe('/plugins/check-test');
+		it('should declare the documented parameters', () => {
+			const names = meta.params.map((param) => param.name);
+			expect(names).toContain('nagiosReturnMessage');
+			expect(names).toContain('nagiosReturnValue');
+			expect(names).toContain('performanceData');
 		});
 	});
 

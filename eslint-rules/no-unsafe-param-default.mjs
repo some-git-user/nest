@@ -1,10 +1,10 @@
 /**
- * Custom ESLint rule to reject example `defaultValue`s that cannot be saved as presets
+ * Custom ESLint rule to reject parameter `default`s that cannot be saved as presets
  *
- * Plugin `meta.examples[].fields[].defaultValue` is used in two places:
+ * Plugin `meta.params[].default` is used in two places:
  *
- * 1. The overview page example form, which builds a URL query. A space works
- *    there because it is percent-encoded to `%20`.
+ * 1. The overview page run form, which builds a URL query. A space works there
+ *    because it is percent-encoded to `%20`.
  * 2. The admin editor, which prefills every parameter field with the declared
  *    default. Saving runs `validatePresetEntry()`, whose grammar forbids
  *    whitespace and `#` in a value (`INVALID_VALUE_CHARACTERS` in
@@ -29,22 +29,19 @@ export default {
 		type: 'problem',
 		docs: {
 			description:
-				'Forbid whitespace or # in plugin example defaultValue, which the admin editor cannot save as a preset',
+				'Forbid whitespace or # in plugin param default, which the admin editor cannot save as a preset',
 			recommended: true,
 		},
 		schema: [],
 		messages: {
 			unsafeDefault:
-				'Example `defaultValue` {{value}} contains {{chars}}, which the local-preset config grammar forbids. The admin editor prefills this value and then rejects it on Test/Save. Use a value without whitespace or # (a regex can use "." to match a space; "+" is NOT decoded back to a space).',
+				'Param `default` {{value}} contains {{chars}}, which the local-preset config grammar forbids. The admin editor prefills this value and then rejects it on Test/Save. Use a value without whitespace or # (a regex can use "." to match a space; "+" is NOT decoded back to a space).',
 		},
 	},
 	create(context) {
 		return {
 			Property(node) {
-				if (
-					node.key.type !== 'Identifier' ||
-					node.key.name !== 'defaultValue'
-				) {
+				if (node.key.type !== 'Identifier' || node.key.name !== 'default') {
 					return;
 				}
 

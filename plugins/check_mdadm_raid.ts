@@ -73,25 +73,37 @@ privileges are required, and no shell command is built.</p>
 <li><a href="https://man7.org/linux/man-pages/man5/mdstat.5.html" target="_blank" rel="noopener">mdstat(5)</a></li>
 <li><a href="https://man7.org/linux/man-pages/man8/mdadm.8.html" target="_blank" rel="noopener">mdadm(8)</a></li>
 </ul>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Check all md arrays',
-			method: 'GET',
-			path: '/plugins/check-mdadm-raid',
-			fields: [],
+			name: 'array',
+			label: 'Array device',
+			type: 'text',
+			description:
+				'Restrict the check to one array (e.g. /dev/md0 or md0). When omitted every array is checked.',
 		},
 		{
-			label: 'Check a single array',
-			method: 'GET',
-			path: '/plugins/check-mdadm-raid?array=/dev/md0',
-			fields: [
-				{
-					name: 'array',
-					label: 'Array device',
-					required: false,
-					defaultValue: '/dev/md0',
-				},
-			],
+			name: 'warnOnRebuild',
+			label: 'Warn on rebuild',
+			type: 'boolean',
+			default: 'true',
+			description:
+				'Return WARNING while a rebuild/reshape is in progress. Set false to treat rebuilding as OK.',
+		},
+		{
+			name: 'warnOnSync',
+			label: 'Warn on sync',
+			type: 'boolean',
+			default: 'false',
+			description:
+				'Return WARNING during a periodic check/resync/repair scrub.',
+		},
+		{
+			name: 'requireArray',
+			label: 'Require an array',
+			type: 'boolean',
+			default: 'false',
+			description:
+				'When true, a host with no md arrays is CRITICAL. When false it is UNKNOWN.',
 		},
 	],
 };

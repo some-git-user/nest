@@ -37,18 +37,22 @@ describe('check-vigor165-vdsl plugin', () => {
 			expect(meta.usage.shell).toContain('./check_nest.sh check-vigor165-vdsl');
 			expect(meta.help).toBeDefined();
 			expect(meta.help).toContain('check-vigor165-vdsl');
-			expect(meta.examples).toBeDefined();
-			expect(meta.examples.length).toBeGreaterThan(0);
+			expect(meta.params).toBeDefined();
+			expect(meta.params.length).toBeGreaterThan(0);
 		});
 
-		it('should have DrayTek CLI example', () => {
-			const example = meta.examples?.find(
-				(ex) => ex.label === 'DrayTek CLI over SSH',
+		it('should declare the required SSH parameters', () => {
+			const names = meta.params.map((param) => param.name);
+			expect(names).toEqual(
+				expect.arrayContaining([
+					'host',
+					'username',
+					'password',
+					'bookedDownstreamMbps',
+				]),
 			);
-			expect(example).toBeDefined();
-			expect(example?.method).toBe('POST');
-			expect(example?.path).toBe('/plugins/check-vigor165-vdsl');
-			expect(example?.fields).toHaveLength(8);
+			const passwordParam = meta.params.find((p) => p.name === 'password');
+			expect(passwordParam?.type).toBe('password');
 		});
 	});
 

@@ -57,37 +57,26 @@ export const meta: PluginMeta = {
 
 <h3>Using check_nest.sh</h3>
 <pre><code>./check_nest.sh check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=false</code></pre>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Quick GET example',
-			method: 'GET',
-			path: '/plugins/check-test',
-			fields: [
-				{
-					name: 'nagiosReturnMessage',
-					label: 'Message',
-					defaultValue: 'Example-OK',
-				},
-				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '0'},
-				{
-					name: 'performanceData',
-					label: 'Include Perf Data',
-					defaultValue: 'true',
-				},
-			],
+			name: 'nagiosReturnMessage',
+			label: 'Message',
+			type: 'text',
+			description: 'The message to return in the Nagios check result.',
 		},
 		{
-			label: 'POST body example',
-			method: 'POST',
-			path: '/plugins/check-test',
-			fields: [
-				{
-					name: 'nagiosReturnMessage',
-					label: 'Message',
-					defaultValue: 'Example-Warning',
-				},
-				{name: 'nagiosReturnValue', label: 'Code', defaultValue: '1'},
-			],
+			name: 'nagiosReturnValue',
+			label: 'Return code',
+			type: 'number',
+			description:
+				'Nagios return code: 0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN.',
+		},
+		{
+			name: 'performanceData',
+			label: 'Include performance data',
+			type: 'boolean',
+			default: 'false',
+			description: 'When true, includes sample performance data in the result.',
 		},
 	],
 };

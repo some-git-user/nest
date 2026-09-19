@@ -25,8 +25,8 @@ import {PluginReturn} from '../src/types/plugin';
  */
 export const meta: PluginMeta = {
 	usage: {
-		http: '/plugins/check-smart-status?device=<device>&checkType=<all|health|attributes|errors|selftest>',
-		shell: './check_nest.sh check-smart-status device=/dev/sda checkType=all',
+		http: '/plugins/check-smart-status?device=<device>&checkType=<0-4>',
+		shell: './check_nest.sh check-smart-status device=/dev/sda checkType=0',
 	},
 	help: `<h1>SMART Disk Status Checker</h1>
 <p>This plugin monitors disk health using S.M.A.R.T. (Self-Monitoring, Analysis and Reporting Technology) and reports results in Nagios-compatible format.</p>
@@ -47,7 +47,7 @@ export const meta: PluginMeta = {
 <table>
 <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
 <tr><td><code>device</code></td><td>string</td><td><strong>Required</strong></td><td>Device path (e.g., /dev/sda, /dev/nvme0n1)</td></tr>
-<tr><td><code>checkType</code></td><td>string</td><td><code>all</code></td><td>Type of check: <code>all</code>, <code>health</code>, <code>attributes</code>, <code>errors</code>, <code>selftest</code></td></tr>
+<tr><td><code>checkType</code></td><td>number</td><td><code>0</code></td><td>Type of check: <code>0</code>=all, <code>1</code>=health, <code>2</code>=attributes, <code>3</code>=errors, <code>4</code>=selftest</td></tr>
 <tr><td><code>warningTemp</code></td><td>number</td><td><code>50</code></td><td>Warning temperature threshold (°C)</td></tr>
 <tr><td><code>criticalTemp</code></td><td>number</td><td><code>60</code></td><td>Critical temperature threshold (°C)</td></tr>
 <tr><td><code>skipPowerModeCheck</code></td><td>boolean</td><td><code>false</code></td><td>Don't fail if disk is in standby/sleep mode</td></tr>
@@ -89,26 +89,26 @@ export const meta: PluginMeta = {
 
 <h2>Check Types</h2>
 <ul>
-<li><strong>all:</strong> Full health check including SMART status, attributes, error log, and self-test log</li>
-<li><strong>health:</strong> Quick SMART health status check only</li>
-<li><strong>attributes:</strong> Check SMART attributes against thresholds</li>
-<li><strong>errors:</strong> Check error log for recent errors</li>
-<li><strong>selftest:</strong> Check self-test log for failed tests</li>
+<li><strong>0 all:</strong> Full health check including SMART status, attributes, error log, and self-test log</li>
+<li><strong>1 health:</strong> Quick SMART health status check only</li>
+<li><strong>2 attributes:</strong> Check SMART attributes against thresholds</li>
+<li><strong>3 errors:</strong> Check error log for recent errors</li>
+<li><strong>4 selftest:</strong> Check self-test log for failed tests</li>
 </ul>
 
 <h2>Examples</h2>
 
 <h3>Full disk health check</h3>
-<pre>./check_nest.sh check-smart-status device=/dev/sda checkType=all</pre>
+<pre>./check_nest.sh check-smart-status device=/dev/sda checkType=0</pre>
 
 <h3>Quick health status</h3>
-<pre>./check_nest.sh check-smart-status device=/dev/sda checkType=health</pre>
+<pre>./check_nest.sh check-smart-status device=/dev/sda checkType=1</pre>
 
 <h3>Check with custom temperature thresholds</h3>
 <pre>./check_nest.sh check-smart-status device=/dev/sda warningTemp=45 criticalTemp=55</pre>
 
 <h3>NVMe drive check</h3>
-<pre>./check_nest.sh check-smart-status device=/dev/nvme0n1 checkType=all</pre>
+<pre>./check_nest.sh check-smart-status device=/dev/nvme0n1 checkType=0</pre>
 
 <h3>Check multiple disks</h3>
 <pre>
@@ -135,62 +135,42 @@ export const meta: PluginMeta = {
 <li><a href="https://en.wikipedia.org/wiki/S.M.A.R.T." target="_blank" rel="noopener">S.M.A.R.T. on Wikipedia</a></li>
 <li><a href="https://www.seagate.com/support/knowledge-base/102534/" target="_blank" rel="noopener">Understanding SMART attributes</a></li>
 </ul>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Full disk health check',
-			method: 'GET',
-			path: '/plugins/check-smart-status',
-			fields: [
-				{
-					name: 'device',
-					label: 'Device Path',
-					defaultValue: '/dev/sda',
-				},
-				{
-					name: 'checkType',
-					label: 'Check Type',
-					defaultValue: 'all',
-				},
-			],
+			name: 'device',
+			label: 'Device path',
+			type: 'text',
+			required: true,
+			description: 'Device path (e.g. /dev/sda, /dev/nvme0n1).',
 		},
 		{
-			label: 'Quick health status',
-			method: 'GET',
-			path: '/plugins/check-smart-status',
-			fields: [
-				{
-					name: 'device',
-					label: 'Device Path',
-					defaultValue: '/dev/sda',
-				},
-				{
-					name: 'checkType',
-					label: 'Check Type',
-					defaultValue: 'health',
-				},
-			],
+			name: 'checkType',
+			label: 'Check type',
+			type: 'number',
+			default: '0',
+			description:
+				'Type of check: 0=all, 1=health, 2=attributes, 3=errors, 4=selftest.',
 		},
 		{
-			label: 'Check with temperature thresholds',
-			method: 'GET',
-			path: '/plugins/check-smart-status',
-			fields: [
-				{
-					name: 'device',
-					label: 'Device Path',
-					defaultValue: '/dev/sda',
-				},
-				{
-					name: 'warningTemp',
-					label: 'Warning Temperature (°C)',
-					defaultValue: '50',
-				},
-				{
-					name: 'criticalTemp',
-					label: 'Critical Temperature (°C)',
-					defaultValue: '60',
-				},
-			],
+			name: 'warningTemp',
+			label: 'Warning temperature (C)',
+			type: 'number',
+			default: '50',
+			description: 'Warning temperature threshold (deg C).',
+		},
+		{
+			name: 'criticalTemp',
+			label: 'Critical temperature (C)',
+			type: 'number',
+			default: '60',
+			description: 'Critical temperature threshold (deg C).',
+		},
+		{
+			name: 'skipPowerModeCheck',
+			label: 'Skip power mode check',
+			type: 'boolean',
+			default: 'false',
+			description: "Don't fail if the disk is in standby/sleep mode.",
 		},
 	],
 };
@@ -208,7 +188,7 @@ export type ExecFileFn = (
 
 export const checkSmartStatus = (params: {
 	device: string;
-	checkType?: 'all' | 'health' | 'attributes' | 'errors' | 'selftest';
+	checkType?: number;
 	warningTemp?: number;
 	criticalTemp?: number;
 	skipPowerModeCheck?: boolean;
@@ -216,7 +196,7 @@ export const checkSmartStatus = (params: {
 }): PluginReturn => {
 	const {
 		device,
-		checkType = 'all',
+		checkType = 0,
 		warningTemp = 50,
 		criticalTemp = 60,
 		skipPowerModeCheck = false,
@@ -232,11 +212,16 @@ export const checkSmartStatus = (params: {
 		};
 	}
 
-	// Validate check type
-	const validCheckTypes = ['all', 'health', 'attributes', 'errors', 'selftest'];
-	if (!validCheckTypes.includes(checkType)) {
+	// Validate check type: 0=all, 1=health, 2=attributes, 3=errors, 4=selftest.
+	const checkTypeNames = ['all', 'health', 'attributes', 'errors', 'selftest'];
+	const selectedCheckType = Number(checkType);
+	if (
+		!Number.isInteger(selectedCheckType) ||
+		selectedCheckType < 0 ||
+		selectedCheckType >= checkTypeNames.length
+	) {
 		return {
-			message: `ERROR: Invalid check type. Must be one of: ${validCheckTypes.join(', ')}`,
+			message: `ERROR: Invalid check type. Must be 0 (all), 1 (health), 2 (attributes), 3 (errors) or 4 (selftest).`,
 			code: NagiosReturnCodes.UNKNOWN,
 			performanceData: [],
 		};

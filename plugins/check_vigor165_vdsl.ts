@@ -78,37 +78,93 @@ export const meta: PluginMeta = {
 		shell:
 			'./check_nest.sh check-vigor165-vdsl host=<router-ip-or-dns> port=<ssh-port> username=<user> password=<pass> bookedDownstreamMbps=<number> warningPercentBelow=<0-100> criticalPercentBelow=<0-100>',
 	},
-	examples: [
+	params: [
 		{
-			label: 'DrayTek CLI over SSH',
-			method: 'POST',
-			path: '/plugins/check-vigor165-vdsl',
-			fields: [
-				{
-					name: 'host',
-					label: 'Router Host or IP',
-					defaultValue: '192.168.111.1',
-				},
-				{name: 'port', label: 'SSH Port', defaultValue: '22333'},
-				{name: 'username', label: 'Username', defaultValue: 'admin'},
-				{name: 'password', label: 'Password', type: 'password'},
-				{
-					name: 'bookedDownstreamMbps',
-					label: 'Booked Downstream (Mbps)',
-					defaultValue: '100',
-				},
-				{
-					name: 'warningPercentBelow',
-					label: 'Warning % Below Booked',
-					defaultValue: '20',
-				},
-				{
-					name: 'criticalPercentBelow',
-					label: 'Critical % Below Booked',
-					defaultValue: '40',
-				},
-				{name: 'timeoutMs', label: 'Timeout (ms)', defaultValue: '10000'},
-			],
+			name: 'host',
+			label: 'Router host or IP',
+			type: 'text',
+			required: true,
+			description: 'SSH host or IP of the router.',
+		},
+		{
+			name: 'port',
+			label: 'SSH port',
+			type: 'number',
+			default: '22',
+			description: 'SSH port.',
+		},
+		{
+			name: 'username',
+			label: 'Username',
+			type: 'text',
+			required: true,
+			description: 'SSH username.',
+		},
+		{
+			name: 'password',
+			label: 'Password',
+			type: 'password',
+			required: true,
+			description: 'SSH password.',
+		},
+		{
+			name: 'bookedDownstreamMbps',
+			label: 'Booked downstream (Mbps)',
+			type: 'number',
+			required: true,
+			description: 'Contracted downstream speed in Mbps.',
+		},
+		{
+			name: 'warningPercentBelow',
+			label: 'Warning % below booked',
+			type: 'number',
+			description:
+				'WARNING when downstream is this percent below the booked speed.',
+		},
+		{
+			name: 'criticalPercentBelow',
+			label: 'Critical % below booked',
+			type: 'number',
+			description:
+				'CRITICAL when downstream is this percent below the booked speed.',
+		},
+		{
+			name: 'timeoutMs',
+			label: 'Timeout (ms)',
+			type: 'number',
+			default: '10000',
+			description: 'Total SSH/session timeout in milliseconds.',
+		},
+		{
+			name: 'command',
+			label: 'CLI command',
+			type: 'text',
+			description: 'CLI command to run (default: "vdsl status").',
+		},
+		{
+			name: 'prompt',
+			label: 'CLI prompt marker',
+			type: 'text',
+			description: 'CLI prompt marker (default: "DrayTek>").',
+		},
+		{
+			name: 'kexAlgorithms',
+			label: 'KEX algorithms (csv)',
+			type: 'text',
+			description:
+				'Override the key exchange algorithms. Defaults append diffie-hellman-group1-sha1.',
+		},
+		{
+			name: 'ciphers',
+			label: 'Ciphers (csv)',
+			type: 'text',
+			description: 'Override the ciphers. Defaults append 3des-cbc.',
+		},
+		{
+			name: 'hostKeyAlgorithms',
+			label: 'Host key algorithms (csv)',
+			type: 'text',
+			description: 'Override the host key algorithms. Defaults append ssh-rsa.',
 		},
 	],
 	help: `<h1>check-vigor165-vdsl</h1>

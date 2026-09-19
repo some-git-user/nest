@@ -155,12 +155,14 @@ describe('APP_STYLESHEET', () => {
 		expect(APP_STYLESHEET).not.toContain(':invalid');
 	});
 
-	it('bottom-aligns the input of a field stretched by a tall neighbour', () => {
-		// A field sitting next to one whose label wraps is stretched to the same
-		// height. The label row has to absorb that slack: two `auto` rows would
-		// split it, inflating the input and lifting it off the row's baseline.
+	it('top-aligns field content so inputs line up across a row', () => {
+		// A field sits in a grid row stretched to the tallest neighbour. If the
+		// label row were allowed to grow (a `1fr` track), each field's label
+		// would absorb a different amount of slack depending on its hint height,
+		// pushing its input to a different vertical offset. Packing content to
+		// the top with auto rows keeps every label and input aligned.
 		expect(APP_STYLESHEET).toContain(
-			'.field{display:grid;grid-template-columns:1fr;grid-template-rows:1fr auto;',
+			'.field{display:grid;grid-template-columns:1fr;grid-auto-rows:auto;align-content:start;',
 		);
 	});
 });

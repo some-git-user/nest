@@ -161,13 +161,24 @@ describe('check_battery_health plugin', () => {
 			);
 		});
 
-		test('rejects an unknown treatNoBatteryAs value', () => {
+		test('rejects an out-of-range treatNoBatteryAs value', () => {
+			const result = checkBatteryHealth(
+				{treatNoBatteryAs: '1'},
+				makeFs({BAT0: HEALTHY_BATTERY}),
+			);
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('treatNoBatteryAs must be 2');
+		});
+
+		test('rejects a non-numeric treatNoBatteryAs value', () => {
 			const result = checkBatteryHealth(
 				{treatNoBatteryAs: 'sometimes'},
 				makeFs({BAT0: HEALTHY_BATTERY}),
 			);
 			expect(result.code).toBe(3);
-			expect(result.message).toContain('treatNoBatteryAs must be either');
+			expect(result.message).toContain(
+				'treatNoBatteryAs must be a valid number',
+			);
 		});
 
 		test('rejects warningHealthPercent below criticalHealthPercent', () => {
@@ -197,20 +208,17 @@ describe('check_battery_health plugin', () => {
 			expect(perf(result, 'battery_count')).toBe('0');
 		});
 
-		test('is CRITICAL when treatNoBatteryAs is critical', () => {
+		test('is CRITICAL when treatNoBatteryAs is 2', () => {
 			const result = checkBatteryHealth(
-				{treatNoBatteryAs: 'critical'},
+				{treatNoBatteryAs: '2'},
 				makeFs({AC0: {type: 'Mains'}}),
 			);
 			expect(result.code).toBe(2);
 			expect(result.message).toContain('treatNoBatteryAs is critical');
 		});
 
-		test('accepts treatNoBatteryAs as a mixed-case string', () => {
-			const result = checkBatteryHealth(
-				{treatNoBatteryAs: ' CRITICAL '},
-				makeFs({}),
-			);
+		test('accepts treatNoBatteryAs as a numeric string', () => {
+			const result = checkBatteryHealth({treatNoBatteryAs: ' 2 '}, makeFs({}));
 			expect(result.code).toBe(2);
 		});
 	});
@@ -482,7 +490,7 @@ describe('check_battery_health plugin', () => {
 			warningChargePercent: 20,
 			criticalChargePercent: 10,
 			checkCharge: true,
-			treatNoBatteryAs: 'unknown' as const,
+			treatNoBatteryAs: 3 as const,
 		};
 
 		test('raises CRITICAL once and keeps the higher code on multiple issues', () => {

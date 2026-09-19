@@ -1,44 +1,148 @@
 import {
-	getPluginMetaExamples,
+	declaresPluginMeta,
 	getPluginMetaHelp,
+	getPluginMetaParams,
 	getPluginMetaUsage,
+	hasParamsDeclaration,
 } from './dynamic-routes';
 
-describe('getPluginMetaExamples', () => {
+describe('declaresPluginMeta', () => {
+	test('returns false for a non-object module', () => {
+		expect(declaresPluginMeta(123)).toBe(false);
+		expect(declaresPluginMeta(null)).toBe(false);
+		expect(declaresPluginMeta(undefined)).toBe(false);
+	});
+
+	test('returns false when meta is absent or null', () => {
+		expect(declaresPluginMeta({})).toBe(false);
+		expect(declaresPluginMeta({meta: null})).toBe(false);
+	});
+
+	test('returns true when meta is an object', () => {
+		expect(declaresPluginMeta({meta: {}})).toBe(true);
+	});
+});
+
+describe('getPluginMetaParams', () => {
 	test('returns empty array when pluginModule is null', () => {
-		const result = getPluginMetaExamples(null);
+		const result = getPluginMetaParams(null);
 		expect(result).toEqual([]);
 	});
 
 	test('returns empty array when pluginModule is undefined', () => {
-		const result = getPluginMetaExamples(undefined);
+		const result = getPluginMetaParams(undefined);
 		expect(result).toEqual([]);
 	});
 
 	test('returns empty array when pluginModule is not an object', () => {
-		const result = getPluginMetaExamples('string' as unknown);
+		const result = getPluginMetaParams('string' as unknown);
 		expect(result).toEqual([]);
 	});
 
 	test('returns empty array when meta is null', () => {
-		const result = getPluginMetaExamples({meta: null});
+		const result = getPluginMetaParams({meta: null});
 		expect(result).toEqual([]);
 	});
 
 	test('returns empty array when meta is undefined', () => {
-		const result = getPluginMetaExamples({});
+		const result = getPluginMetaParams({});
 		expect(result).toEqual([]);
 	});
 
-	test('returns empty array when examples is not an array', () => {
-		const result = getPluginMetaExamples({
+	test('returns empty array when params is not an array', () => {
+		const result = getPluginMetaParams({
 			meta: {
 				usage: 'test',
 				help: '<p>test</p>',
-				examples: 'not-array' as unknown,
+				params: 'not-array' as unknown,
 			},
 		});
 		expect(result).toEqual([]);
+	});
+
+	test('normalises declared params with defaults, labels and descriptions', () => {
+		const result = getPluginMetaParams({
+			meta: {
+				usage: 'test',
+				help: '<p>test</p>',
+				params: [
+					{
+						name: ' device ',
+						label: 'Device',
+						required: true,
+						type: 'text',
+						default: '/dev/sda',
+						description: 'Disk device to inspect.',
+					},
+				],
+			},
+		});
+		expect(result).toEqual([
+			{
+				name: 'device',
+				label: 'Device',
+				required: true,
+				type: 'text',
+				default: '/dev/sda',
+				description: 'Disk device to inspect.',
+			},
+		]);
+	});
+
+	test('falls back to the param name when label is empty and defaults optional fields', () => {
+		const result = getPluginMetaParams({
+			meta: {
+				usage: 'test',
+				help: '<p>test</p>',
+				params: [{name: 'warningTempC', label: '', type: 'number'}],
+			},
+		});
+		expect(result).toEqual([
+			{
+				name: 'warningTempC',
+				label: 'warningTempC',
+				required: false,
+				type: 'number',
+			},
+		]);
+	});
+
+	test('coerces unknown input types to text and skips malformed entries', () => {
+		const result = getPluginMetaParams({
+			meta: {
+				usage: 'test',
+				help: '<p>test</p>',
+				params: [
+					'name',
+					{type: 'mystery'},
+					{name: '   '},
+					{name: 'ok', type: 'password'},
+				],
+			},
+		});
+		expect(result).toEqual([
+			{name: 'ok', label: 'ok', required: false, type: 'password'},
+		]);
+	});
+});
+
+describe('hasParamsDeclaration', () => {
+	test('returns false when pluginModule is not an object', () => {
+		expect(hasParamsDeclaration('string')).toBe(false);
+		expect(hasParamsDeclaration(null)).toBe(false);
+	});
+
+	test('returns false when meta is missing or null', () => {
+		expect(hasParamsDeclaration({})).toBe(false);
+		expect(hasParamsDeclaration({meta: null})).toBe(false);
+	});
+
+	test('returns false when params is not an array', () => {
+		expect(hasParamsDeclaration({meta: {params: 'nope'}})).toBe(false);
+	});
+
+	test('returns true when params is an array, even when empty', () => {
+		expect(hasParamsDeclaration({meta: {params: []}})).toBe(true);
 	});
 });
 
@@ -73,7 +177,7 @@ describe('getPluginMetaUsage', () => {
 			meta: {
 				usage: 123 as unknown,
 				help: '<p>test</p>',
-				examples: [],
+				params: [],
 			},
 		});
 		expect(result).toBeUndefined();
@@ -111,7 +215,7 @@ describe('getPluginMetaHelp', () => {
 			meta: {
 				usage: 'test',
 				help: 'not-html',
-				examples: [],
+				params: [],
 			},
 		});
 		expect(result).toBeUndefined();

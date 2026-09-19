@@ -27,7 +27,7 @@ describe('checkDmesgErrors', () => {
 			expect(meta.usage).toBeDefined();
 			expect(meta.usage.http).toContain('/plugins/check-dmesg-errors');
 			expect(meta.usage.shell).toContain('check-dmesg-errors');
-			expect(meta.examples).toHaveLength(2);
+			expect(meta.params).toHaveLength(4);
 		});
 	});
 
@@ -35,7 +35,7 @@ describe('checkDmesgErrors', () => {
 		it('should handle missing dmesg access gracefully', async () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
-				level: 'err',
+				level: 3,
 				timeRange: 60,
 				execSync: mockedExecSync,
 			});
@@ -51,7 +51,7 @@ describe('checkDmesgErrors', () => {
 		it('should validate log level parameter', async () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
-				level: 'err' as const,
+				level: 3,
 				execSync: mockedExecSync,
 			});
 
@@ -119,7 +119,7 @@ describe('checkDmesgErrors', () => {
 		});
 
 		it('should handle all log levels', async () => {
-			const levels = ['emerg', 'alert', 'crit', 'err', 'warn'] as const;
+			const levels = [0, 1, 2, 3, 4] as const;
 
 			for (const level of levels) {
 				mockedExecSync.mockReturnValue('');
@@ -137,7 +137,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'warn',
+				level: 4,
 				pattern: 'error|warning',
 				timeRange: 1800,
 				ignorePatterns: 'test',
@@ -201,7 +201,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -215,7 +215,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -267,7 +267,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'emerg',
+				level: 0,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -278,7 +278,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'alert',
+				level: 1,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -289,7 +289,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'crit',
+				level: 2,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -300,7 +300,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -311,7 +311,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'warn',
+				level: 4,
 			});
 
 			expect(result).toHaveProperty('message');
@@ -324,7 +324,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 60,
 			});
 
@@ -369,15 +369,27 @@ describe('checkDmesgErrors', () => {
 			expect(result).toHaveProperty('code');
 		});
 
-		it('should handle invalid level with fallback to default', async () => {
+		it('should reject an out-of-range level', async () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'invalid' as never,
+				level: 99,
 			});
 
-			expect(result).toHaveProperty('code');
-			expect(result.code).toBeGreaterThanOrEqual(0);
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('Invalid level');
+		});
+
+		it('should reject a negative level', async () => {
+			const result = await checkDmesgErrors({level: -1});
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('Invalid level');
+		});
+
+		it('should reject a non-integer level', async () => {
+			const result = await checkDmesgErrors({level: 1.5});
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('Invalid level');
 		});
 	});
 
@@ -450,7 +462,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'emerg',
+				level: 0,
 			});
 			expect(result).toHaveProperty('code');
 		});
@@ -459,7 +471,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'alert',
+				level: 1,
 			});
 			expect(result).toHaveProperty('code');
 		});
@@ -468,7 +480,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'crit',
+				level: 2,
 			});
 			expect(result).toHaveProperty('code');
 		});
@@ -477,7 +489,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 			expect(result).toHaveProperty('code');
 		});
@@ -486,7 +498,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'warn',
+				level: 4,
 			});
 			expect(result).toHaveProperty('code');
 		});
@@ -605,7 +617,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -620,7 +632,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -643,7 +655,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'crit',
+				level: 2,
 				timeRange: 3600,
 			});
 
@@ -657,7 +669,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				pattern: 'I/O error',
 				timeRange: 3600,
 			});
@@ -681,7 +693,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				ignorePatterns: 'I/O error',
 				timeRange: 3600,
 			});
@@ -703,7 +715,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(mockedExecSync).toHaveBeenCalled();
@@ -724,7 +736,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(mockedExecSync).toHaveBeenCalled();
@@ -745,7 +757,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(mockedExecSync).toHaveBeenCalled();
@@ -758,7 +770,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 			});
 
 			expect(result.code).toBe(1);
@@ -770,7 +782,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 
 			const _result = await checkDmesgErrors({
-				level: 'err',
+				level: 3,
 				timeRange: 7200,
 				execSync: mockedExecSync,
 			});
@@ -785,7 +797,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 
 			await checkDmesgErrors({
-				level: 'err',
+				level: 3,
 				timeRange: 7200,
 				execSync: mockedExecSync,
 			});
@@ -805,7 +817,7 @@ describe('checkDmesgErrors', () => {
 			mockedExecSync.mockReturnValue('');
 
 			await checkDmesgErrors({
-				level: 'warn',
+				level: 4,
 				timeRange: 3600,
 				execSync: mockedExecSync,
 			});
@@ -819,7 +831,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'warn',
+				level: 4,
 				timeRange: 3600,
 			});
 
@@ -849,7 +861,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'emerg',
+				level: 0,
 				timeRange: 3600,
 			});
 
@@ -865,7 +877,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'alert',
+				level: 1,
 				timeRange: 3600,
 			});
 
@@ -879,7 +891,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'crit',
+				level: 2,
 				timeRange: 3600,
 			});
 
@@ -892,7 +904,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -906,7 +918,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -922,7 +934,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -935,7 +947,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'warn',
+				level: 4,
 				pattern: 'error|warning',
 				ignorePatterns: 'I/O',
 				timeRange: 3600,
@@ -956,7 +968,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -981,7 +993,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -999,7 +1011,7 @@ describe('checkDmesgErrors', () => {
 
 			const result = await checkDmesgErrors({
 				execSync: mockedExecSync,
-				level: 'err',
+				level: 3,
 				timeRange: 3600,
 			});
 
@@ -1038,24 +1050,21 @@ describe('checkDmesgErrors', () => {
 		});
 	});
 
-	describe('examples property', () => {
-		it('should have valid example configurations', () => {
-			expect(meta.examples).toBeInstanceOf(Array);
-			expect(meta.examples.length).toBeGreaterThan(0);
+	describe('params property', () => {
+		it('should have valid parameter definitions', () => {
+			expect(meta.params).toBeInstanceOf(Array);
+			expect(meta.params.length).toBeGreaterThan(0);
 
-			meta.examples.forEach((example) => {
-				expect(example).toHaveProperty('label');
-				expect(example).toHaveProperty('method');
-				expect(example).toHaveProperty('path');
-				expect(example).toHaveProperty('fields');
+			meta.params.forEach((param) => {
+				expect(param).toHaveProperty('name');
+				expect(param).toHaveProperty('label');
+				expect(param).toHaveProperty('type');
 			});
 		});
 
-		it('should have example with pattern field', () => {
-			const patternExample = meta.examples.find((ex) =>
-				ex.fields?.some((f) => f.name === 'pattern'),
-			);
-			expect(patternExample).toBeDefined();
+		it('should have a pattern parameter', () => {
+			const patternParam = meta.params.find((p) => p.name === 'pattern');
+			expect(patternParam).toBeDefined();
 		});
 	});
 });

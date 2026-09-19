@@ -129,7 +129,7 @@ dd{margin:.2rem 0 0;overflow-wrap:anywhere}
 .muted{color:var(--text-muted)}
 .card{display:grid;gap:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem .95rem;margin:0 0 .8rem;min-width:0}
 .plugin-example-method{display:inline-block;padding:.1rem .5rem;border:1px solid var(--border-strong);border-radius:var(--radius-pill);background:var(--surface);color:var(--text-muted);font-size:.74rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
-.field{display:grid;grid-template-columns:1fr;grid-template-rows:1fr auto;gap:.22rem;min-width:0}
+.field{display:grid;grid-template-columns:1fr;grid-auto-rows:auto;align-content:start;gap:.22rem;min-width:0}
 .field-label{font-size:.86rem;color:var(--text-muted)}
 .field input,.field select{width:100%;padding:.36rem .45rem;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit;font-size:.94rem}
 .field input:focus,.field select:focus,button:focus,a:focus{outline:2px solid var(--accent);outline-offset:1px}

@@ -7,7 +7,7 @@ describe('checkSmartStatus Plugin', () => {
 			expect(meta.usage).toBeDefined();
 			expect(meta.usage.http).toContain('/plugins/check-smart-status');
 			expect(meta.help).toContain('SMART Disk Status Checker');
-			expect(meta.examples).toHaveLength(3);
+			expect(meta.params).toHaveLength(5);
 		});
 	});
 
@@ -49,7 +49,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should return UNKNOWN for invalid check type', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'invalid' as any,
+				checkType: 99,
 				execFile: jest.fn(),
 			});
 
@@ -628,7 +628,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should work with checkType=all', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'all',
+				checkType: 0,
 				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
@@ -638,7 +638,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should work with checkType=health', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'health',
+				checkType: 1,
 				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
@@ -648,7 +648,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should work with checkType=attributes', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'attributes',
+				checkType: 2,
 				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
@@ -658,7 +658,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should work with checkType=errors', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'errors',
+				checkType: 3,
 				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 
@@ -668,7 +668,7 @@ describe('checkSmartStatus Plugin', () => {
 		it('should work with checkType=selftest', async () => {
 			const result = await checkSmartStatus({
 				device: '/dev/nvme0n1',
-				checkType: 'selftest',
+				checkType: 4,
 				execFile: jest.fn().mockReturnValue(JSON.stringify(mockNvmeData)),
 			});
 

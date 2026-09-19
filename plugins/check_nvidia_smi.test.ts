@@ -64,24 +64,13 @@ describe('checkNvidiaSmi plugin', () => {
 		expect(meta.usage.http).toContain('expectedGpuCount');
 		expect(meta.usage.http).toContain('warningTempC');
 		expect(meta.usage.http).toContain('warningPowerUsagePercent');
-		expect(meta.examples?.[0]).toEqual(
-			expect.objectContaining({path: '/plugins/check-nvidia-smi'}),
+		expect(meta.params).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({name: 'expectedGpuCount'}),
+				expect.objectContaining({name: 'warningTempC'}),
+				expect.objectContaining({name: 'criticalPowerUsagePercent'}),
+			]),
 		);
-		if (
-			typeof meta.examples?.[0] === 'object' &&
-			'fields' in meta.examples[0]
-		) {
-			expect(meta.examples[0].fields).toEqual(
-				expect.arrayContaining([
-					expect.objectContaining({name: 'expectedGpuCount', required: false}),
-					expect.objectContaining({name: 'warningTempC', required: false}),
-					expect.objectContaining({
-						name: 'criticalPowerUsagePercent',
-						required: false,
-					}),
-				]),
-			);
-		}
 	});
 
 	test('getStatusText returns UNKNOWN for unexpected code', () => {

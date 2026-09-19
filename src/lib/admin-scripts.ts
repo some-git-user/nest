@@ -146,7 +146,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			var stored = isSecret(entry, field.name);
 			var value = entry.params[field.name];
 			if (value === undefined) {
-				value = secret ? '' : field.defaultValue || '';
+				value = secret ? '' : field.default || '';
 			}
 			var placeholder = stored ? 'stored - leave empty to keep' : '';
 			rows +=
@@ -352,7 +352,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				var declared = previousFields[name];
 				if (
 					declared !== undefined &&
-					input.value === (declared.defaultValue || '')
+					input.value === (declared.default || '')
 				) {
 					// A field the previous plugin declared that the operator never
 					// changed: pure prefill, not worth carrying to the new plugin.

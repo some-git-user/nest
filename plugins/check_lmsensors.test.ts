@@ -48,20 +48,12 @@ describe('checkLmSensors plugin', () => {
 		expect(meta.usage.shell).toContain('./check_nest.sh check-lmsensors');
 		expect(meta.usage.http).toContain('warningTempC');
 		expect(meta.usage.http).toContain('criticalTempC');
-		expect(meta.examples?.[0]).toEqual(
-			expect.objectContaining({path: '/plugins/check-lmsensors'}),
+		expect(meta.params).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({name: 'warningTempC'}),
+				expect.objectContaining({name: 'criticalTempC'}),
+			]),
 		);
-		if (
-			typeof meta.examples?.[0] === 'object' &&
-			'fields' in meta.examples[0]
-		) {
-			expect(meta.examples[0].fields).toEqual(
-				expect.arrayContaining([
-					expect.objectContaining({name: 'warningTempC', required: false}),
-					expect.objectContaining({name: 'criticalTempC', required: false}),
-				]),
-			);
-		}
 	});
 
 	test('getStatusText maps all codes', () => {
@@ -254,23 +246,118 @@ describe('checkLmSensors plugin', () => {
 		);
 	});
 
-	test('detects crit_alarm flag as alarm', () => {
+	test('detects crit_alarm flag with programmed crit limit', () => {
 		const readings = parseTemperatureReadings(
 			{
 				'chip-0': {
 					Adapter: 'x',
-					temp1: {temp1_input: 10, temp1_crit_alarm: 1},
+					temp1: {temp1_input: 10, temp1_crit: 90, temp1_crit_alarm: 1},
 				},
 			},
 			baseConfig,
 		);
 
-		expect(readings[0].alarm).toBe(true);
+		expect(readings[0].critAlarm).toBe(true);
+	});
+
+	test('ignores crit_alarm when crit limit is 0 (unset)', () => {
+		const readings = parseTemperatureReadings(
+			{
+				'chip-0': {
+					Adapter: 'x',
+					temp1: {
+						temp1_input: 46,
+						temp1_max: 0,
+						temp1_crit: 0,
+						temp1_max_alarm: 1,
+						temp1_crit_alarm: 1,
+					},
+				},
+			},
+			baseConfig,
+		);
+
+		expect(readings[0].crit).toBeUndefined();
+		expect(readings[0].max).toBeUndefined();
+		expect(readings[0].critAlarm).toBe(false);
+		expect(readings[0].maxAlarm).toBe(false);
+	});
+
+	test('detects max_alarm flag with programmed max limit', () => {
+		const readings = parseTemperatureReadings(
+			{
+				'chip-0': {
+					Adapter: 'x',
+					temp1: {temp1_input: 82, temp1_max: 80, temp1_max_alarm: 1},
+				},
+			},
+			baseConfig,
+		);
+
+		expect(readings[0].maxAlarm).toBe(true);
+	});
+
+	test('reports OK for jc42 DIMM sensors with unset (0) limits and raised alarms', async () => {
+		const json = JSON.stringify({
+			'jc42-i2c-1-1a': {
+				Adapter: 'SMBus I801 adapter at e000',
+				temp1: {
+					temp1_input: 46,
+					temp1_max: 0,
+					temp1_max_hyst: 0,
+					temp1_min: 0,
+					temp1_crit: 0,
+					temp1_crit_hyst: 0,
+					temp1_max_alarm: 1,
+					temp1_min_alarm: 0,
+					temp1_crit_alarm: 1,
+				},
+			},
+		});
+		const result = await checkLmSensors({}, runner(json));
+
+		expect(result.code).toBe(0);
+		expect(result.message).toContain('OK: lm-sensors checked 1 chip(s)');
+	});
+
+	test('reports CRITICAL for crit_alarm with programmed crit limit', async () => {
+		const json = JSON.stringify({
+			'chip-0': {
+				Adapter: 'x',
+				temp1: {temp1_input: 40, temp1_crit: 85, temp1_crit_alarm: 1},
+			},
+		});
+		const result = await checkLmSensors({}, runner(json));
+
+		expect(result.code).toBe(2);
+		expect(result.message).toContain('hardware critical alarm raised');
+	});
+
+	test('reports WARNING for max_alarm with programmed max limit', async () => {
+		const json = JSON.stringify({
+			'chip-0': {
+				Adapter: 'x',
+				temp1: {temp1_input: 40, temp1_max: 80, temp1_max_alarm: 1},
+			},
+		});
+		const result = await checkLmSensors({}, runner(json));
+
+		expect(result.code).toBe(1);
+		expect(result.message).toContain('hardware max alarm raised');
 	});
 
 	test('evaluateReadings returns OK when nothing is triggered', () => {
 		const evaluation = evaluateReadings(
-			[{chip: 'c', feature: 'f', value: 10, alarm: false}],
+			[
+				{
+					chip: 'c',
+					feature: 'f',
+					value: 10,
+					alarm: false,
+					critAlarm: false,
+					maxAlarm: false,
+				},
+			],
 			baseConfig,
 		);
 

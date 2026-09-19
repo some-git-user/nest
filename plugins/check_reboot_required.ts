@@ -11,30 +11,14 @@ export const meta: PluginMeta = {
 		http: '/plugins/check-reboot-required[?checkReasons=<true|false>]',
 		shell: './check_nest.sh check-reboot-required [checkReasons=<true|false>]',
 	},
-	examples: [
+	params: [
 		{
-			label: 'Check if reboot is required (basic)',
-			method: 'GET',
-			path: '/plugins/check-reboot-required',
-			fields: [
-				{
-					name: 'checkReasons',
-					label: 'Check reboot reasons',
-					defaultValue: 'false',
-				},
-			],
-		},
-		{
-			label: 'Check reboot with detailed reasons',
-			method: 'GET',
-			path: '/plugins/check-reboot-required?checkReasons=true',
-			fields: [
-				{
-					name: 'checkReasons',
-					label: 'Check reboot reasons',
-					defaultValue: 'true',
-				},
-			],
+			name: 'checkReasons',
+			label: 'Check reboot reasons',
+			type: 'boolean',
+			default: 'false',
+			description:
+				'When true, also read /var/run/reboot-required.pkgs and include the offending packages in the output.',
 		},
 	],
 	help: `<h1>check-reboot-required</h1>

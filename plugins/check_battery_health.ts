@@ -39,9 +39,9 @@ import type {
  */
 export const meta: PluginMeta = {
 	usage: {
-		http: '/plugins/check-battery-health[?warningHealthPercent=<number>&criticalHealthPercent=<number>&warningChargePercent=<number>&criticalChargePercent=<number>&checkCharge=<true | false>&treatNoBatteryAs=<unknown | critical>]',
+		http: '/plugins/check-battery-health[?warningHealthPercent=<number>&criticalHealthPercent=<number>&warningChargePercent=<number>&criticalChargePercent=<number>&checkCharge=<true | false>&treatNoBatteryAs=<2 | 3>]',
 		shell:
-			'./check_nest.sh check-battery-health [warningHealthPercent=80] [criticalHealthPercent=60] [warningChargePercent=20] [criticalChargePercent=10] [checkCharge=true] [treatNoBatteryAs=unknown]',
+			'./check_nest.sh check-battery-health [warningHealthPercent=80] [criticalHealthPercent=60] [warningChargePercent=20] [criticalChargePercent=10] [checkCharge=true] [treatNoBatteryAs=3]',
 	},
 	help: `<h1>check-battery-health</h1>
 <p>Monitors battery health by reading <code>/sys/class/power_supply/&lt;name&gt;/*</code>. No external binary, no D-Bus daemon and no root privileges are required, and no shell command is built.</p>
@@ -62,70 +62,74 @@ export const meta: PluginMeta = {
 <tr><td><code>warningChargePercent</code></td><td>number</td><td><code>20</code></td><td>WARNING when current charge is at or below this percentage while discharging.</td></tr>
 <tr><td><code>criticalChargePercent</code></td><td>number</td><td><code>10</code></td><td>CRITICAL when current charge is at or below this percentage while discharging.</td></tr>
 <tr><td><code>checkCharge</code></td><td>boolean</td><td><code>true</code></td><td>Also alert on low current charge while discharging. Set false to monitor wear only.</td></tr>
-<tr><td><code>treatNoBatteryAs</code></td><td>string</td><td><code>unknown</code></td><td>Return code when no battery is present: <code>unknown</code> (a desktop has none) or <code>critical</code> (a laptop lost its battery).</td></tr>
+<tr><td><code>treatNoBatteryAs</code></td><td>number</td><td><code>3</code></td><td>Nagios return code when no battery is present: <code>2</code>=CRITICAL (a laptop lost its battery) or <code>3</code>=UNKNOWN (a desktop has none).</td></tr>
 </table>
 
 <h2>Return codes</h2>
 <ul>
 <li><strong>OK</strong> - every battery is present, healthy and (when on battery) adequately charged.</li>
 <li><strong>WARNING</strong> - a battery's State of Health is at or below the warning threshold, or its charge is low while discharging.</li>
-<li><strong>CRITICAL</strong> - a battery is worn past the critical threshold, critically low while discharging, has raised its alarm flag, is reported not present, or no battery exists and treatNoBatteryAs is <code>critical</code>.</li>
-<li><strong>UNKNOWN</strong> - invalid parameters, or no battery exists and treatNoBatteryAs is <code>unknown</code>.</li>
+<li><strong>CRITICAL</strong> - a battery is worn past the critical threshold, critically low while discharging, has raised its alarm flag, is reported not present, or no battery exists and treatNoBatteryAs is <code>2</code>.</li>
+<li><strong>UNKNOWN</strong> - invalid parameters, or no battery exists and treatNoBatteryAs is <code>3</code>.</li>
 </ul>
 
 <h2>Examples</h2>
 <pre>./check_nest.sh check-battery-health</pre>
 <pre>./check_nest.sh check-battery-health warningHealthPercent=85 criticalHealthPercent=70</pre>
-<pre>./check_nest.sh check-battery-health checkCharge=false treatNoBatteryAs=critical</pre>
+<pre>./check_nest.sh check-battery-health checkCharge=false treatNoBatteryAs=2</pre>
 
 <h2>References</h2>
 <ul>
 <li><a href="https://www.kernel.org/doc/html/latest/power/power_supply_class.html" target="_blank" rel="noopener">Linux power supply class</a></li>
 </ul>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Check battery health with default thresholds',
-			method: 'GET',
-			path: '/plugins/check-battery-health',
-			fields: [],
+			name: 'warningHealthPercent',
+			label: 'Warning health (%)',
+			type: 'number',
+			default: '80',
+			description:
+				'WARNING when State of Health is at or below this percentage.',
 		},
 		{
-			label: 'Custom wear thresholds',
-			method: 'GET',
-			path: '/plugins/check-battery-health',
-			fields: [
-				{
-					name: 'warningHealthPercent',
-					label: 'Warning Health (%)',
-					required: false,
-					defaultValue: '80',
-				},
-				{
-					name: 'criticalHealthPercent',
-					label: 'Critical Health (%)',
-					required: false,
-					defaultValue: '60',
-				},
-			],
+			name: 'criticalHealthPercent',
+			label: 'Critical health (%)',
+			type: 'number',
+			default: '60',
+			description:
+				'CRITICAL when State of Health is at or below this percentage.',
 		},
 		{
-			label: 'Wear only, treat a missing battery as critical',
-			method: 'GET',
-			path: '/plugins/check-battery-health',
-			fields: [
-				{
-					name: 'checkCharge',
-					label: 'Check Charge (true/false)',
-					required: false,
-					defaultValue: 'false',
-				},
-				{
-					name: 'treatNoBatteryAs',
-					label: 'No Battery As (unknown/critical)',
-					required: false,
-					defaultValue: 'critical',
-				},
-			],
+			name: 'warningChargePercent',
+			label: 'Warning charge (%)',
+			type: 'number',
+			default: '20',
+			description:
+				'WARNING when current charge is at or below this percentage while discharging.',
+		},
+		{
+			name: 'criticalChargePercent',
+			label: 'Critical charge (%)',
+			type: 'number',
+			default: '10',
+			description:
+				'CRITICAL when current charge is at or below this percentage while discharging.',
+		},
+		{
+			name: 'checkCharge',
+			label: 'Check charge level',
+			type: 'boolean',
+			default: 'true',
+			description:
+				'Also alert on low current charge while discharging. Set false to monitor wear only.',
+		},
+		{
+			name: 'treatNoBatteryAs',
+			label: 'No battery as',
+			type: 'number',
+			default: '3',
+			description:
+				'Nagios return code when no battery is present: 2=CRITICAL (a laptop lost its battery), 3=UNKNOWN (a desktop has none).',
 		},
 	],
 } satisfies PluginMeta;
@@ -153,7 +157,7 @@ type BatteryConfig = {
 	warningChargePercent: number;
 	criticalChargePercent: number;
 	checkCharge: boolean;
-	treatNoBatteryAs: 'unknown' | 'critical';
+	treatNoBatteryAs: NagiosReturnCode;
 };
 
 type BatteryEvaluation = {
@@ -259,13 +263,21 @@ const getConfig = (
 		return {error: criticalCharge.error};
 	}
 
-	const treatNoBatteryRaw =
-		typeof params.treatNoBatteryAs === 'string'
-			? params.treatNoBatteryAs.trim().toLowerCase()
-			: 'unknown';
-	if (treatNoBatteryRaw !== 'unknown' && treatNoBatteryRaw !== 'critical') {
+	const treatNoBatteryAs = parseOptionalNumber(
+		params.treatNoBatteryAs,
+		'treatNoBatteryAs',
+		NagiosReturnCodes.UNKNOWN,
+	);
+	if (treatNoBatteryAs.error) {
+		return {error: treatNoBatteryAs.error};
+	}
+	const treatNoBatteryCode = treatNoBatteryAs.value as number;
+	if (
+		treatNoBatteryCode !== NagiosReturnCodes.CRITICAL &&
+		treatNoBatteryCode !== NagiosReturnCodes.UNKNOWN
+	) {
 		return {
-			error: 'treatNoBatteryAs must be either "unknown" or "critical"',
+			error: 'treatNoBatteryAs must be 2 (critical) or 3 (unknown)',
 		};
 	}
 
@@ -295,7 +307,7 @@ const getConfig = (
 			warningChargePercent,
 			criticalChargePercent,
 			checkCharge: parseOptionalBoolean(params.checkCharge, true),
-			treatNoBatteryAs: treatNoBatteryRaw,
+			treatNoBatteryAs: treatNoBatteryCode,
 		},
 	};
 };
@@ -585,7 +597,7 @@ export const checkBatteryHealth = (
 
 	const names = discoverBatteries(fsImpl);
 	if (names.length === 0) {
-		if (config.treatNoBatteryAs === 'critical') {
+		if (config.treatNoBatteryAs === NagiosReturnCodes.CRITICAL) {
 			return {
 				message:
 					'CRITICAL: no battery found but treatNoBatteryAs is critical - expected battery is missing',

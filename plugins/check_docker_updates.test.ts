@@ -88,12 +88,19 @@ const perf = (
 	result.performanceData?.find((entry) => entry.label === label)?.value;
 
 describe('check_docker_updates meta', () => {
-	test('exposes usage and examples', () => {
+	test('exposes usage and params', () => {
 		expect(meta.usage.http).toContain('/plugins/check-docker-updates');
 		expect(meta.usage.shell).toContain('./check_nest.sh check-docker-updates');
 		expect(meta.usage.http).toContain('composeFile');
-		expect(meta.examples?.[0]).toEqual(
-			expect.objectContaining({path: '/plugins/check-docker-updates'}),
+		const names = meta.params.map((param) => param.name);
+		expect(names).toEqual(
+			expect.arrayContaining([
+				'checkRunning',
+				'composeFile',
+				'dockerfile',
+				'severity',
+				'ignore',
+			]),
 		);
 	});
 });
@@ -157,7 +164,17 @@ describe('checkDockerUpdates config validation', () => {
 	test('rejects invalid severity', async () => {
 		const result = await checkDockerUpdates({severity: 'nope'}, makeRunner({}));
 		expect(result.code).toBe(3);
-		expect(result.message).toContain('severity must be warning or critical');
+		expect(result.message).toContain(
+			'severity must be 1 (warning) or 2 (critical)',
+		);
+	});
+
+	test('rejects an out-of-range severity', async () => {
+		const result = await checkDockerUpdates({severity: '4'}, makeRunner({}));
+		expect(result.code).toBe(3);
+		expect(result.message).toContain(
+			'severity must be 1 (warning) or 2 (critical)',
+		);
 	});
 
 	test('rejects invalid checkRunning', async () => {
@@ -332,13 +349,45 @@ describe('checkDockerUpdates evaluation', () => {
 		expect(result.message).toContain('mongo:7.0');
 	});
 
-	test('CRITICAL when severity=critical and outdated', async () => {
+	test('WARNING when severity=1 and outdated', async () => {
 		const runner = makeRunner(
 			{'mongo:7.0': {local: 'sha256:old', remote: 'sha256:new'}},
 			{ps: ['mongo:7.0']},
 		);
-		const result = await checkDockerUpdates({severity: 'critical'}, runner);
+		const result = await checkDockerUpdates({severity: '1'}, runner);
+		expect(result.code).toBe(1);
+	});
+
+	test('CRITICAL when severity=2 and outdated', async () => {
+		const runner = makeRunner(
+			{'mongo:7.0': {local: 'sha256:old', remote: 'sha256:new'}},
+			{ps: ['mongo:7.0']},
+		);
+		const result = await checkDockerUpdates({severity: '2'}, runner);
 		expect(result.code).toBe(2);
+	});
+
+	// The HTTP route coerces numeric/boolean query params to real JS numbers and
+	// booleans (see coerceParams), so the plugin must tolerate non-string values.
+	test('severity passed as a number (route-coerced) is handled', async () => {
+		const runner = makeRunner(
+			{'mongo:7.0': {local: 'sha256:old', remote: 'sha256:new'}},
+			{ps: ['mongo:7.0']},
+		);
+		const result = await checkDockerUpdates({severity: 2}, runner);
+		expect(result.code).toBe(2);
+	});
+
+	test('checkRunning passed as a boolean (route-coerced) is handled', async () => {
+		const runner = makeRunner(
+			{'mongo:7.0': {local: 'sha256:old', remote: 'sha256:new'}},
+			{ps: ['mongo:7.0']},
+		);
+		const result = await checkDockerUpdates(
+			{checkRunning: true, severity: 1},
+			runner,
+		);
+		expect(result.code).toBe(1);
 	});
 
 	test('local-build images are skipped and noted', async () => {

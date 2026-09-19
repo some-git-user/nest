@@ -34,7 +34,7 @@ import {
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
 import {
-	registeredPluginRouteExamples,
+	registeredPluginRouteParams,
 	registeredPluginRoutes,
 } from '../routes/dynamic-routes';
 import {
@@ -59,7 +59,7 @@ jest.mock('../lib/logger');
 jest.mock('../lib/plugin-utils');
 jest.mock('../routes/dynamic-routes', () => ({
 	registeredPluginRoutes: [] as string[],
-	registeredPluginRouteExamples: {} as Record<string, unknown>,
+	registeredPluginRouteParams: {} as Record<string, unknown>,
 }));
 
 const mockedEnv = jest.mocked(env);
@@ -159,35 +159,20 @@ describe('admin-local-config controller', () => {
 	describe('listAdminCommands / secretParamNamesForCommand', () => {
 		// dynamic-routes is mocked with plain mutable containers (see top of file).
 		const routes = registeredPluginRoutes as string[];
-		const examples = registeredPluginRouteExamples as Record<string, unknown[]>;
+		const params = registeredPluginRouteParams as Record<string, unknown[]>;
 
 		beforeEach(() => {
 			routes.length = 0;
-			for (const key of Object.keys(examples)) {
-				delete examples[key];
+			for (const key of Object.keys(params)) {
+				delete params[key];
 			}
 		});
 
-		it('derives commands from registered routes and merges interactive fields', () => {
+		it('derives commands from registered routes and exposes declared params', () => {
 			routes.push('/plugins/check-disk');
-			examples['/plugins/check-disk'] = [
-				{
-					kind: 'static',
-					title: 'Static',
-					requestLine: 'GET /plugins/check-disk',
-					responseBody: 'OK',
-				},
-				{
-					kind: 'interactive',
-					title: 'Form',
-					method: 'GET',
-					path: '/plugins/check-disk',
-					fields: [
-						{name: 'warn', label: 'Warn', type: 'text'},
-						{name: 'warn', label: 'Warn dup', type: 'text'},
-						{name: 'password', label: 'PW', type: 'password'},
-					],
-				},
+			params['/plugins/check-disk'] = [
+				{name: 'warn', label: 'Warn', required: false, type: 'text'},
+				{name: 'password', label: 'PW', required: false, type: 'password'},
 			];
 
 			const {listAdminCommands} = require('./admin-local-config');
@@ -198,8 +183,13 @@ describe('admin-local-config controller', () => {
 					command: 'check-disk',
 					routePath: '/plugins/check-disk',
 					fields: [
-						{name: 'warn', label: 'Warn', type: 'text'},
-						{name: 'password', label: 'PW', type: 'password'},
+						{name: 'warn', label: 'Warn', required: false, type: 'text'},
+						{
+							name: 'password',
+							label: 'PW',
+							required: false,
+							type: 'password',
+						},
 					],
 				},
 			]);
@@ -207,28 +197,14 @@ describe('admin-local-config controller', () => {
 
 		it('returns password field names for a known command', () => {
 			routes.push('/plugins/check-net');
-			examples['/plugins/check-net'] = [
-				{
-					kind: 'interactive',
-					title: 'Form',
-					method: 'GET',
-					path: '/plugins/check-net',
-					fields: [
-						{name: 'user', label: 'User', type: 'text'},
-						{name: 'password', label: 'PW', type: 'password'},
-					],
-				},
+			params['/plugins/check-net'] = [
+				{name: 'user', label: 'User', required: false, type: 'text'},
+				{name: 'password', label: 'PW', required: false, type: 'password'},
 			];
 			// A second, unrelated command exercises the skip branch.
 			routes.push('/plugins/check-other');
-			examples['/plugins/check-other'] = [
-				{
-					kind: 'interactive',
-					title: 'Form',
-					method: 'GET',
-					path: '/plugins/check-other',
-					fields: [{name: 'secret', label: 'S', type: 'password'}],
-				},
+			params['/plugins/check-other'] = [
+				{name: 'secret', label: 'S', required: false, type: 'password'},
 			];
 			mockedCommandToRoutePath.mockReturnValue('/plugins/check-net');
 
@@ -245,9 +221,9 @@ describe('admin-local-config controller', () => {
 			expect(secretParamNamesForCommand('unknown').size).toBe(0);
 		});
 
-		it('handles a registered route with no recorded examples', () => {
+		it('handles a registered route with no recorded params', () => {
 			routes.push('/plugins/bare');
-			// No examples entry for /plugins/bare → exercises the `?? []` fallback.
+			// No params entry for /plugins/bare → exercises the `?? []` fallback.
 			const {listAdminCommands} = require('./admin-local-config');
 			const commands = listAdminCommands();
 			const bare = commands.find(

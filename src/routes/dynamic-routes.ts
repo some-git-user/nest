@@ -22,11 +22,10 @@ import {
 } from '../lib/startup-warning-registry';
 import type {
 	HtmlTemplateString,
-	PluginExampleField,
-	PluginExampleFieldInputType,
 	PluginMeta,
 	PluginMetaUsage,
-	PluginRouteExample,
+	PluginParam,
+	PluginParamInputType,
 } from '../types/plugin';
 
 // VM dependency injection for testability
@@ -50,32 +49,32 @@ export const pluginStartupWarnings: string[] = [];
 export const registeredPluginRoutes: string[] = [];
 
 export type {
-	PluginExampleField,
-	PluginExampleFieldInputType,
 	PluginMeta,
 	PluginMetaUsage,
-	PluginRouteExample,
+	PluginParam,
+	PluginParamInputType,
 } from '../types/plugin';
 
-export const registeredPluginRouteExamples: Record<
-	string,
-	PluginRouteExample[]
-> = {};
+export const registeredPluginRouteParams: Record<string, PluginParam[]> = {};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null;
 
-const toInputType = (value: unknown): PluginExampleFieldInputType => {
-	if (value === 'password' || value === 'url' || value === 'text') {
+const toInputType = (value: unknown): PluginParamInputType => {
+	if (
+		value === 'password' ||
+		value === 'url' ||
+		value === 'text' ||
+		value === 'number' ||
+		value === 'boolean'
+	) {
 		return value;
 	}
 
 	return 'text';
 };
 
-export const getPluginMetaExamples = (
-	pluginModule: unknown,
-): PluginRouteExample[] => {
+export const getPluginMetaParams = (pluginModule: unknown): PluginParam[] => {
 	if (typeof pluginModule !== 'object' || pluginModule === null) {
 		return [];
 	}
@@ -86,67 +85,78 @@ export const getPluginMetaExamples = (
 	}
 
 	const meta = moduleRecord.meta as PluginMeta;
-	if (!Array.isArray(meta.examples)) {
+	if (!Array.isArray(meta.params)) {
 		return [];
 	}
 
-	const parsedExamples: PluginRouteExample[] = [];
-	meta.examples.forEach((example, index) => {
-		const defaultLabel = `example ${index + 1}`;
-
-		if (!isRecord(example)) {
+	const parsedParams: PluginParam[] = [];
+	meta.params.forEach((param) => {
+		if (!isRecord(param)) {
 			return;
 		}
 
-		const method = example.method === 'POST' ? 'POST' : 'GET';
-		const pathValue = typeof example.path === 'string' ? example.path : '';
-		if (!pathValue.startsWith('/')) {
+		const name = typeof param.name === 'string' ? param.name.trim() : '';
+		if (!name) {
 			return;
 		}
 
-		if (!Array.isArray(example.fields)) {
-			return;
-		}
-
-		const fields = example.fields
-			.filter(isRecord)
-			.map((field): PluginExampleField | undefined => {
-				const name = typeof field.name === 'string' ? field.name : '';
-				if (!name) {
-					return undefined;
-				}
-				const parsedField: PluginExampleField = {
-					name,
-					label: typeof field.label === 'string' ? field.label : name,
-					required: field.required !== false,
-					type: toInputType(field.type),
-				};
-
-				if (typeof field.defaultValue === 'string') {
-					parsedField.defaultValue = field.defaultValue;
-				}
-
-				return parsedField;
-			})
-			.filter((field): field is PluginExampleField => field !== undefined);
-
-		if (fields.length === 0) {
-			return;
-		}
-
-		parsedExamples.push({
-			kind: 'interactive',
+		const parsedParam: PluginParam = {
+			name,
 			label:
-				typeof example.label === 'string' && example.label.trim().length > 0
-					? example.label
-					: defaultLabel,
-			method,
-			path: pathValue,
-			fields,
-		});
+				typeof param.label === 'string' && param.label.length > 0
+					? param.label
+					: name,
+			required: param.required === true,
+			type: toInputType(param.type),
+		};
+
+		if (typeof param.default === 'string') {
+			parsedParam.default = param.default;
+		}
+
+		if (typeof param.description === 'string' && param.description.length > 0) {
+			parsedParam.description = param.description;
+		}
+
+		parsedParams.push(parsedParam);
 	});
 
-	return parsedExamples;
+	return parsedParams;
+};
+
+/**
+ * Whether a plugin module ships a `meta` object. A module that declares
+ * metadata commits to also declaring its parameter set (see
+ * {@link hasParamsDeclaration}); a metadata-less module is exempt and stays
+ * loadable, it simply has no run form.
+ */
+export const declaresPluginMeta = (pluginModule: unknown): boolean => {
+	if (typeof pluginModule !== 'object' || pluginModule === null) {
+		return false;
+	}
+
+	const meta = (pluginModule as Record<string, unknown>).meta;
+	return typeof meta === 'object' && meta !== null;
+};
+
+/**
+ * Whether a plugin module declares `meta.params` as an array.
+ *
+ * Enforced at load time: a plugin without a parameter declaration cannot be
+ * edited in the admin UI or rendered as a run form, so it is rejected rather
+ * than silently loaded with an empty parameter set.
+ */
+export const hasParamsDeclaration = (pluginModule: unknown): boolean => {
+	if (typeof pluginModule !== 'object' || pluginModule === null) {
+		return false;
+	}
+
+	const moduleRecord = pluginModule as Record<string, unknown>;
+	if (typeof moduleRecord.meta !== 'object' || moduleRecord.meta === null) {
+		return false;
+	}
+
+	return Array.isArray((moduleRecord.meta as Record<string, unknown>).params);
 };
 
 export const getPluginMetaUsage = (
@@ -228,12 +238,12 @@ export const isPluginMeta = (value: unknown): value is PluginMeta => {
 		return false;
 	}
 
-	// Validate examples field
-	if (!('examples' in record)) {
+	// Validate params field - must be an array of parameter definitions
+	if (!('params' in record)) {
 		return false;
 	}
 
-	if (!Array.isArray(record.examples)) {
+	if (!Array.isArray(record.params)) {
 		return false;
 	}
 
@@ -520,30 +530,48 @@ effectivePluginFiles.forEach((file) => {
 	);
 
 	let helpContext: PluginHelpContext = {};
-	let pluginExamples: PluginRouteExample[] = [];
+	let pluginParams: PluginParam[] = [];
+	let pluginRejected = false;
 	try {
 		const pluginModule: unknown = loadPluginModule(runtimePluginPath);
-		const usage = getPluginMetaUsage(pluginModule);
-		pluginExamples = getPluginMetaExamples(pluginModule);
-		let usageHttp: string | undefined;
-		let usageShell: string | undefined;
-		if (usage) {
-			logPluginUsage(filePath, usage, helpUrl);
-			if (typeof usage === 'string') {
-				usageHttp = usage;
-			} else {
-				usageHttp = usage.http;
-				usageShell = usage.shell;
+		// A plugin that ships metadata must declare its parameter set, so the
+		// admin UI and overview run-form can expose every settable option. A
+		// metadata-less module stays loadable (it simply has no run form).
+		if (
+			declaresPluginMeta(pluginModule) &&
+			!hasParamsDeclaration(pluginModule)
+		) {
+			const warning = `Skipping plugin ${filePath} because meta.params is missing. Every plugin must declare its settable parameters in meta.params, even if it has none.`;
+			recordStartupWarning(warning);
+			logger.warn(warning);
+			pluginRejected = true;
+		} else {
+			pluginParams = getPluginMetaParams(pluginModule);
+			const usage = getPluginMetaUsage(pluginModule);
+			let usageHttp: string | undefined;
+			let usageShell: string | undefined;
+			if (usage) {
+				logPluginUsage(filePath, usage, helpUrl);
+				if (typeof usage === 'string') {
+					usageHttp = usage;
+				} else {
+					usageHttp = usage.http;
+					usageShell = usage.shell;
+				}
 			}
+			helpContext = {
+				pluginName: path.basename(file, path.extname(file)),
+				helpHtml: getPluginMetaHelp(pluginModule),
+				usageHttp,
+				usageShell,
+			};
 		}
-		helpContext = {
-			pluginName: path.basename(file, path.extname(file)),
-			helpHtml: getPluginMetaHelp(pluginModule),
-			usageHttp,
-			usageShell,
-		};
 	} catch (err) {
 		warnWithError(`Could not load plugin metadata for ${filePath}`, err);
+	}
+
+	if (pluginRejected) {
+		return;
 	}
 
 	const handler = createPluginRouteHandler(
@@ -554,8 +582,8 @@ effectivePluginFiles.forEach((file) => {
 	router.get(kebabCasePath, handler);
 	router.post(kebabCasePath, handler);
 	registeredPluginRoutes.push(kebabCasePath);
-	if (pluginExamples.length > 0) {
-		registeredPluginRouteExamples[kebabCasePath] = pluginExamples;
+	if (pluginParams.length > 0) {
+		registeredPluginRouteParams[kebabCasePath] = pluginParams;
 	}
 });
 

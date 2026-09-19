@@ -5,7 +5,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: 'test usage',
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(true);
 	});
@@ -14,7 +14,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: {http: '/test', shell: './test.sh'},
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(true);
 	});
@@ -47,7 +47,7 @@ describe('isPluginMeta', () => {
 	test('returns false when usage field is missing', () => {
 		const result = isPluginMeta({
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -56,7 +56,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: 123,
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -65,7 +65,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: null,
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -74,7 +74,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: {http: 123},
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -83,7 +83,7 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: {shell: 123},
 			help: '<p>Help text</p>',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -91,7 +91,7 @@ describe('isPluginMeta', () => {
 	test('returns false when help field is missing', () => {
 		const result = isPluginMeta({
 			usage: 'test',
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
@@ -100,12 +100,12 @@ describe('isPluginMeta', () => {
 		const result = isPluginMeta({
 			usage: 'test',
 			help: null,
-			examples: [],
+			params: [],
 		});
 		expect(result).toBe(false);
 	});
 
-	test('returns false when examples field is missing', () => {
+	test('returns false when params field is missing', () => {
 		const result = isPluginMeta({
 			usage: 'test',
 			help: '<p>Help text</p>',
@@ -113,29 +113,29 @@ describe('isPluginMeta', () => {
 		expect(result).toBe(false);
 	});
 
-	test('returns false when examples is not an array', () => {
+	test('returns false when params is not an array', () => {
 		const result = isPluginMeta({
 			usage: 'test',
 			help: '<p>Help text</p>',
-			examples: 'not-an-array',
+			params: 'not-an-array',
 		});
 		expect(result).toBe(false);
 	});
 
-	test('returns false when examples is an object', () => {
+	test('returns false when params is an object', () => {
 		const result = isPluginMeta({
 			usage: 'test',
 			help: '<p>Help text</p>',
-			examples: {},
+			params: {},
 		});
 		expect(result).toBe(false);
 	});
 
-	test('returns false when examples is a number', () => {
+	test('returns false when params is a number', () => {
 		const result = isPluginMeta({
 			usage: 'test',
 			help: '<p>Help text</p>',
-			examples: 123,
+			params: 123,
 		});
 		expect(result).toBe(false);
 	});

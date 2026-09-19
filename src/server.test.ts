@@ -243,34 +243,26 @@ describe('server bootstrap', () => {
 				'/plugins/check-test',
 				'/plugins/check-debian-eol',
 			],
-			registeredPluginRouteExamples: {
+			registeredPluginRouteParams: {
 				'/plugins/check-test': [
 					{
-						kind: 'link',
-						label: 'quick link',
-						method: 'GET',
-						href: '/plugins/check-test?nagiosReturnMessage=Quick&nagiosReturnValue=0',
+						name: 'nagiosReturnMessage',
+						label: 'message',
+						required: true,
+						type: 'text',
 					},
 					{
-						kind: 'interactive',
-						label: 'post sample',
-						method: 'POST',
-						path: '/plugins/check-test',
-						fields: [
-							{
-								name: 'nagiosReturnMessage',
-								label: 'message',
-								required: true,
-								type: 'text',
-							},
-							{
-								name: 'nagiosReturnValue',
-								label: 'code',
-								required: false,
-								type: 'text',
-								defaultValue: '0',
-							},
-						],
+						name: 'nagiosReturnValue',
+						label: 'code',
+						required: false,
+						type: 'text',
+						default: '0',
+					},
+					{
+						name: 'performanceData',
+						label: 'performance data',
+						required: false,
+						type: 'boolean',
 					},
 				],
 			},
@@ -525,17 +517,12 @@ describe('server bootstrap', () => {
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
-				'<form class="plugin-example-form" method="post" action="/plugins/check-test">',
+				'<form class="plugin-example-form" method="get" action="/plugins/check-test">',
 			),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
 				'<script src="/help/plugin-example-form.js" defer></script>',
-			),
-		);
-		expect(rootSend).toHaveBeenCalledWith(
-			expect.stringContaining(
-				'<a class="plugin-example-link" href="/plugins/check-test?nagiosReturnMessage=Quick&nagiosReturnValue=0">quick link</a>',
 			),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
@@ -1014,7 +1001,7 @@ describe('server bootstrap', () => {
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [],
 			registeredPluginRoutes: [],
-			registeredPluginRouteExamples: {},
+			registeredPluginRouteParams: {},
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
@@ -1212,7 +1199,7 @@ describe('server bootstrap', () => {
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [],
 			registeredPluginRoutes: [],
-			registeredPluginRouteExamples: {},
+			registeredPluginRouteParams: {},
 		}));
 		jest.doMock('./lib/honey-pot', () => ({
 			recordHoneypotSignal: jest.fn(),
@@ -1489,7 +1476,7 @@ describe('form submission filtering', () => {
 		jest.doMock('./routes/dynamic-routes', () => ({
 			default: {handle: jest.fn()},
 			registeredPluginRoutes: ['check_test'],
-			registeredPluginRouteExamples: {},
+			registeredPluginRouteParams: {},
 			pluginStartupWarnings: [],
 		}));
 		jest.doMock('./routes/local-config', () => ({
@@ -1716,7 +1703,7 @@ describe('config drift warning on the overview page', () => {
 			__esModule: true,
 			default: {handle: jest.fn()},
 			registeredPluginRoutes: [],
-			registeredPluginRouteExamples: {},
+			registeredPluginRouteParams: {},
 			pluginStartupWarnings: [],
 		}));
 		jest.doMock('./routes/local-config', () => ({

@@ -398,6 +398,7 @@ describe('dynamic routes (branch coverage)', () => {
 					usage: {
 						http: '/plugins/check-fake?foo=<value>',
 					},
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -420,6 +421,7 @@ describe('dynamic routes (branch coverage)', () => {
 			pluginModule: {
 				meta: {
 					usage: 42,
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -662,6 +664,7 @@ describe('dynamic routes (branch coverage)', () => {
 					usage: {
 						http: '/plugins/check-fake?x=1',
 					},
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -687,6 +690,7 @@ describe('dynamic routes (branch coverage)', () => {
 					usage: {
 						shell: './check_nest.sh check-fake x=1',
 					},
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -710,6 +714,7 @@ describe('dynamic routes (branch coverage)', () => {
 						http: '/plugins/check-fake?x=1',
 						shell: './check_nest.sh check-fake x=1',
 					},
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -734,7 +739,7 @@ describe('dynamic routes (branch coverage)', () => {
 						http: '/plugins/check-fake?x=1',
 						shell: './check_nest.sh check-fake x=1',
 					},
-					examples: [],
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -754,6 +759,7 @@ describe('dynamic routes (branch coverage)', () => {
 					usage: {
 						http: '/plugins/check-fake?x=<val>',
 					},
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},
@@ -774,6 +780,7 @@ describe('dynamic routes (branch coverage)', () => {
 			pluginModule: {
 				meta: {
 					help: 42,
+					params: [],
 				},
 				checkFake: () => Promise.resolve({message: 'ok', code: 0}),
 			},

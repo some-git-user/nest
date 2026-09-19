@@ -38,10 +38,10 @@ import {
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
 import {
-	registeredPluginRouteExamples,
+	registeredPluginRouteParams,
 	registeredPluginRoutes,
 } from '../routes/dynamic-routes';
-import type {PluginExampleField} from '../types/plugin';
+import type {PluginParam} from '../types/plugin';
 
 /**
  * Header a JSON API caller must send.
@@ -85,25 +85,13 @@ const isStringRecord = (value: unknown): value is Record<string, string> =>
 export const listAdminCommands = (): {
 	command: string;
 	routePath: string;
-	fields: PluginExampleField[];
+	fields: PluginParam[];
 }[] => {
 	return registeredPluginRoutes.map((routePath) => {
-		const fieldsByName = new Map<string, PluginExampleField>();
-		for (const example of registeredPluginRouteExamples[routePath] ?? []) {
-			if (example.kind !== 'interactive') {
-				continue;
-			}
-			for (const field of example.fields) {
-				if (!fieldsByName.has(field.name)) {
-					fieldsByName.set(field.name, field);
-				}
-			}
-		}
-
 		return {
 			command: routePath.replace(/^\/plugins\//, ''),
 			routePath,
-			fields: Array.from(fieldsByName.values()),
+			fields: registeredPluginRouteParams[routePath] ?? [],
 		};
 	});
 };
@@ -122,9 +110,9 @@ export const secretParamNamesForCommand = (command: string): Set<string> => {
 		if (info.routePath !== routePath) {
 			continue;
 		}
-		for (const field of info.fields) {
-			if (field.type === 'password') {
-				names.add(field.name);
+		for (const param of info.fields) {
+			if (param.type === 'password') {
+				names.add(param.name);
 			}
 		}
 	}

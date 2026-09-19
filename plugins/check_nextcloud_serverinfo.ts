@@ -78,25 +78,81 @@ export const meta: PluginMeta = {
 		shell:
 			'./check_nest.sh check-nextcloud-serverinfo baseUrl=<nextcloud-base-url> token=<serverinfo-token> warningCpuLoad1m=<number> criticalCpuLoad1m=<number> warningFreeSpaceGiB=<number> criticalFreeSpaceGiB=<number> skipApps=<true|false> skipUpdate=<true|false>',
 	},
-	examples: [
+	params: [
 		{
-			label: 'Run with required variables',
-			method: 'POST',
-			path: '/plugins/check-nextcloud-serverinfo',
-			fields: [
-				{name: 'baseUrl', label: 'Nextcloud Base URL', type: 'url'},
-				{name: 'token', label: 'Serverinfo Token', type: 'password'},
-				{
-					name: 'skipApps',
-					label: 'Skip App Update Check',
-					defaultValue: 'false',
-				},
-				{
-					name: 'skipUpdate',
-					label: 'Skip Core Update Check',
-					defaultValue: 'false',
-				},
-			],
+			name: 'baseUrl',
+			label: 'Nextcloud base URL',
+			type: 'url',
+			required: true,
+			description:
+				'Base URL of your Nextcloud instance, e.g. https://cloud.example.com.',
+		},
+		{
+			name: 'token',
+			label: 'Serverinfo token',
+			type: 'password',
+			description:
+				'Official NC-Token value configured in Nextcloud serverinfo.',
+		},
+		{
+			name: 'username',
+			label: 'Username',
+			type: 'text',
+			description: 'Fallback admin username for HTTP Basic authentication.',
+		},
+		{
+			name: 'password',
+			label: 'Password',
+			type: 'password',
+			description:
+				'Fallback admin password or app password for HTTP Basic authentication.',
+		},
+		{
+			name: 'warningCpuLoad1m',
+			label: 'Warning CPU load (1m)',
+			type: 'number',
+			default: '4',
+			description:
+				'WARNING when the 1-minute CPU load is greater than or equal to this threshold.',
+		},
+		{
+			name: 'criticalCpuLoad1m',
+			label: 'Critical CPU load (1m)',
+			type: 'number',
+			default: '8',
+			description:
+				'CRITICAL when the 1-minute CPU load is greater than or equal to this threshold.',
+		},
+		{
+			name: 'warningFreeSpaceGiB',
+			label: 'Warning free space (GiB)',
+			type: 'number',
+			default: '20',
+			description:
+				'WARNING when free disk space is less than or equal to this threshold.',
+		},
+		{
+			name: 'criticalFreeSpaceGiB',
+			label: 'Critical free space (GiB)',
+			type: 'number',
+			default: '10',
+			description:
+				'CRITICAL when free disk space is less than or equal to this threshold.',
+		},
+		{
+			name: 'skipApps',
+			label: 'Skip app update check',
+			type: 'boolean',
+			default: 'true',
+			description:
+				'Skip the app update section. Enabling it triggers an external request to the Nextcloud app store.',
+		},
+		{
+			name: 'skipUpdate',
+			label: 'Skip core update check',
+			type: 'boolean',
+			default: 'true',
+			description: 'Skip the core update section.',
 		},
 	],
 	help: `<h1>check-nextcloud-serverinfo</h1>

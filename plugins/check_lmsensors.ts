@@ -48,6 +48,8 @@ type TempReading = {
 	crit?: number;
 	max?: number;
 	alarm: boolean;
+	critAlarm: boolean;
+	maxAlarm: boolean;
 };
 
 type ThresholdConfig = {
@@ -73,7 +75,10 @@ export const meta: PluginMeta = {
   <li>Every <code>tempN_input</code> reading reported by <code>sensors -j</code></li>
   <li>Temperature against configurable global warning/critical thresholds</li>
   <li>The chip's own <code>*_crit</code> (critical) and <code>*_max</code> (warning) limits</li>
-  <li>Hardware <code>*_alarm</code> / <code>*_crit_alarm</code> flags</li>
+  <li>Hardware <code>*_alarm</code> / <code>*_crit_alarm</code> flags (CRITICAL) and <code>*_max_alarm</code> (WARNING)</li>
+  <li>Limit registers of <code>0</code> are treated as <em>not programmed</em>: they are ignored for
+      threshold comparisons and the matching <code>*_alarm</code> flag is ignored too. This avoids
+      false CRITICALs on JC42 DIMM sensors whose thresholds are left at 0 by the firmware.</li>
   <li>Optional chip include/exclude filtering (substring match)</li>
 </ul>
 
@@ -103,7 +108,8 @@ export const meta: PluginMeta = {
       <td><code>checkAlarms</code></td>
       <td>boolean</td>
       <td>true</td>
-      <td>Treat a raised <code>*_alarm</code> / <code>*_crit_alarm</code> flag as CRITICAL</td>
+      <td>Treat a raised <code>*_alarm</code> / <code>*_crit_alarm</code> flag as CRITICAL and
+          <code>*_max_alarm</code> as WARNING. Flags whose limit register is 0 (unset) are ignored</td>
     </tr>
     <tr>
       <td><code>includeChips</code></td>
@@ -144,50 +150,49 @@ export const meta: PluginMeta = {
 
 <h3>Only check the CPU package</h3>
 <pre><code>GET /plugins/check-lmsensors?includeChips=coretemp</code></pre>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Check all sensors with default thresholds',
-			method: 'GET',
-			path: '/plugins/check-lmsensors',
-			fields: [
-				{
-					name: 'warningTempC',
-					label: 'Warning Temperature (C)',
-					required: false,
-					defaultValue: '80',
-				},
-				{
-					name: 'criticalTempC',
-					label: 'Critical Temperature (C)',
-					required: false,
-					defaultValue: '95',
-				},
-			],
+			name: 'warningTempC',
+			label: 'Warning temperature (C)',
+			type: 'number',
+			default: '80',
+			description:
+				'Global warning threshold for any temperature sensor (deg C).',
 		},
 		{
-			label: 'Custom thresholds and chip filter',
-			method: 'GET',
-			path: '/plugins/check-lmsensors',
-			fields: [
-				{
-					name: 'warningTempC',
-					label: 'Warning Temperature (C)',
-					required: false,
-					defaultValue: '75',
-				},
-				{
-					name: 'criticalTempC',
-					label: 'Critical Temperature (C)',
-					required: false,
-					defaultValue: '90',
-				},
-				{
-					name: 'excludeChips',
-					label: 'Exclude Chips (csv)',
-					required: false,
-					defaultValue: 'iwlwifi_1',
-				},
-			],
+			name: 'criticalTempC',
+			label: 'Critical temperature (C)',
+			type: 'number',
+			default: '95',
+			description:
+				'Global critical threshold for any temperature sensor (deg C).',
+		},
+		{
+			name: 'useChipLimits',
+			label: 'Use chip limits',
+			type: 'boolean',
+			default: 'true',
+			description: "Also alarm on each chip's own *_crit / *_max limits.",
+		},
+		{
+			name: 'checkAlarms',
+			label: 'Check alarm flags',
+			type: 'boolean',
+			default: 'true',
+			description:
+				'Treat a raised *_alarm / *_crit_alarm flag as CRITICAL and *_max_alarm as WARNING.',
+		},
+		{
+			name: 'includeChips',
+			label: 'Include chips (csv)',
+			type: 'text',
+			description: 'Only chips whose name contains one of these are checked.',
+		},
+		{
+			name: 'excludeChips',
+			label: 'Exclude chips (csv)',
+			type: 'text',
+			description: 'Chips whose name contains one of these are skipped.',
 		},
 	],
 } satisfies PluginMeta;
@@ -240,6 +245,21 @@ const toFiniteNumber = (value: unknown): number | undefined => {
 
 const isAlarmRaised = (value: unknown): boolean => {
 	return typeof value === 'number' && value !== 0;
+};
+
+/**
+ * Chip limit registers read as 0 when the BIOS/firmware never programmed
+ * them (common on JC42 DIMM sensors). A limit of 0 is not a real limit and
+ * must not be used for comparisons or to honour alarm flags, because every
+ * temperature above 0C would then trip the chip's alarm bits.
+ */
+const toSetLimit = (value: unknown): number | undefined => {
+	const parsed = toFiniteNumber(value);
+	if (parsed === undefined || parsed === 0) {
+		return undefined;
+	}
+
+	return parsed;
 };
 
 const sanitizeLabel = (value: string): string => {
@@ -384,15 +404,21 @@ export const parseTemperatureReadings = (
 				}
 
 				const prefix = match[1];
+				const crit = toSetLimit(values[`${prefix}_crit`]);
+				const max = toSetLimit(values[`${prefix}_max`]);
 				readings.push({
 					chip,
 					feature,
 					value,
-					crit: toFiniteNumber(values[`${prefix}_crit`]),
-					max: toFiniteNumber(values[`${prefix}_max`]),
-					alarm:
-						isAlarmRaised(values[`${prefix}_alarm`]) ||
-						isAlarmRaised(values[`${prefix}_crit_alarm`]),
+					crit,
+					max,
+					alarm: isAlarmRaised(values[`${prefix}_alarm`]),
+					// Alarm bits are only meaningful when the matching limit
+					// register was actually programmed (non-zero).
+					critAlarm:
+						crit !== undefined && isAlarmRaised(values[`${prefix}_crit_alarm`]),
+					maxAlarm:
+						max !== undefined && isAlarmRaised(values[`${prefix}_max_alarm`]),
 				});
 			}
 		}
@@ -420,6 +446,18 @@ export const evaluateReadings = (
 	for (const reading of readings) {
 		if (config.checkAlarms && reading.alarm) {
 			criticalIssues.push(`${formatReading(reading)} hardware alarm raised`);
+			continue;
+		}
+
+		if (config.checkAlarms && reading.critAlarm) {
+			criticalIssues.push(
+				`${formatReading(reading)} hardware critical alarm raised`,
+			);
+			continue;
+		}
+
+		if (config.checkAlarms && reading.maxAlarm) {
+			warningIssues.push(`${formatReading(reading)} hardware max alarm raised`);
 			continue;
 		}
 

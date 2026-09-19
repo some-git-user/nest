@@ -47,7 +47,7 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('collectEntry(entryElement, true)');
 			expect(ADMIN_CONFIG_SCRIPT).toContain('if (commandChanged) {');
 			expect(ADMIN_CONFIG_SCRIPT).toContain(
-				"input.value === (declared.defaultValue || '')",
+				"input.value === (declared.default || '')",
 			);
 		});
 

@@ -65,12 +65,12 @@ import adminLocalConfig from './routes/admin-local-config';
 import appInfo from './routes/app-info';
 import dynamicRoutes, {
 	pluginStartupWarnings,
-	registeredPluginRouteExamples,
+	registeredPluginRouteParams,
 	registeredPluginRoutes,
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
 import localConfig from './routes/local-config';
-import type {PluginRouteExample} from './types/plugin';
+import type {PluginParam} from './types/plugin';
 
 validateStartup();
 
@@ -94,24 +94,37 @@ const APP_VERSION = getAppVersion();
  * page is the only place that markup is produced. Everything visual comes from
  * the shared stylesheet, so an example form is the same card everywhere.
  */
-const renderExampleFormHtml = (example: PluginRouteExample): string => {
-	if (example.kind === 'link') {
-		return `<a class="plugin-example-link" href="${example.href}">${escapeHtml(example.label)}</a>`;
+const renderPluginRunFormHtml = (
+	routePath: string,
+	params: PluginParam[],
+): string => {
+	if (params.length === 0) {
+		return '';
 	}
 
-	const fieldsHtml = example.fields
-		.map((field) =>
+	// `boolean` has no native <input> type; it is edited as free text (the
+	// plugin parses "true"/"false"), matching how presets store it.
+	const toHtmlInputType = (param: PluginParam): string => {
+		if (param.type === 'boolean') {
+			return 'text';
+		}
+		return param.type;
+	};
+
+	const fieldsHtml = params
+		.map((param) =>
 			renderField({
-				name: field.name,
-				type: field.type,
-				label: field.label,
-				required: field.required,
-				value: field.defaultValue,
+				name: param.name,
+				type: toHtmlInputType(param),
+				label: param.label,
+				required: param.required,
+				value: param.default,
+				hint: param.description,
 			}),
 		)
 		.join('');
 
-	return `<form class="plugin-example-form" method="${example.method.toLowerCase()}" action="${example.path}"><div class="plugin-example-header"><span class="plugin-example-title">${escapeHtml(example.label)}</span><span class="plugin-example-method">${example.method}</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions">${renderButton(
+	return `<form class="plugin-example-form" method="get" action="${routePath}"><div class="plugin-example-header"><span class="plugin-example-title">Run</span><span class="plugin-example-method">GET</span></div><div class="plugin-example-fields">${fieldsHtml}</div><div class="plugin-example-actions">${renderButton(
 		{
 			label: 'Run',
 			type: 'submit',
@@ -155,7 +168,7 @@ const buildOverviewPageHtml = (
 	warnings: string[],
 	pluginRoutes: string[],
 	adminUiPath: string,
-	pluginRouteExamples?: Record<string, PluginRouteExample[]>,
+	pluginRouteParams?: Record<string, PluginParam[]>,
 	localConfigPresets?: Map<
 		string,
 		{command: string; params: Record<string, string>}
@@ -213,22 +226,20 @@ const buildOverviewPageHtml = (
 					})
 					.join('')
 			: '';
-	const examplesByRoute = pluginRouteExamples ?? {};
+	const paramsByRoute = pluginRouteParams ?? {};
 	const pluginRouteItems = pluginRoutes
 		.map((routePath) => {
-			const examples = examplesByRoute[routePath] ?? [];
-			// A plugin that offers a link example has a sensible no-argument call, so
-			// the route name itself becomes that shortcut.
-			const firstLinkExample = examples.find(
-				(example) => example.kind === 'link',
+			// One run form per plugin, built from the plugin's declared parameters.
+			// A plugin with no parameters renders just the route header (a bare GET).
+			const formHtml = renderPluginRunFormHtml(
+				routePath,
+				paramsByRoute[routePath] ?? [],
 			);
-			const examplesHtml = examples.map(renderExampleFormHtml).join('');
 
 			return `<li>${renderRouteHeader({
 				path: routePath,
-				href: firstLinkExample?.href,
 				helpPath: `${routePath}?help`,
-			})}${examplesHtml ? `<div class="plugin-examples">${examplesHtml}</div>` : ''}</li>`;
+			})}${formHtml ? `<div class="plugin-examples">${formHtml}</div>` : ''}</li>`;
 		})
 		.join('');
 
@@ -422,7 +433,7 @@ app.get('/', (_req: Request, res: Response) => {
 		getStartupWarningsAtRuntime(),
 		registeredPluginRoutes,
 		ADMIN_UI_MOUNT_PATH,
-		registeredPluginRouteExamples,
+		registeredPluginRouteParams,
 		localConfigPresets,
 		validationFailed,
 	);

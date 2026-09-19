@@ -21,11 +21,11 @@ type FsLike = {
 	readFileSync: (path: string, encoding: 'utf-8') => string;
 };
 
-type Severity = 'warning' | 'critical';
+type ParamValue = string | number | boolean | undefined;
 
 type Config = {
 	checkRunning: boolean;
-	severity: Severity;
+	severity: NagiosReturnCode;
 	ignore: string[];
 	composeFile: string;
 	dockerfile: string;
@@ -51,9 +51,9 @@ const MAX_LISTED_REFS = 10;
 
 export const meta: PluginMeta = {
 	usage: {
-		http: '/plugins/check-docker-updates[?checkRunning=<true|false>&composeFile=<path>&dockerfile=<path>&severity=<warning|critical>&ignore=<csv>]&maxBuffer=<bytes>',
+		http: '/plugins/check-docker-updates[?checkRunning=<true|false>&composeFile=<path>&dockerfile=<path>&severity=<1|2>&ignore=<csv>]&maxBuffer=<bytes>',
 		shell:
-			'./check_nest.sh check-docker-updates [checkRunning=<true|false>] [composeFile=<path>] [dockerfile=<path>] [severity=<warning|critical>] [ignore=<csv>]',
+			'./check_nest.sh check-docker-updates [checkRunning=<true|false>] [composeFile=<path>] [dockerfile=<path>] [severity=<1|2>] [ignore=<csv>]',
 	},
 	help: `<h1>check-docker-updates</h1>
 <p>Detects container images whose tag has moved upstream (an update or security
@@ -79,7 +79,7 @@ against the <strong>current registry digest</strong>. This is an
 
 <h2>Status Logic</h2>
 <ul>
-  <li><strong>${NagiosReturnCodes.WARNING} WARNING</strong> (or CRITICAL with <code>severity=critical</code>): at least one image is outdated.</li>
+  <li><strong>${NagiosReturnCodes.WARNING} WARNING</strong> (or ${NagiosReturnCodes.CRITICAL} CRITICAL with <code>severity=2</code>): at least one image is outdated.</li>
   <li><strong>${NagiosReturnCodes.UNKNOWN} UNKNOWN</strong>: Docker is unavailable, no images were found, or no digest could be compared.</li>
   <li><strong>${NagiosReturnCodes.OK} OK</strong>: every comparable image is up to date.</li>
 </ul>
@@ -89,7 +89,7 @@ against the <strong>current registry digest</strong>. This is an
   <li><code>checkRunning</code>: include running containers (default: true).</li>
   <li><code>composeFile</code>: path to a compose file to scan for <code>image:</code> entries.</li>
   <li><code>dockerfile</code>: path to a Dockerfile to scan for <code>FROM</code> images.</li>
-  <li><code>severity</code>: <code>warning</code> (default) or <code>critical</code> when outdated images are found.</li>
+  <li><code>severity</code>: <code>1</code>=WARNING (default) or <code>2</code>=CRITICAL when outdated images are found.</li>
   <li><code>ignore</code>: comma-separated substrings; matching image references are skipped.</li>
 </ul>
 
@@ -107,31 +107,40 @@ against the <strong>current registry digest</strong>. This is an
   <li>Requires the Docker CLI and the buildx plugin; queries the registry over the network.</li>
   <li>Compose <code>build:</code>-only services and multi-stage <code>FROM &lt;stage&gt;</code> references are skipped automatically.</li>
 </ul>` as HtmlTemplateString,
-	examples: [
+	params: [
 		{
-			label: 'Check running containers only',
-			method: 'GET',
-			path: '/plugins/check-docker-updates',
-			fields: [],
+			name: 'checkRunning',
+			label: 'Check running containers',
+			type: 'boolean',
+			default: 'true',
+			description: 'Include images used by running containers.',
 		},
 		{
-			label: 'Also scan a compose file and fail critical on outdated images',
-			method: 'GET',
-			path: '/plugins/check-docker-updates',
-			fields: [
-				{
-					name: 'composeFile',
-					label: 'Compose file path',
-					required: false,
-					defaultValue: 'docker-compose.yml',
-				},
-				{
-					name: 'severity',
-					label: 'Severity for outdated images',
-					required: false,
-					defaultValue: 'critical',
-				},
-			],
+			name: 'composeFile',
+			label: 'Compose file path',
+			type: 'text',
+			description: 'Path to a compose file to scan for image: entries.',
+		},
+		{
+			name: 'dockerfile',
+			label: 'Dockerfile path',
+			type: 'text',
+			description: 'Path to a Dockerfile to scan for FROM images.',
+		},
+		{
+			name: 'severity',
+			label: 'Severity for outdated images',
+			type: 'number',
+			default: '1',
+			description:
+				'Nagios return code when outdated images are found: 1=WARNING (default), 2=CRITICAL.',
+		},
+		{
+			name: 'ignore',
+			label: 'Ignore (csv)',
+			type: 'text',
+			description:
+				'Comma-separated substrings; matching image references are skipped.',
 		},
 	],
 };
@@ -154,15 +163,18 @@ const runDocker: DockerRunner = async (args) => {
 };
 
 const parseBool = (
-	value: string | undefined,
+	value: ParamValue,
 	def: boolean,
 	name: string,
 	errors: string[],
 ): boolean => {
-	if (value === undefined || value.trim() === '') {
+	if (typeof value === 'boolean') {
+		return value;
+	}
+	if (value === undefined || String(value).trim() === '') {
 		return def;
 	}
-	const normalized = value.trim().toLowerCase();
+	const normalized = String(value).trim().toLowerCase();
 	if (['1', 'true', 'yes'].includes(normalized)) {
 		return true;
 	}
@@ -173,22 +185,37 @@ const parseBool = (
 	return def;
 };
 
-const getConfig = (params: Record<string, string>): Config => {
-	const errors: string[] = [];
-	const severityRaw = (params.severity ?? 'warning').trim().toLowerCase();
-	if (severityRaw !== 'warning' && severityRaw !== 'critical') {
-		errors.push('severity must be warning or critical');
+const parseSeverity = (
+	value: ParamValue,
+	errors: string[],
+): NagiosReturnCode => {
+	if (value === undefined || String(value).trim() === '') {
+		return NagiosReturnCodes.WARNING;
 	}
-	const ignore = (params.ignore ?? '')
+	const parsed = Number(String(value).trim());
+	if (parsed === NagiosReturnCodes.WARNING) {
+		return NagiosReturnCodes.WARNING;
+	}
+	if (parsed === NagiosReturnCodes.CRITICAL) {
+		return NagiosReturnCodes.CRITICAL;
+	}
+	errors.push('severity must be 1 (warning) or 2 (critical)');
+	return NagiosReturnCodes.WARNING;
+};
+
+const getConfig = (params: Record<string, ParamValue>): Config => {
+	const errors: string[] = [];
+	const severity = parseSeverity(params.severity, errors);
+	const ignore = String(params.ignore ?? '')
 		.split(',')
 		.map((token) => token.trim())
 		.filter((token) => token.length > 0);
 	return {
 		checkRunning: parseBool(params.checkRunning, true, 'checkRunning', errors),
-		severity: severityRaw === 'critical' ? 'critical' : 'warning',
+		severity,
 		ignore,
-		composeFile: (params.composeFile ?? '').trim(),
-		dockerfile: (params.dockerfile ?? '').trim(),
+		composeFile: String(params.composeFile ?? '').trim(),
+		dockerfile: String(params.dockerfile ?? '').trim(),
 		errors,
 	};
 };
@@ -388,7 +415,7 @@ export const getStatusText = (
 };
 
 export const checkDockerUpdates = async (
-	params: Record<string, string> = {},
+	params: Record<string, ParamValue> = {},
 	runner: DockerRunner = runDocker,
 	fsImpl: FsLike = fs,
 ): Promise<PluginReturn> => {
@@ -480,7 +507,7 @@ export const checkDockerUpdates = async (
 	let code: NagiosReturnCode;
 	if (counts.outdated > 0) {
 		code =
-			config.severity === 'critical'
+			config.severity === NagiosReturnCodes.CRITICAL
 				? NagiosReturnCodes.CRITICAL
 				: NagiosReturnCodes.WARNING;
 	} else if (counts.upToDate === 0) {

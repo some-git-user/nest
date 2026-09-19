@@ -94,20 +94,19 @@ describe('dynamic routes (plugins)', () => {
 					shell:
 						'./check_nest.sh check-test nagiosReturnMessage=<string> nagiosReturnValue=<0 | 1 | 2 | 3> performanceData=<true | false>',
 				},
-				examples: [
+				params: [
 					{
-						label: 'post sample',
-						method: 'POST',
-						path: '/plugins/check-test',
-						fields: [
-							{
-								name: 'nagiosReturnMessage',
-								defaultValue: 'Example OK',
-							},
-							{name: 'nagiosReturnValue', defaultValue: '0'},
-						],
+						name: 'nagiosReturnMessage',
+						label: 'message',
+						type: 'text',
+						default: 'Example OK',
 					},
-					'invalid-example',
+					{
+						name: 'nagiosReturnValue',
+						label: 'return value',
+						type: 'number',
+						default: '0',
+					},
 				],
 			},
 			checkTest: (params: {
@@ -307,7 +306,7 @@ module.exports = pluginModule;
 
 		let dynamicRoutes: express.Router;
 		let registeredPluginRoutes: string[];
-		let registeredPluginRouteExamples: Record<string, string[]>;
+		let registeredPluginRouteParams: Record<string, unknown[]>;
 
 		// Get vm mock OUTSIDE isolateModules to avoid require() isolation issue
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -321,12 +320,11 @@ module.exports = pluginModule;
 			const routesModule = require('./dynamic-routes') as {
 				default: express.Router;
 				registeredPluginRoutes: string[];
-				registeredPluginRouteExamples: Record<string, string[]>;
+				registeredPluginRouteParams: Record<string, unknown[]>;
 			};
 			dynamicRoutes = routesModule.default;
 			registeredPluginRoutes = routesModule.registeredPluginRoutes;
-			registeredPluginRouteExamples =
-				routesModule.registeredPluginRouteExamples;
+			registeredPluginRouteParams = routesModule.registeredPluginRouteParams;
 		});
 
 		const builtApp = express();
@@ -335,7 +333,7 @@ module.exports = pluginModule;
 		return {
 			app: builtApp,
 			registeredPluginRoutes: registeredPluginRoutes!,
-			registeredPluginRouteExamples: registeredPluginRouteExamples!,
+			registeredPluginRouteParams: registeredPluginRouteParams!,
 			logger,
 		};
 	};
@@ -444,58 +442,51 @@ module.exports = pluginModule;
 		]);
 	});
 
-	test('exports sanitized plugin examples for overview links', () => {
-		const {registeredPluginRouteExamples} = buildApp();
+	test('exports sanitized plugin params for overview forms', () => {
+		const {registeredPluginRouteParams} = buildApp();
 
-		expect(registeredPluginRouteExamples['/plugins/check-test']).toEqual([
+		expect(registeredPluginRouteParams['/plugins/check-test']).toEqual([
 			expect.objectContaining({
-				kind: 'interactive',
-				method: 'POST',
-				path: '/plugins/check-test',
+				name: 'nagiosReturnMessage',
+				label: 'message',
+				type: 'text',
+				default: 'Example OK',
+			}),
+			expect.objectContaining({
+				name: 'nagiosReturnValue',
+				label: 'return value',
+				type: 'number',
+				default: '0',
 			}),
 		]);
 	});
 
-	test('parses interactive examples and ignores malformed example definitions', () => {
-		const {registeredPluginRouteExamples} = buildApp({
+	test('normalises declared params and ignores malformed definitions', () => {
+		const {registeredPluginRouteParams} = buildApp({
 			pluginModule: {
 				meta: {
 					usage: {
 						http: '/plugins/check-test',
 					},
-					examples: [
-						// Missing path - should be ignored
-						{method: 'POST', fields: []},
-						// Invalid path (no leading /) - should be ignored
-						{method: 'POST', path: 'plugins/check-test', fields: []},
-						// Invalid fields (not array) - should be ignored
-						{method: 'POST', path: '/plugins/check-test', fields: 'bad'},
-						// Missing field name - should be ignored
+					params: [
+						// Not an object - ignored.
+						'not-a-param',
+						// Missing/blank name - ignored.
+						{label: 'Missing name'},
 						{
-							method: 'POST',
-							path: '/plugins/check-test',
-							fields: [{label: 'Missing name'}],
+							name: '   ',
+							type: 'text',
 						},
-						// Valid interactive example
+						// Unknown type coerced to text, label defaults to name.
+						{name: 'baseUrl', type: 'mystery'},
+						// Fully specified param, required + default + description.
 						{
-							method: 'GET',
-							label: 'web get',
-							path: '/plugins/check-test',
-							fields: [
-								{
-									name: 'baseUrl',
-									label: 'Base URL',
-									type: 'url',
-									required: false,
-									defaultValue: 'https://cloud.example.com',
-								},
-							],
-						},
-						// Valid interactive example
-						{
-							method: 'POST',
-							path: '/plugins/check-test',
-							fields: [{name: 'token', type: 'password'}],
+							name: 'token',
+							label: 'Token',
+							type: 'password',
+							required: true,
+							default: 'secret',
+							description: 'Bearer token.',
 						},
 					],
 				},
@@ -503,37 +494,42 @@ module.exports = pluginModule;
 			},
 		});
 
-		expect(registeredPluginRouteExamples['/plugins/check-test']).toEqual([
+		expect(registeredPluginRouteParams['/plugins/check-test']).toEqual([
 			{
-				kind: 'interactive',
-				method: 'GET',
-				label: 'web get',
-				path: '/plugins/check-test',
-				fields: [
-					{
-						name: 'baseUrl',
-						label: 'Base URL',
-						type: 'url',
-						required: false,
-						defaultValue: 'https://cloud.example.com',
-					},
-				],
+				name: 'baseUrl',
+				label: 'baseUrl',
+				required: false,
+				type: 'text',
 			},
 			{
-				kind: 'interactive',
-				method: 'POST',
-				path: '/plugins/check-test',
-				label: 'example 6',
-				fields: [
-					{
-						name: 'token',
-						label: 'token',
-						type: 'password',
-						required: true,
-					},
-				],
+				name: 'token',
+				label: 'Token',
+				required: true,
+				type: 'password',
+				default: 'secret',
+				description: 'Bearer token.',
 			},
 		]);
+	});
+
+	test('does not record params for a plugin that declares none', () => {
+		const {registeredPluginRouteParams, registeredPluginRoutes} = buildApp({
+			pluginModule: {
+				meta: {
+					usage: {http: '/plugins/check-test'},
+					params: [],
+				},
+				checkTest: () => ({message: 'ok', code: 0, performanceData: []}),
+			},
+		});
+
+		expect(registeredPluginRoutes).toContain('/plugins/check-test');
+		expect(
+			Object.prototype.hasOwnProperty.call(
+				registeredPluginRouteParams,
+				'/plugins/check-test',
+			),
+		).toBe(false);
 	});
 
 	test('allows plugin registration in non-production even with insecure plugin file metadata', async () => {
@@ -562,7 +558,7 @@ module.exports = pluginModule;
 				meta: {
 					usage: '/plugins/string-usage-plugin?param=value',
 					help: '<p>Help text</p>',
-					examples: [],
+					params: [],
 				},
 				stringUsagePlugin: () => ({
 					message: 'ok',
@@ -658,7 +654,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: 123,
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			invalidUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -697,7 +693,7 @@ module.exports = pluginModule;
 		const requireFn = ((_modulePath: string) => ({
 			meta: {
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			missingUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -737,7 +733,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: '/plugins/invalid-help-plugin',
 				help: 'plain text help',
-				examples: [],
+				params: [],
 			},
 			invalidHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -776,7 +772,7 @@ module.exports = pluginModule;
 		const requireFn = ((_modulePath: string) => ({
 			meta: {
 				usage: '/plugins/missing-help-plugin',
-				examples: [],
+				params: [],
 			},
 			missingHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -804,49 +800,50 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('handles plugin with invalid examples (not array)', () => {
-		const logger = {
-			info: jest.fn(),
-			warn: jest.fn(),
-			error: jest.fn(),
-			debug: jest.fn(),
-		};
-
-		const requireFn = ((_modulePath: string) => ({
-			meta: {
-				usage: '/plugins/invalid-examples-plugin',
-				help: '<p>Help text</p>',
-
-				examples: 'not-an-array',
+	test('rejects a plugin whose params declaration is not an array', () => {
+		const {registeredPluginRoutes, logger} = buildApp({
+			pluginModule: {
+				meta: {
+					usage: '/plugins/check-test',
+					help: '<p>Help text</p>',
+					params: 'not-an-array',
+				},
+				checkTest: () => ({
+					message: 'ok',
+					code: 0,
+					performanceData: [],
+				}),
 			},
-			invalidExamplesPlugin: () => ({
-				message: 'ok',
-				code: 0,
-				performanceData: [],
-			}),
-		})) as ((_modulePath: string) => unknown) & {
-			resolve: (_modulePath: string) => string;
-		};
-		requireFn.resolve = (_modulePath: string) => _modulePath;
-
-		jest.doMock('module', () => ({
-			createRequire: () => requireFn,
-		}));
-
-		jest.doMock('../lib/logger', () => ({
-			logger,
-		}));
-
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			require('./dynamic-routes');
 		});
 
-		// Filter to only check calls specific to this test's plugin path
-		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
-			(call) => (call[0] as string).includes('invalid_examples_plugin'),
+		// A plugin that declares meta but whose params is not an array is
+		// hard-rejected: a warning is logged and the route is never registered.
+		const warningCalls = (logger.warn.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('meta.params is missing'),
 		);
-		expect(httpUsageCalls.length).toBe(0);
+		expect(warningCalls.length).toBeGreaterThan(0);
+		expect(registeredPluginRoutes).not.toContain('/plugins/check-test');
+	});
+
+	test('registers a plugin whose meta is null without a params warning', () => {
+		const {registeredPluginRoutes, logger} = buildApp({
+			pluginModule: {
+				meta: null,
+				checkTest: () => ({
+					message: 'ok',
+					code: 0,
+					performanceData: [],
+				}),
+			},
+		});
+
+		// A null meta is not a metadata declaration, so the params contract does
+		// not apply: the plugin registers and no warning is logged.
+		const warningCalls = (logger.warn.mock.calls as Array<unknown[]>).filter(
+			(call) => (call[0] as string).includes('meta.params is missing'),
+		);
+		expect(warningCalls.length).toBe(0);
+		expect(registeredPluginRoutes).toContain('/plugins/check-test');
 	});
 
 	test('handles plugin with null plugin module', () => {
@@ -931,7 +928,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: {foo: 'bar'},
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			missingHttpShellPlugin: () => ({
 				message: 'ok',
@@ -975,7 +972,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: {http: 123},
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			invalidHttpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -1015,7 +1012,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: {http: '/plugins/invalid-shell-plugin', shell: 456},
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			invalidShellPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -1051,7 +1048,7 @@ module.exports = pluginModule;
 					usage:
 						'/plugins/check-test?nagiosReturnMessage=<string>&nagiosReturnValue=<0 | 1 | 2 | 3>&performanceData=<true | false>',
 					help: '<p>Test plugin</p>',
-					examples: [],
+					params: [],
 				},
 				checkTest: () => ({message: 'ok', code: 0, performanceData: []}),
 			},
@@ -1082,7 +1079,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: 12345,
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 			invalidUsagePlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((_modulePath: string) => unknown) & {
@@ -1122,7 +1119,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: '/plugins/invalid-help-plugin',
 				help: 12345,
-				examples: [],
+				params: [],
 			},
 			invalidHelpPlugin: () => ({message: 'ok', code: 0, performanceData: []}),
 		})) as ((modulePath: string) => unknown) & {
@@ -1150,50 +1147,6 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('handles plugin with examples as non-array', () => {
-		const logger = {
-			info: jest.fn(),
-			warn: jest.fn(),
-			error: jest.fn(),
-			debug: jest.fn(),
-		};
-
-		const requireFn = ((_modulePath: string) => ({
-			meta: {
-				usage: '/plugins/invalid-examples-plugin',
-				help: '<p>Help text</p>',
-				examples: 'not-an-array',
-			},
-			invalidExamplesPlugin: () => ({
-				message: 'ok',
-				code: 0,
-				performanceData: [],
-			}),
-		})) as ((_modulePath: string) => unknown) & {
-			resolve: (_modulePath: string) => string;
-		};
-		requireFn.resolve = (_modulePath: string) => _modulePath;
-
-		jest.doMock('module', () => ({
-			createRequire: () => requireFn,
-		}));
-
-		jest.doMock('../lib/logger', () => ({
-			logger,
-		}));
-
-		jest.isolateModules(() => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			require('./dynamic-routes');
-		});
-
-		// Filter to only check calls specific to this test's plugin path
-		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
-			(call) => (call[0] as string).includes('invalid_examples_plugin'),
-		);
-		expect(httpUsageCalls.length).toBe(0);
-	});
-
 	test('isPluginMeta rejects usage as number type', () => {
 		jest.resetModules();
 
@@ -1208,7 +1161,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: 123,
 				help: '<p>Help text</p>',
-				examples: [],
+				params: [],
 			},
 		})) as ((_modulePath: string) => unknown) & {
 			resolve: (_modulePath: string) => string;
@@ -1273,7 +1226,7 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('isPluginMeta rejects examples as non-array type', () => {
+	test('isPluginMeta rejects params as non-array type', () => {
 		jest.resetModules();
 
 		const logger = {
@@ -1287,7 +1240,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: {http: '/test'},
 				help: '<p>Help text</p>',
-				examples: 'not-an-array',
+				params: 'not-an-array',
 			},
 		})) as ((_modulePath: string) => unknown) & {
 			resolve: (_modulePath: string) => string;
@@ -1345,7 +1298,7 @@ module.exports = pluginModule;
 			require('./dynamic-routes');
 		});
 
-		// Plugin with examples as non-array should not log HTTP usage
+		// Plugin with params as non-array should not log HTTP usage
 		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
 			(call) => (call[0] as string).includes('http'),
 		);
@@ -1427,7 +1380,7 @@ module.exports = pluginModule;
 		expect(httpUsageCalls.length).toBe(0);
 	});
 
-	test('isPluginMeta rejects missing examples field', () => {
+	test('isPluginMeta rejects missing params field', () => {
 		jest.resetModules();
 
 		const logger = {
@@ -1441,7 +1394,7 @@ module.exports = pluginModule;
 			meta: {
 				usage: {http: '/test'},
 				help: '<p>Help text</p>',
-				// Missing examples field
+				// Missing params field
 			},
 		})) as ((_modulePath: string) => unknown) & {
 			resolve: (_modulePath: string) => string;
@@ -1499,7 +1452,7 @@ module.exports = pluginModule;
 			require('./dynamic-routes');
 		});
 
-		// Plugin with missing examples field should not log HTTP usage
+		// Plugin with missing params field should not log HTTP usage
 		const httpUsageCalls = (logger.info.mock.calls as Array<unknown[]>).filter(
 			(call) => (call[0] as string).includes('http'),
 		);

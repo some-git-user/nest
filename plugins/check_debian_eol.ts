@@ -36,29 +36,20 @@ export const meta: PluginMeta = {
 		shell:
 			'./check_nest.sh check-debian-eol warningEolRemainingDays=<number> criticalEolRemainingDays=<number>',
 	},
-	examples: [
+	params: [
 		{
-			label: 'Check with default thresholds',
-			method: 'GET',
-			path: '/plugins/check-debian-eol',
-			fields: [],
+			name: 'warningEolRemainingDays',
+			label: 'Warning threshold (days)',
+			type: 'number',
+			default: '60',
+			description: 'Days before EOL to trigger a WARNING state.',
 		},
 		{
-			label: 'Check with custom thresholds',
-			method: 'GET',
-			path: '/plugins/check-debian-eol?warningEolRemainingDays=90&criticalEolRemainingDays=60',
-			fields: [
-				{
-					name: 'warningEolRemainingDays',
-					label: 'Warning threshold (days)',
-					defaultValue: '90',
-				},
-				{
-					name: 'criticalEolRemainingDays',
-					label: 'Critical threshold (days)',
-					defaultValue: '60',
-				},
-			],
+			name: 'criticalEolRemainingDays',
+			label: 'Critical threshold (days)',
+			type: 'number',
+			default: '30',
+			description: 'Days before EOL to trigger a CRITICAL state.',
 		},
 	],
 	help: `<h1>check-debian-eol</h1>
