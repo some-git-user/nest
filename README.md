@@ -214,7 +214,43 @@ curl -k -H "x-api-key: $NEST_API_KEY" "https://localhost:5000/plugins/check-cust
 npm run validate     # Lint, type check, build, test
 npm run test:ci      # CI mode
 npm run test:shell   # Shell script tests
+npm run test:ui      # Playwright browser tests (see below)
 ```
+
+### Browser (Playwright) UI tests
+
+`npm run test:ui` drives the real Web UI in headless Chromium against a
+spawned `dist/server.js`. Run `npm run build` first — the suite deliberately
+does not build, so a stale bundle is never tested silently.
+
+This suite is **not a CI job**. It runs as a husky **pre-push** gate
+(`.husky/pre-push`), after `npm run validate`: if the browser suite is not
+green, the push is aborted and nothing reaches GitHub. Skip it once in a
+while with `git push --no-verify` if you know what you are doing.
+
+The suite needs **no root and no host binaries** (`smartctl`, `dmesg`,
+`docker`, `nvidia-smi`). It points the server at inert fixture plugins in
+`tests/ui/fixtures/plugins/` instead of the real `plugins/` tree, so the
+admin "Test" button — which executes a plugin with the server's own API key —
+can only ever reach code that cannot touch the host.
+
+What it covers, and why it exists: the three client scripts
+(`PLUGIN_EXAMPLE_FORM_SCRIPT`, `ADMIN_CONFIG_SCRIPT`, `THEME_TOGGLE_SCRIPT`)
+are template literals that Jest can only match as strings, never execute.
+These tests click them for real — the plugin run forms' empty-field filtering,
+the admin editor's add/copy/validate/save/revert flow, live duplicate-key
+warnings, secret masking, and the theme toggle's cookie persistence.
+
+```bash
+npm run test:ui            # headless
+npm run test:ui:headed     # watch it run
+npm run test:ui:report     # open the HTML report
+NEST_UI_E2E_PORT=5700 npm run test:ui   # if 5599 is taken
+npx playwright install --with-deps chromium   # once, if system libs are missing
+```
+
+The suite runs with a single worker: the admin editor writes one shared config
+file on disk, so parallel workers would fight over it.
 
 ## Shell Script Usage
 
@@ -238,6 +274,14 @@ Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST
   Only set `TRUST_PROXY` when Nest runs behind a reverse proxy you control —
   `true` trusts every peer, a number sets the number of proxy hops, or a
   comma-separated list of IPs/CIDRs restricts which peers may supply the header.
+- Plugins never build shell command strings. Every child process is started with
+  an argv array (`execFile`/`spawn`), and the custom `no-shell-exec` ESLint rule
+  bans `exec`/`execSync` and `shell: true` across `src/` and `plugins/`, so the
+  rule cannot silently regress.
+- The admin UI's "Test" button runs an _approved_ (whitelisted) plugin as the
+  service user, gated by an admin session, the `x-nest-admin: 1` header, and the
+  CSRF guard. Command injection is closed off; per-plugin input validation and
+  privilege amplification remain the operator's concern.
 
 ## License
 

@@ -1,0 +1,27 @@
+{
+	// Type-checking and linting project for the Playwright UI test suite.
+	//
+	// Needed because eslint.config.mjs enables type-aware rules via
+	// parserOptions.project. Files under tests/ belong to no project by default,
+	// which makes the parser hard-error on them. Adding this project to the
+	// ESLint `project` list gives the UI tests the same type-aware coverage as
+	// src/ and plugins/.
+	//
+	// `include` replaces rather than merges, so it is self-contained here.
+	"extends": "./tsconfig.json",
+	"include": ["tests/**/*.ts", "tests/**/*.mts", "src/types/**/*.d.ts"],
+	"exclude": ["node_modules", "dist"],
+	"compilerOptions": {
+		"noEmit": true,
+		"rootDir": ".",
+		// The specs import the harness with an explicit `.mts` specifier, which
+		// Node requires for ESM resolution. Allowed here because noEmit is set.
+		"allowImportingTsExtensions": true,
+		// The specs drive a browser, so DOM globals (HTMLElement, document)
+		// must resolve even though the test runner itself is Node.
+		"lib": ["ESNext", "DOM"],
+		// jest is deliberately excluded: its global expect/describe/it would sit
+		// next to the explicitly imported Playwright ones for no benefit.
+		"types": ["node"]
+	}
+}

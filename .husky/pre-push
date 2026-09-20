@@ -1,1 +1,10 @@
 npm run validate
+
+# Playwright UI E2E gate: this is the only place the browser suite runs —
+# deliberately not a CI job. No green UI suite, no push.
+#
+# `npm run validate` above already built `dist/`, which the suite needs
+# (it spawns dist/server.js and never builds itself). The browser install
+# below is idempotent: a no-op when this Chromium build is already cached.
+npx playwright install chromium
+npm run test:ui

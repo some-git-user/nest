@@ -118,3 +118,7 @@ jobs:
         # local/manual test because privileged scan types are unreliable on
         # shared CI runners and the -sV case can stall for many minutes.
         run: npm run test:e2e:realip
+
+  # The Playwright UI suite is intentionally NOT a CI job. It runs as a local
+  # husky pre-push gate (.husky/pre-push), so a failing UI test stops the
+  # push before it ever reaches GitHub. See README "Browser (Playwright) UI tests".

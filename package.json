@@ -1,6 +1,6 @@
 {
 	"name": "nest",
-	"version": "0.1.5.2",
+	"version": "0.1.5.3",
 	"description": "Nagios Rest Server",
 	"main": "dist/server.js",
 	"module": "ESNext",
@@ -18,6 +18,9 @@
 		"test:shell": "bash scripts/check_nest.test.sh",
 		"test:e2e:realip": "bash scripts/check_honeypot_realip.test.sh",
 		"test:e2e:nmap": "bash scripts/check_honeypot_nmap.test.sh",
+		"test:ui": "playwright test --config tests/ui/playwright.config.mts",
+		"test:ui:headed": "playwright test --config tests/ui/playwright.config.mts --headed",
+		"test:ui:report": "playwright show-report test-results/playwright-report",
 		"check:vulnerabilities": "npm audit --omit=dev",
 		"fix:vulnerabilities": "npm audit fix --omit=dev --ignore-scripts",
 		"test": "NODE_OPTIONS='--experimental-vm-modules --experimental-vm-modules' jest --watch",
@@ -28,7 +31,8 @@
 		"typescript-app:check": "npx tsc --noEmit --project tsconfig.json",
 		"typescript-plugins:check": "npx tsc --noEmit --project tsconfig.plugins.json",
 		"typescript-tests:check": "npx tsc --noEmit --project tsconfig.jest.json",
-		"validate": "npm run lint:check && npm run format:check && npm run typescript-app:check && npm run typescript-plugins:check && npm run typescript-tests:check && npm run test:coverage && npm run build && npm run find-untested",
+		"typescript-ui:check": "npx tsc --noEmit --project tsconfig.playwright.json",
+		"validate": "npm run lint:check && npm run format:check && npm run typescript-app:check && npm run typescript-plugins:check && npm run typescript-tests:check && npm run typescript-ui:check && npm run test:coverage && npm run build && npm run find-untested",
 		"prepare": "./nvm-wrapper.sh node .husky/install.mjs"
 	},
 	"repository": {
@@ -42,6 +46,7 @@
 	},
 	"homepage": "https://github.com/some-git-user/nest#readme",
 	"devDependencies": {
+		"@playwright/test": "^1.63.0",
 		"@trivago/prettier-plugin-sort-imports": "^4.3.0",
 		"@types/express": "^5.0.6",
 		"@types/jest": "^30.0.0",

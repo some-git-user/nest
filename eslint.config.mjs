@@ -47,7 +47,7 @@ const tsRecommendedConfigs = compat
 	)
 	.map((config) => ({
 		...config,
-		files: ['**/*.ts', '**/*.tsx'],
+		files: ['**/*.ts', '**/*.tsx', 'tests/**/*.mts'],
 	}));
 
 export default [
@@ -87,14 +87,18 @@ export default [
 		},
 	},
 	{
-		files: ['**/*.ts', '**/*.tsx'], // Apply to TypeScript files
+		files: ['**/*.ts', '**/*.tsx', 'tests/**/*.mts'], // Apply to TypeScript files (UI tests are .mts)
 		languageOptions: {
 			parser: tsParser,
 			parserOptions: {
 				ecmaVersion: 2026,
 				sourceType: 'module',
 				tsconfigRootDir: __dirname, // root for resolving tsconfig.json
-				project: ['./tsconfig.json', './tsconfig.plugins.json'], // enable type-aware linting for main + plugins
+				project: [
+					'./tsconfig.json',
+					'./tsconfig.plugins.json',
+					'./tsconfig.playwright.json',
+				], // enable type-aware linting for main + plugins + UI tests
 			},
 		},
 		plugins: {

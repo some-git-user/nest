@@ -18,6 +18,11 @@ logs
 # coverage reports
 coverage
 
+# Playwright UI test artifacts (traces, screenshots, HTML report)
+test-results/
+playwright-report/
+playwright/.cache/
+
 # certificates
 certs
 
