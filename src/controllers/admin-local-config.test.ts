@@ -636,6 +636,33 @@ describe('admin-local-config controller', () => {
 	});
 
 	describe('postAdminTest', () => {
+		// The Test endpoint only forwards parameters the plugin declares, so the
+		// command under test must be registered with its params. The registry is
+		// the mutable container exported by the mocked dynamic-routes module.
+		const testRoutes = registeredPluginRoutes as string[];
+		const testParams = registeredPluginRouteParams as Record<string, unknown[]>;
+
+		const resetTestRegistry = (): void => {
+			testRoutes.length = 0;
+			for (const key of Object.keys(testParams)) {
+				delete testParams[key];
+			}
+			testRoutes.push('/plugins/check_disk');
+			testParams['/plugins/check_disk'] = [
+				{name: 'warn', label: 'Warn', required: false, type: 'text'},
+				{
+					name: 'password',
+					label: 'Password',
+					required: false,
+					type: 'password',
+				},
+			];
+		};
+
+		beforeEach(() => {
+			resetTestRegistry();
+		});
+
 		it('rejects an invalid single entry', () => {
 			const res = makeResponse();
 
@@ -754,6 +781,115 @@ describe('admin-local-config controller', () => {
 			await postAdminTest({body: {}} as Request, res as unknown as Response);
 
 			expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.BAD_REQUEST);
+		});
+
+		it('rejects a parameter the plugin does not declare', async () => {
+			mockedValidatePresetEntry.mockReturnValue([]);
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {
+							key: 'k',
+							command: 'check_disk',
+							params: {warn: '80', device: '/dev/sda'},
+						},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.BAD_REQUEST);
+			expect(res.json).toHaveBeenCalledWith({
+				ok: false,
+				problems: [
+					"Parameter(s) not declared by check_disk: device. Only parameters in the plugin's meta.params can be tested.",
+				],
+			});
+			expect(mockedMakeInternalRequest).not.toHaveBeenCalled();
+		});
+
+		it('rejects every undeclared parameter, listed in sorted order', async () => {
+			mockedValidatePresetEntry.mockReturnValue([]);
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {
+							key: 'k',
+							command: 'check_disk',
+							params: {zzz: '1', aaa: '2'},
+						},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.json).toHaveBeenCalledWith({
+				ok: false,
+				problems: [
+					"Parameter(s) not declared by check_disk: aaa, zzz. Only parameters in the plugin's meta.params can be tested.",
+				],
+			});
+		});
+
+		it('restores a masked secret from the stored preset before testing', async () => {
+			mockedValidatePresetEntry.mockReturnValue([]);
+			mockedReadConfigDocument.mockReturnValue(
+				docResult([
+					{
+						key: 'k',
+						command: 'check_disk',
+						params: {warn: '80', password: 'stored-secret'},
+					},
+				]),
+			);
+			mockedMergeMaskedParams.mockImplementation(
+				(secrets, existing, incoming) => {
+					const merged: Record<string, string> = {...incoming};
+					if (
+						secrets.has('password') &&
+						incoming.password === '' &&
+						existing &&
+						'password' in existing
+					) {
+						merged.password = existing.password;
+					}
+					return merged;
+				},
+			);
+			mockedMakeInternalRequest.mockResolvedValue({
+				statusCode: 200,
+				headers: {},
+				body: 'OK',
+			});
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {
+							key: 'k',
+							command: 'check_disk',
+							params: {warn: '90', password: ''},
+						},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(mockedMergeMaskedParams).toHaveBeenCalledWith(
+				new Set(['password']),
+				{warn: '80', password: 'stored-secret'},
+				{warn: '90', password: ''},
+			);
+			expect(mockedMakeInternalRequest).toHaveBeenCalledWith(
+				expect.objectContaining({
+					params: {warn: '90', password: 'stored-secret'},
+				}),
+			);
 		});
 	});
 

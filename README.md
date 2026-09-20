@@ -48,6 +48,7 @@ Create `.env` from `.env.example`:
 | `ADMIN_UI_PASSWORD`          | (empty)               | Password for the `/admin` config editor    |
 | `ADMIN_SESSION_TTL_SECONDS`  | `900`                 | Admin session cookie lifetime (s)          |
 | `ADMIN_LOGIN_RATE_LIMIT_MAX` | `5`                   | Max admin login attempts per window        |
+| `ADMIN_TEST_RATE_LIMIT_MAX`  | `20`                  | Max admin plugin test runs per window      |
 
 TLS certificates are auto-generated if missing.
 
@@ -97,9 +98,14 @@ When `API_KEY` is configured, a `POST` without a valid key header returns `401`.
 Config presets are stored in `plugins/configs/local-presets.conf`:
 
 ```
-test_perfdata=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=true
+test_perfdata=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=true
 debian_eol_warning=check-debian-eol warningEolRemainingDays=90 criticalEolRemainingDays=30
 ```
+
+A value containing a space is wrapped in double quotes; inside quotes `\"` is a
+literal double quote and `\\` a literal backslash. Values without a space are
+written bare, so an unchanged preset round-trips byte for byte. A value may not
+contain a newline or `#`.
 
 See `plugins/configs/local-presets.conf.example` for setup instructions and security considerations.
 

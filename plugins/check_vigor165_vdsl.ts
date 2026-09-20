@@ -118,6 +118,7 @@ export const meta: PluginMeta = {
 			name: 'warningPercentBelow',
 			label: 'Warning % below booked',
 			type: 'number',
+			default: '20',
 			description:
 				'WARNING when downstream is this percent below the booked speed.',
 		},
@@ -125,6 +126,7 @@ export const meta: PluginMeta = {
 			name: 'criticalPercentBelow',
 			label: 'Critical % below booked',
 			type: 'number',
+			default: '40',
 			description:
 				'CRITICAL when downstream is this percent below the booked speed.',
 		},
@@ -139,18 +141,22 @@ export const meta: PluginMeta = {
 			name: 'command',
 			label: 'CLI command',
 			type: 'text',
-			description: 'CLI command to run (default: "vdsl status").',
+			default: 'vdsl status',
+			description:
+				'CLI command to run (default: "vdsl status"). Not scoped to status: any router CLI command is sent verbatim over SSH.',
 		},
 		{
 			name: 'prompt',
 			label: 'CLI prompt marker',
 			type: 'text',
+			default: 'DrayTek>',
 			description: 'CLI prompt marker (default: "DrayTek>").',
 		},
 		{
 			name: 'kexAlgorithms',
 			label: 'KEX algorithms (csv)',
 			type: 'text',
+			default: 'diffie-hellman-group1-sha1',
 			description:
 				'Override the key exchange algorithms. Defaults append diffie-hellman-group1-sha1.',
 		},
@@ -158,12 +164,14 @@ export const meta: PluginMeta = {
 			name: 'ciphers',
 			label: 'Ciphers (csv)',
 			type: 'text',
+			default: '3des-cbc',
 			description: 'Override the ciphers. Defaults append 3des-cbc.',
 		},
 		{
 			name: 'hostKeyAlgorithms',
 			label: 'Host key algorithms (csv)',
 			type: 'text',
+			default: 'ssh-rsa',
 			description: 'Override the host key algorithms. Defaults append ssh-rsa.',
 		},
 	],
@@ -201,7 +209,7 @@ DrayTek&gt; vdsl status</code></pre>
 <h2>Optional Parameters</h2>
 <ul>
   <li><code>port</code> - SSH port, default <code>22</code></li>
-  <li><code>command</code> - CLI command to run, default <code>vdsl status</code></li>
+  <li><code>command</code> - CLI command to run, default <code>vdsl status</code>. The value is written to the router shell as-is, so it is <strong>not</strong> restricted to status queries — whoever controls the parameter controls the router CLI. Treat it as a privileged parameter.</li>
   <li><code>prompt</code> - CLI prompt marker, default <code>DrayTek&gt;</code></li>
   <li><code>timeoutMs</code> - total SSH/session timeout, default <code>10000</code> ms</li>
 </ul>

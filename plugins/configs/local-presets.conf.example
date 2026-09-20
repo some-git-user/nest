@@ -1,6 +1,9 @@
 # Local Config Presets for Nest Server
 # Location: plugins/configs/local-presets.conf
 # Format: <key>=<command> <param1>=<value1> <param2>=<value2> ...
+# A value containing a space must be wrapped in double quotes, e.g.
+#   command="vdsl status"
+# Inside quotes, \" is a literal double quote and \\ a literal backslash.
 # Lines starting with # are comments
 # Empty lines are ignored
 #
@@ -18,8 +21,8 @@
 #           plugins/plugin-whitelist.txt with SHA-256 hash. This example file
 #           is NOT hashed and is only for reference.
 
-# Example: Test plugin with basic message
-test=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=false
+# Example: Test plugin with basic message (space in the value is quoted)
+test=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=false
 
 # Example: Test plugin with performance data
-test_perfdata=check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=true
+test_perfdata=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=true

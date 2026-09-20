@@ -107,6 +107,41 @@ describe('getPluginMetaParams', () => {
 		]);
 	});
 
+	test('passes through a default verbatim, including one with a space', () => {
+		const result = getPluginMetaParams({
+			meta: {
+				usage: 'test',
+				help: '<p>test</p>',
+				params: [
+					{
+						name: 'command',
+						label: 'CLI command',
+						type: 'text',
+						default: 'vdsl status',
+					},
+					{name: 'empty', label: 'Empty', type: 'text', default: ''},
+				],
+			},
+		});
+		// A declared default is carried through unchanged so the run form and
+		// admin editor prefill it. A space is fine here: the config serializer
+		// quotes it on save. The loader does not strip or transform it.
+		expect(result[0]).toEqual({
+			name: 'command',
+			label: 'CLI command',
+			required: false,
+			type: 'text',
+			default: 'vdsl status',
+		});
+		expect(result[1]).toEqual({
+			name: 'empty',
+			label: 'Empty',
+			required: false,
+			type: 'text',
+			default: '',
+		});
+	});
+
 	test('coerces unknown input types to text and skips malformed entries', () => {
 		const result = getPluginMetaParams({
 			meta: {

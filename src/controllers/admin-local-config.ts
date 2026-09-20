@@ -119,6 +119,24 @@ export const secretParamNamesForCommand = (command: string): Set<string> => {
 	return names;
 };
 
+/**
+ * The parameter names a plugin actually declares, for a given command.
+ *
+ * `meta.params` is authoritative for what a plugin accepts — it drives the run
+ * form, the editor, and secret masking — so it is equally authoritative for
+ * what the Test button may pass. `registeredPluginRouteParams` is filled by the
+ * loader at startup, so this reflects the code that is really loaded rather than
+ * anything the browser claims.
+ *
+ * A command with no entry (unknown, or a plugin declaring `params: []`) yields
+ * an empty set, meaning no parameter may be tested against it.
+ */
+export const declaredParamNamesForCommand = (command: string): Set<string> => {
+	const routePath = commandToRoutePath(command);
+	const fields = registeredPluginRouteParams[routePath] ?? [];
+	return new Set(fields.map((param) => param.name));
+};
+
 const maskEntry = (
 	entry: PresetEntry,
 	secretNames: Set<string>,
@@ -449,6 +467,13 @@ export const postAdminValidate = (req: Request, res: Response): void => {
  * a browser could not reach `/plugins/<name>` directly when `API_KEY` is set,
  * and the operator is already authenticated here, so no new authority is
  * granted. Nothing is persisted, so testing an unapproved preset is harmless.
+ *
+ * Because the dial-back carries the server's own key, the request is narrowed to
+ * what the editor could legitimately have produced: the command must be a
+ * registered plugin, every parameter must appear in that plugin's
+ * `meta.params`, and a masked secret is restored from the stored preset rather
+ * than sent empty. What this endpoint still cannot do is reach an unapproved
+ * plugin — unregistered commands have no route and 404.
  */
 export const postAdminTest = async (
 	req: Request,
@@ -470,6 +495,39 @@ export const postAdminTest = async (
 		return;
 	}
 
+	// Only parameters the plugin declares may be tested. Without this the Test
+	// button would forward arbitrary keys, and a plugin that reads an
+	// undocumented knob would be exercised through the admin path with the
+	// server's own API key. `meta.params` is the authoritative allowlist.
+	const declared = declaredParamNamesForCommand(draft.command);
+	const undeclared = Object.keys(draft.params).filter(
+		(name) => !declared.has(name),
+	);
+	if (undeclared.length > 0) {
+		sendAdminJson(res, HttpStatusCodes.BAD_REQUEST, {
+			ok: false,
+			problems: [
+				`Parameter(s) not declared by ${draft.command}: ${undeclared
+					.sort()
+					.join(
+						', ',
+					)}. Only parameters in the plugin's meta.params can be tested.`,
+			],
+		});
+		return;
+	}
+
+	// A secret the editor masked away arrives as an empty string. Restore it
+	// from the stored preset so testing a saved preset actually works — the
+	// merge only substitutes for names the plugin typed as `password`.
+	const {doc} = readConfigDocument();
+	const stored = storedEntriesByKeyFrom(doc.entries).get(draft.key);
+	const testParams = mergeMaskedParams(
+		secretParamNamesForCommand(draft.command),
+		stored?.params,
+		draft.params,
+	);
+
 	const method =
 		isRecord(req.body) && req.body.method === 'POST'
 			? ('POST' as const)
@@ -480,8 +538,8 @@ export const postAdminTest = async (
 		const internalResponse = await makeInternalRequest({
 			method,
 			path: commandToRoutePath(draft.command),
-			params: method === 'GET' ? draft.params : undefined,
-			body: method === 'POST' ? draft.params : undefined,
+			params: method === 'GET' ? testParams : undefined,
+			body: method === 'POST' ? testParams : undefined,
 			apiKey,
 			apiKeyHeader: env.API_KEY_HEADER,
 			requireApiKey: env.API_KEY.length > 0,

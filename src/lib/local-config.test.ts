@@ -24,11 +24,13 @@ const {
 	lookupConfig,
 	parseConfigFile,
 	parseConfigLine,
+	quoteConfigValue,
 	safeLookupConfig,
 	setWhitelistCache,
 	setHashFunction,
 	setCheckConfigFileSecurityFn,
 	resetModuleState,
+	tokenizeConfigLine,
 	validateConfigFilePath,
 	validateConfigFileSecurity,
 } = require('./local-config');
@@ -98,7 +100,9 @@ describe('local-config', () => {
 			});
 		});
 
-		it('should handle URL-encoded values with + signs', () => {
+		it('treats a + in an unquoted value as a literal character', () => {
+			// '+' is NOT a space escape: the config format uses double quotes
+			// for spaces, so a bare '+' stays a literal '+'.
 			const result = parseConfigLine(
 				'check-test nagiosReturnMessage=Test+message',
 			);
@@ -106,6 +110,27 @@ describe('local-config', () => {
 				command: 'check-test',
 				params: {nagiosReturnMessage: 'Test+message'},
 			});
+		});
+
+		it('should parse a quoted value containing spaces', () => {
+			const result = parseConfigLine(
+				'check-vigor165-vdsl command="vdsl status" host=10.0.0.1',
+			);
+			expect(result).toEqual({
+				command: 'check-vigor165-vdsl',
+				params: {command: 'vdsl status', host: '10.0.0.1'},
+			});
+		});
+
+		it('should unescape quotes and backslashes inside a quoted value', () => {
+			const result = parseConfigLine('c msg="say \\"hi\\" \\\\ ok"');
+			expect(result).toEqual({command: 'c', params: {msg: 'say "hi" \\ ok'}});
+		});
+
+		it('should throw on an unterminated double quote', () => {
+			expect(() => parseConfigLine('c msg="unterminated')).toThrow(
+				'Unterminated double quote',
+			);
 		});
 
 		it('should throw error for empty line', () => {
@@ -187,6 +212,68 @@ invalidLineWithoutEquals`;
 			expect(() => parseConfigFile()).toThrow(
 				'Config unavailable - startup loading failed or not completed',
 			);
+		});
+	});
+
+	describe('tokenizeConfigLine', () => {
+		it('splits plain whitespace-separated tokens', () => {
+			expect(tokenizeConfigLine('a b   c')).toEqual(['a', 'b', 'c']);
+		});
+
+		it('keeps a quoted value with spaces as one token', () => {
+			expect(tokenizeConfigLine('a "b c" d')).toEqual(['a', 'b c', 'd']);
+		});
+
+		it('preserves an empty quoted token', () => {
+			expect(tokenizeConfigLine('a "" b')).toEqual(['a', '', 'b']);
+		});
+
+		it('resolves escaped quote and backslash inside quotes', () => {
+			expect(tokenizeConfigLine('a "b\\"c\\\\d"')).toEqual(['a', 'b"c\\d']);
+		});
+
+		it('treats a backslash outside quotes as literal', () => {
+			expect(tokenizeConfigLine('a b\\c')).toEqual(['a', 'b\\c']);
+		});
+
+		it('throws on an unterminated quote', () => {
+			expect(() => tokenizeConfigLine('a "b')).toThrow(
+				'Unterminated double quote',
+			);
+		});
+
+		it('returns an empty array for an empty string', () => {
+			expect(tokenizeConfigLine('')).toEqual([]);
+		});
+	});
+
+	describe('quoteConfigValue', () => {
+		it('leaves a plain value unquoted', () => {
+			expect(quoteConfigValue('plain')).toBe('plain');
+		});
+
+		it('wraps a value with a space in quotes', () => {
+			expect(quoteConfigValue('two words')).toBe('"two words"');
+		});
+
+		it('quotes and escapes an embedded double quote', () => {
+			expect(quoteConfigValue('say "hi"')).toBe('"say \\"hi\\""');
+		});
+
+		it('quotes and escapes a backslash', () => {
+			expect(quoteConfigValue('a\\b')).toBe('"a\\\\b"');
+		});
+
+		it('round-trips through the tokenizer', () => {
+			for (const value of [
+				'plain',
+				'two words',
+				'say "hi"',
+				'back\\slash',
+				'mix "and" \\ mix',
+			]) {
+				expect(tokenizeConfigLine(quoteConfigValue(value))[0]).toBe(value);
+			}
 		});
 	});
 

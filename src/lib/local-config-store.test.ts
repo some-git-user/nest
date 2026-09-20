@@ -26,8 +26,21 @@ import {
 import {logger} from './logger';
 
 jest.mock('fs');
-jest.mock('./local-config');
 jest.mock('./logger');
+
+// The store relies on the pure tokenizer/quoter from local-config for
+// buildConfigLine and parseConfigDocument. A blanket auto-mock would replace
+// them with undefined and break every round-trip, so keep the real
+// implementations while mocking only the fs/path guards the store calls.
+jest.mock('./local-config', () => {
+	const actual = jest.requireActual('./local-config');
+	return {
+		...actual,
+		getConfigFilePath: jest.fn(),
+		validateConfigFilePath: jest.fn(),
+		validateConfigFileSecurity: jest.fn(),
+	};
+});
 
 const mockedGetConfigFilePath = jest.mocked(getConfigFilePath);
 const mockedValidateConfigFilePath = jest.mocked(validateConfigFilePath);
@@ -121,19 +134,23 @@ describe('local-config-store', () => {
 	});
 
 	describe('validateParamValue', () => {
-		it('accepts a value with a + escape', () => {
+		it('accepts a value with a + character', () => {
 			expect(validateParamValue('msg', 'Test+message')).toBeUndefined();
 		});
 
-		it('rejects a value containing whitespace', () => {
-			expect(validateParamValue('msg', 'has space')).toBe(
-				'Parameter "msg" may not contain whitespace or "#". Use "+" for spaces.',
+		it('accepts a value containing a space (quoted on save)', () => {
+			expect(validateParamValue('command', 'vdsl status')).toBeUndefined();
+		});
+
+		it('rejects a value containing a newline', () => {
+			expect(validateParamValue('msg', 'has\nnewline')).toBe(
+				'Parameter "msg" may not contain a newline or "#".',
 			);
 		});
 
 		it('rejects a value containing a hash', () => {
 			expect(validateParamValue('msg', 'has#hash')).toBe(
-				'Parameter "msg" may not contain whitespace or "#". Use "+" for spaces.',
+				'Parameter "msg" may not contain a newline or "#".',
 			);
 		});
 	});
@@ -185,10 +202,10 @@ describe('local-config-store', () => {
 			const entry: PresetEntry = {
 				key: 'check_disk',
 				command: 'check_disk',
-				params: {warn: 'has space'},
+				params: {warn: 'has#hash'},
 			};
 			expect(validatePresetEntry(entry)).toEqual([
-				'Parameter "warn" may not contain whitespace or "#". Use "+" for spaces.',
+				'Parameter "warn" may not contain a newline or "#".',
 			]);
 		});
 	});
@@ -212,6 +229,37 @@ describe('local-config-store', () => {
 			expect(buildConfigLine(entry)).toBe(
 				'check_disk=check_disk warn=80 crit=90',
 			);
+		});
+
+		it('wraps a value containing a space in double quotes', () => {
+			const entry: PresetEntry = {
+				key: 'vdsl',
+				command: 'check-vigor165-vdsl',
+				params: {command: 'vdsl status'},
+			};
+			expect(buildConfigLine(entry)).toBe(
+				'vdsl=check-vigor165-vdsl command="vdsl status"',
+			);
+		});
+
+		it('escapes embedded quotes and backslashes when quoting', () => {
+			const entry: PresetEntry = {
+				key: 'q',
+				command: 'c',
+				params: {msg: 'say "hi" \\ now'},
+			};
+			expect(buildConfigLine(entry)).toBe('q=c msg="say \\"hi\\" \\\\ now"');
+		});
+
+		it('round-trips a spaced value back to the original', () => {
+			const entry: PresetEntry = {
+				key: 'vdsl',
+				command: 'check-vigor165-vdsl',
+				params: {command: 'vdsl status', host: '10.0.0.1'},
+			};
+			const line = buildConfigLine(entry);
+			const reparsed = parseConfigDocument(`${line}\n`);
+			expect(reparsed.entries).toEqual([entry]);
 		});
 	});
 
@@ -261,6 +309,16 @@ describe('local-config-store', () => {
 		it('keeps a malformed param token verbatim', () => {
 			const doc = parseConfigDocument('check_test=check_test orphan');
 			expect(doc.preservedLines).toEqual(['check_test=check_test orphan']);
+			expect(doc.entries).toEqual([]);
+		});
+
+		it('keeps a line with an unterminated quote verbatim', () => {
+			const doc = parseConfigDocument(
+				'check_test=check_test msg="unterminated',
+			);
+			expect(doc.preservedLines).toEqual([
+				'check_test=check_test msg="unterminated',
+			]);
 			expect(doc.entries).toEqual([]);
 		});
 

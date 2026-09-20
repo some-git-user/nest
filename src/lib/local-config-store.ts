@@ -4,6 +4,8 @@ import * as path from 'path';
 import {getErrorMessage} from './error-message';
 import {
 	getConfigFilePath,
+	quoteConfigValue,
+	tokenizeConfigLine,
 	validateConfigFilePath,
 	validateConfigFileSecurity,
 } from './local-config';
@@ -62,15 +64,15 @@ export type ConfigDocument = {
 };
 
 /**
- * Reject anything that would change how the line parser splits the file.
+ * Reject anything that cannot survive the line-based config format.
  *
- * `parseConfigLine()` splits on whitespace with no quoting support, so a value
- * containing a space would silently become an extra parameter, and a `#` or a
- * newline would let one preset inject a second config line. The `+` character
- * is the established escape for spaces (see `Test+message` in the shipped
- * example file) and is deliberately allowed.
+ * `tokenizeConfigLine()` now understands double quotes, so a value containing a
+ * space is written as `key="value with spaces"` and round-trips cleanly. What
+ * still cannot be represented is a literal newline (the file is parsed line by
+ * line, so one would split a preset across lines) and a `#` (which reads as a
+ * comment at the start of a line and is ambiguous enough to forbid outright).
  */
-const INVALID_VALUE_CHARACTERS = /[\s#]/;
+const INVALID_VALUE_CHARACTERS = /[\r\n#]/;
 
 export const validateConfigKey = (key: string): string | undefined => {
 	if (key.length === 0) {
@@ -110,7 +112,7 @@ export const validateParamValue = (
 	value: string,
 ): string | undefined => {
 	if (INVALID_VALUE_CHARACTERS.test(value)) {
-		return `Parameter "${paramKey}" may not contain whitespace or "#". Use "+" for spaces.`;
+		return `Parameter "${paramKey}" may not contain a newline or "#".`;
 	}
 	return undefined;
 };
@@ -157,7 +159,7 @@ export const validatePresetEntry = (entry: PresetEntry): string[] => {
  */
 export const buildConfigLine = (entry: PresetEntry): string => {
 	const params = Object.entries(entry.params).map(
-		([key, value]) => `${key}=${value}`,
+		([key, value]) => `${key}=${quoteConfigValue(value)}`,
 	);
 	return [entry.key, [entry.command, ...params].join(' ')].join('=');
 };
@@ -194,7 +196,14 @@ export const parseConfigDocument = (content: string): ConfigDocument => {
 			continue;
 		}
 
-		const tokens = rest.split(/\s+/);
+		let tokens: string[];
+		try {
+			tokens = tokenizeConfigLine(rest);
+		} catch {
+			// Unterminated quote: keep the line verbatim rather than losing it.
+			preservedLines.push(rawLine);
+			continue;
+		}
 		const params: Record<string, string> = {};
 		let malformed = false;
 		for (const token of tokens.slice(1)) {

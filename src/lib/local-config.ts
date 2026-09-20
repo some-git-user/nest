@@ -190,8 +190,86 @@ export const getConfigFilePath = (): string => {
 };
 
 /**
+ * Split a config line into whitespace-separated tokens, honouring double quotes.
+ *
+ * A value that contains a space is written as `key="value with spaces"`; the
+ * quotes let it survive the whitespace split and are stripped here. Inside a
+ * quoted section, `\"` is a literal double quote and `\\` a literal backslash.
+ * Outside quotes a backslash is literal, so an unquoted value round-trips
+ * unchanged.
+ *
+ * @param line The config line (without the `key=` prefix)
+ * @returns The tokens with quotes removed and escapes resolved
+ * @throws Error if a double quote is opened but never closed
+ */
+export const tokenizeConfigLine = (line: string): string[] => {
+	const tokens: string[] = [];
+	let current = '';
+	let inToken = false;
+	let inQuotes = false;
+	let escaped = false;
+
+	for (const ch of line) {
+		if (escaped) {
+			current += ch;
+			escaped = false;
+		} else if (inQuotes) {
+			if (ch === '\\') {
+				escaped = true;
+			} else if (ch === '"') {
+				inQuotes = false;
+			} else {
+				current += ch;
+			}
+		} else if (ch === '"') {
+			inQuotes = true;
+			// A bare "" is still a token, so an empty quoted value survives.
+			inToken = true;
+		} else if (/\s/.test(ch)) {
+			if (inToken) {
+				tokens.push(current);
+				current = '';
+				inToken = false;
+			}
+		} else {
+			current += ch;
+			inToken = true;
+		}
+	}
+
+	if (inQuotes) {
+		throw new Error('Unterminated double quote in config line');
+	}
+	if (inToken) {
+		tokens.push(current);
+	}
+
+	return tokens;
+};
+
+/**
+ * Render a single value for the config file, adding double quotes only when the
+ * value would otherwise be split or corrupted by the tokenizer.
+ *
+ * A value with no whitespace and no quote/backslash is written bare, so an
+ * unchanged preset round-trips byte for byte. Anything containing a space is
+ * wrapped in double quotes, and any embedded `"` or `\` is escaped so the value
+ * survives the round trip through {@link tokenizeConfigLine}.
+ */
+export const quoteConfigValue = (value: string): string => {
+	if (!/[\s"]/.test(value) && !value.includes('\\')) {
+		return value;
+	}
+	const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+	return `"${escaped}"`;
+};
+
+/**
  * Parse a single config line into command and parameters
  * Format: <key>=<command> <param1>=<value1> <param2>=<value2> ...
+ *
+ * Values containing spaces are wrapped in double quotes (see
+ * {@link tokenizeConfigLine}); the quotes are stripped here.
  *
  * @param line The config line to parse (without the key= prefix)
  * @returns Parsed command and parameters
@@ -204,8 +282,8 @@ export const parseConfigLine = (line: string): LocalConfigEntry => {
 		throw new Error('Empty config line');
 	}
 
-	// Split by spaces to get tokens
-	const tokens = trimmedLine.split(/\s+/);
+	// Split on whitespace, honouring quoted values that contain spaces.
+	const tokens = tokenizeConfigLine(trimmedLine);
 
 	// First token is the command
 	const command = tokens[0];

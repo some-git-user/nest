@@ -54,6 +54,24 @@ const adminAuthRateLimiter = rateLimit({
 });
 
 /**
+ * Every successful Test request spawns a real plugin process as the service
+ * user. `adminAuthRateLimiter` deliberately ignores successes — that is the
+ * point of it, so an authenticated operator is never throttled — which leaves
+ * the spawn path bounded only by the global bucket. This limiter counts the
+ * successes, so a session cannot be used to run plugins in a tight loop.
+ *
+ * Generous by design: a human clicking Test in the editor does a handful per
+ * minute. It exists to stop scripted abuse, not to constrain the workflow.
+ */
+const adminTestRateLimiter = rateLimit({
+	windowMs: env.RATE_LIMIT_WINDOW_MS,
+	max: env.ADMIN_TEST_RATE_LIMIT_MAX,
+	standardHeaders: true,
+	legacyHeaders: false,
+	message: 'Too many plugin test runs. Try again later.',
+});
+
+/**
  * Session cookie or admin password header - either is enough.
  *
  * The page itself is served to a header-authenticated caller too, because every
@@ -135,7 +153,12 @@ router.post('/logout', postAdminLogout);
 router.get('/api/commands', getAdminCommands);
 router.get('/api/entries', getAdminEntries);
 router.post('/api/validate', requireAdminApiHeader, postAdminValidate);
-router.post('/api/test', requireAdminApiHeader, postAdminTest);
+router.post(
+	'/api/test',
+	requireAdminApiHeader,
+	adminTestRateLimiter,
+	postAdminTest,
+);
 router.post('/api/save', requireAdminApiHeader, postAdminSave);
 router.post('/api/revert', requireAdminApiHeader, postAdminRevert);
 

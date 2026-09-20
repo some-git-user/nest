@@ -210,4 +210,14 @@ run_check "$TARGET_SCRIPT" --local-config
 assert_output_contains "Error: --local-config requires a config key argument" "$RUN_OUTPUT" "requires argument for --local-config"
 assert_equals "3" "$RUN_STATUS" "returns error status for missing --local-config argument"
 
+# A config key containing a double quote must be escaped in the JSON body, not
+# left to break the string or inject a sibling key.
+run_check env MOCK_RESPONSE="VALID_JSON:ok|0|" "$TARGET_SCRIPT" --local-config 'a"b'
+assert_file_contains '{"localConfig":"a\"b"}' "$TMP_DIR/curl_args" "escapes a double quote in the JSON body"
+if grep -Fq '"localConfig":"a"b"' "$TMP_DIR/curl_args"; then
+    printf 'FAIL: unescaped double quote reached the JSON body\n' >&2
+    exit 1
+fi
+assert_equals "0" "$RUN_STATUS" "succeeds with an escaped key"
+
 printf 'check_nest.sh tests passed\n'

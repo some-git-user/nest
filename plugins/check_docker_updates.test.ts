@@ -1,6 +1,7 @@
 import {
 	checkDockerUpdates,
 	getStatusText,
+	isUnsafeRef,
 	meta,
 	parseComposeImages,
 	parseDockerfileImages,
@@ -42,6 +43,9 @@ const makeRunner = (
 	opts: {ps?: string[]; psError?: string} = {},
 ): DockerRunner => {
 	return async (args: string[]) => {
+		// The plugin passes the image reference after a `--` end-of-options
+		// separator, so read it from there rather than a fixed index.
+		const ref = args[args.indexOf('--') + 1];
 		if (args[0] === 'ps') {
 			if (opts.psError) {
 				return fail(opts.psError);
@@ -49,9 +53,9 @@ const makeRunner = (
 			return ok(`${(opts.ps ?? []).join('\n')}\n`);
 		}
 		if (args[0] === 'image' && args[1] === 'inspect') {
-			const entry = images[args[2]];
+			const entry = images[ref];
 			if (!entry || entry.localError) {
-				return fail(`Error: No such image: ${args[2]}`);
+				return fail(`Error: No such image: ${ref}`);
 			}
 			if (entry.local === undefined) {
 				return ok('[]\n');
@@ -59,7 +63,6 @@ const makeRunner = (
 			return localDigest(entry.local);
 		}
 		if (args[0] === 'buildx') {
-			const ref = args[3];
 			const entry = images[ref];
 			if (!entry || entry.remoteError || entry.remote === undefined) {
 				return fail(
@@ -603,5 +606,99 @@ describe('checkDockerUpdates default runner', () => {
 
 		jest.dontMock('child_process');
 		jest.resetModules();
+	});
+});
+
+describe('checkDockerUpdates argument-injection guard', () => {
+	test('isUnsafeRef flags a leading dash', () => {
+		expect(isUnsafeRef('--privileged')).toBe(true);
+		expect(isUnsafeRef('-H')).toBe(true);
+		expect(isUnsafeRef('-')).toBe(true);
+		expect(isUnsafeRef('nginx:1.25')).toBe(false);
+		expect(isUnsafeRef('alpine')).toBe(false);
+	});
+
+	test('drops a dash-prefixed reference from a compose file and reports it', async () => {
+		const runner = makeRunner(
+			{'nginx:1.25': {local: 'sha256:aaa', remote: 'sha256:bbb'}},
+			{ps: []},
+		);
+		const fsImpl = makeFs({
+			'/c/docker-compose.yml':
+				'services:\n  a:\n    image: --privileged\n  b:\n    image: nginx:1.25\n',
+		});
+
+		const result = await checkDockerUpdates(
+			{checkRunning: 'false', composeFile: '/c/docker-compose.yml'},
+			runner,
+			fsImpl,
+		);
+
+		// The unsafe ref never reaches the CLI; only the safe one is counted.
+		expect(result.message).toContain('skipped unsafe image reference');
+		expect(result.message).toContain('--privileged');
+		expect(perf(result, 'images_total')).toBe(1);
+		expect(perf(result, 'images_outdated')).toBe(1);
+	});
+
+	test('a file of only unsafe references reports nothing to check', async () => {
+		const runner = makeRunner({}, {ps: []});
+		const fsImpl = makeFs({
+			'/c/docker-compose.yml': 'services:\n  a:\n    image: -Htcp://evil\n',
+		});
+
+		const result = await checkDockerUpdates(
+			{checkRunning: 'false', composeFile: '/c/docker-compose.yml'},
+			runner,
+			fsImpl,
+		);
+
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('no container images found');
+		expect(result.message).toContain('skipped unsafe image reference');
+	});
+
+	test('passes the reference after a -- end-of-options separator', async () => {
+		const seenArgs: string[][] = [];
+		const recordingRunner: DockerRunner = async (args) => {
+			seenArgs.push(args);
+			return fail('no such image');
+		};
+
+		await checkDockerUpdates(
+			{checkRunning: 'false', composeFile: '/c/x.yml'},
+			recordingRunner,
+			makeFs({'/c/x.yml': 'services:\n  a:\n    image: nginx:1.25\n'}),
+		);
+
+		// Every inspect call must place `--` immediately before the reference,
+		// so the CLI treats it as a positional argument, never an option.
+		expect(seenArgs.length).toBeGreaterThan(0);
+		for (const args of seenArgs) {
+			const dashIndex = args.indexOf('--');
+			expect(dashIndex).toBeGreaterThan(-1);
+			expect(args[dashIndex + 1]).toBe('nginx:1.25');
+		}
+	});
+
+	test('an unsafe reference that is also ignored is not double-reported', async () => {
+		const runner = makeRunner({}, {ps: []});
+		const fsImpl = makeFs({
+			'/c/docker-compose.yml': 'services:\n  a:\n    image: --privileged\n',
+		});
+
+		const result = await checkDockerUpdates(
+			{
+				checkRunning: 'false',
+				composeFile: '/c/docker-compose.yml',
+				ignore: 'privileged',
+			},
+			runner,
+			fsImpl,
+		);
+
+		// ignoreMatch wins, so it is filtered before the unsafe check and never
+		// appears in the skipped-unsafe list.
+		expect(result.message).not.toContain('skipped unsafe image reference');
 	});
 });

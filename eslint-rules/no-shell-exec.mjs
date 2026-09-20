@@ -27,10 +27,14 @@
  * named bindings (`import {execSync} ...`) and namespace members
  * (`cp.execSync(...)`), so aliased imports are still caught.
  *
- * NOTE: `promisify(execFile)` produces a local alias the rule cannot trace, so
- * a `shell: true` passed to that alias is not detected. That is an accepted
- * limitation of a syntactic rule; the direct `exec`/`execSync` ban and the
- * literal `shell: true` check cover the realistic cases.
+ * It also follows the very common `const execFileAsync = promisify(execFile)`
+ * pattern (and `promisify(cp.execFileSync)`), so a `shell: true` smuggled
+ * through the promisified alias is reported too. Both the named alias and an
+ * inline `promisify(execFile)(...)` call are resolved.
+ *
+ * NOTE: aliases introduced by dependency injection (`const exec = injected ||
+ * execFileSync`) still cannot be traced syntactically; those call sites are
+ * covered by review and by the plugins' own argv guards, not this rule.
  */
 
 // Always shell-based: the whole command is one string handed to /bin/sh.
@@ -45,6 +49,8 @@ const SHELL_OPTION_FUNCTIONS = new Set([
 ]);
 
 const CHILD_PROCESS_MODULE = 'child_process';
+const UTIL_MODULE = 'util';
+const PROMISIFY_MEMBER = 'promisify';
 
 /**
  * Is `node` a truthy-enough value to enable a shell? `true` and any non-empty
@@ -116,6 +122,80 @@ export default {
 		// Set of local names bound to the whole module (`import * as cp`, or the
 		// result of `require('child_process')`), so `cp.execSync(...)` resolves.
 		const namespaceImports = new Set();
+		// Local names bound to `util.promisify` (`import {promisify} from 'util'`,
+		// `const {promisify} = require('util')`, or `util.promisify` via namespace).
+		const promisifyNames = new Set();
+		// Alias local name -> child_process function name, for
+		// `const execFileAsync = promisify(execFile)`.
+		const promisifyAliases = new Map();
+
+		const isUtilRequire = (node) =>
+			node.type === 'CallExpression' &&
+			node.callee.type === 'Identifier' &&
+			node.callee.name === 'require' &&
+			node.arguments.length === 1 &&
+			node.arguments[0].type === 'Literal' &&
+			node.arguments[0].value === UTIL_MODULE;
+
+		const registerPromisifyBinding = (idNode, init) => {
+			if (!isUtilRequire(init)) {
+				return;
+			}
+			if (idNode.type === 'Identifier') {
+				// `const util = require('util')` -> util.promisify(...)
+				promisifyNames.add(`${idNode.name}.${PROMISIFY_MEMBER}`);
+			} else if (idNode.type === 'ObjectPattern') {
+				for (const prop of idNode.properties) {
+					if (prop.type !== 'Property') {
+						continue;
+					}
+					const imported =
+						prop.key.type === 'Identifier' && !prop.computed
+							? prop.key.name
+							: prop.key.type === 'Literal'
+								? String(prop.key.value)
+								: undefined;
+					if (
+						imported === PROMISIFY_MEMBER &&
+						prop.value.type === 'Identifier'
+					) {
+						promisifyNames.add(prop.value.name);
+					}
+				}
+			}
+		};
+
+		// Is `calleeNode` a reference to `util.promisify` (named or namespaced)?
+		const isPromisifyCallee = (calleeNode) => {
+			if (calleeNode.type === 'Identifier') {
+				return promisifyNames.has(calleeNode.name);
+			}
+			if (
+				calleeNode.type === 'MemberExpression' &&
+				!calleeNode.computed &&
+				calleeNode.object.type === 'Identifier' &&
+				calleeNode.property.type === 'Identifier'
+			) {
+				return promisifyNames.has(
+					`${calleeNode.object.name}.${calleeNode.property.name}`,
+				);
+			}
+			return false;
+		};
+
+		// If `initNode` is `promisify(<child_process fn>)`, return the child_process
+		// function name it promisifies, else null.
+		const promisifyAliasTarget = (initNode) => {
+			if (
+				initNode.type !== 'CallExpression' ||
+				!isPromisifyCallee(initNode.callee) ||
+				initNode.arguments.length !== 1
+			) {
+				return null;
+			}
+			const target = resolveCalleeFunction(initNode.arguments[0]);
+			return target && SHELL_OPTION_FUNCTIONS.has(target) ? target : null;
+		};
 
 		const isChildProcessRequire = (node) =>
 			node.type === 'CallExpression' &&
@@ -157,10 +237,16 @@ export default {
 
 		/**
 		 * Resolve a callee to the child_process function it refers to, or null.
+		 * Includes direct imports, namespace members, and `promisify(execFile)`
+		 * aliases.
 		 */
 		const resolveCalleeFunction = (callee) => {
 			if (callee.type === 'Identifier') {
-				return namedImports.get(callee.name) ?? null;
+				return (
+					namedImports.get(callee.name) ??
+					promisifyAliases.get(callee.name) ??
+					null
+				);
 			}
 			if (
 				callee.type === 'MemberExpression' &&
@@ -174,8 +260,37 @@ export default {
 			return null;
 		};
 
+		// Register `promisify(execFile)` aliases bound to an identifier, e.g.
+		// `const execFileAsync = promisify(execFile)`.
+		const registerPromisifyAlias = (idNode, init) => {
+			if (idNode.type !== 'Identifier') {
+				return;
+			}
+			const target = promisifyAliasTarget(init);
+			if (target) {
+				promisifyAliases.set(idNode.name, target);
+			}
+		};
+
 		return {
 			ImportDeclaration(node) {
+				if (node.source.value === UTIL_MODULE) {
+					for (const spec of node.specifiers) {
+						if (
+							spec.type === 'ImportSpecifier' &&
+							spec.imported.type === 'Identifier' &&
+							spec.imported.name === PROMISIFY_MEMBER
+						) {
+							promisifyNames.add(spec.local.name);
+						} else if (
+							spec.type === 'ImportNamespaceSpecifier' ||
+							spec.type === 'ImportDefaultSpecifier'
+						) {
+							promisifyNames.add(`${spec.local.name}.${PROMISIFY_MEMBER}`);
+						}
+					}
+					return;
+				}
 				if (node.source.value !== CHILD_PROCESS_MODULE) {
 					return;
 				}
@@ -198,6 +313,8 @@ export default {
 			VariableDeclarator(node) {
 				if (node.init) {
 					registerRequireBinding(node.id, node.init);
+					registerPromisifyBinding(node.id, node.init);
+					registerPromisifyAlias(node.id, node.init);
 				}
 			},
 
@@ -208,11 +325,18 @@ export default {
 						node.left.type === 'ObjectPattern')
 				) {
 					registerRequireBinding(node.left, node.right);
+					registerPromisifyBinding(node.left, node.right);
+					registerPromisifyAlias(node.left, node.right);
 				}
 			},
 
 			'CallExpression, NewExpression'(node) {
-				const fnName = resolveCalleeFunction(node.callee);
+				// Inline form: `promisify(execFile)(cmd, args, {shell: true})`.
+				const inlineAlias =
+					node.callee.type === 'CallExpression'
+						? promisifyAliasTarget(node.callee)
+						: null;
+				const fnName = inlineAlias ?? resolveCalleeFunction(node.callee);
 				if (!fnName) {
 					return;
 				}

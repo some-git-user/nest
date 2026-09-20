@@ -1,4 +1,6 @@
+import dns from 'dns';
 import https from 'https';
+import net from 'net';
 import {
 	NagiosPerformanceData,
 	NagiosReturnCode,
@@ -143,7 +145,7 @@ export const meta: PluginMeta = {
 			name: 'skipApps',
 			label: 'Skip app update check',
 			type: 'boolean',
-			default: 'true',
+			default: 'false',
 			description:
 				'Skip the app update section. Enabling it triggers an external request to the Nextcloud app store.',
 		},
@@ -151,7 +153,7 @@ export const meta: PluginMeta = {
 			name: 'skipUpdate',
 			label: 'Skip core update check',
 			type: 'boolean',
-			default: 'true',
+			default: 'false',
 			description: 'Skip the core update section.',
 		},
 	],
@@ -301,6 +303,161 @@ const formatGiB = (value: number): string => value.toFixed(1);
 
 const formatLoad = (value: number): string => value.toFixed(2);
 
+/**
+ * Resolve a hostname to every address it maps to.
+ *
+ * Injectable so the SSRF guard is testable without a network: the specs pass a
+ * stub resolver and get deterministic answers for names that would otherwise
+ * depend on whatever DNS the test host happens to have.
+ */
+export type HostResolver = (hostname: string) => Promise<string[]>;
+
+const systemHostResolver: HostResolver = async (hostname) => {
+	const entries = await dns.promises.lookup(hostname, {all: true});
+	return entries.map((entry) => entry.address);
+};
+
+/**
+ * Whether an IPv4 address must never be used as a check target.
+ *
+ * Blocks the ranges that reach the host itself or the local network fabric
+ * rather than a remote Nextcloud instance:
+ *
+ * - `0.0.0.0/8`   — "this host on this network", includes the unspecified addr
+ * - `127.0.0.0/8` — loopback
+ * - `169.254.0.0/16` — link-local, and with it the cloud instance-metadata
+ *   endpoint at `169.254.169.254`, the classic SSRF prize
+ * - `224.0.0.0/4` — multicast
+ * - `240.0.0.0/4` — reserved, includes the broadcast address
+ *
+ * RFC1918 (`10/8`, `172.16/12`, `192.168/16`) is deliberately **allowed**: a
+ * Nextcloud instance on the LAN is the common legitimate case, and blocking it
+ * would break real monitoring for a class of target the operator chose.
+ */
+const isBlockedIpv4 = (address: string): boolean => {
+	const [a, b] = address.split('.').map(Number);
+	if (a === 0) {
+		return true;
+	}
+	if (a === 127) {
+		return true;
+	}
+	if (a === 169 && b === 254) {
+		return true;
+	}
+	if ((a & 0xf0) === 0xe0) {
+		return true;
+	}
+	if (a >= 240) {
+		return true;
+	}
+	return false;
+};
+
+/**
+ * IPv6 counterpart of `isBlockedIpv4`.
+ *
+ * IPv4-mapped (`::ffff:a.b.c.d`) and IPv4-compatible (`::a.b.c.d`) forms are
+ * unwrapped and judged by the IPv4 rule, because a client can otherwise write
+ * `http://[::ffff:127.0.0.1]/` and slip past a v6-only check.
+ *
+ * Blocked: `::` (unspecified), `::1` (loopback), `fe80::/10` (link-local) and
+ * `ff00::/8` (multicast). `fc00::/7` (unique-local) is allowed for the same
+ * reason RFC1918 is — it is the IPv6 equivalent of a LAN address.
+ */
+const isBlockedIpv6 = (raw: string): boolean => {
+	const address = raw.toLowerCase().split('%')[0];
+
+	const mapped = address.match(/^::(?:ffff:)?((?:\d{1,3}\.){3}\d{1,3})$/i);
+	if (mapped) {
+		return isBlockedIpv4(mapped[1]);
+	}
+
+	if (address === '::' || address === '::1') {
+		return true;
+	}
+
+	// An address written with a leading "::" has no first group, so this is NaN
+	// and falls through as not blocked — which is right: such an address is
+	// neither link-local nor multicast, and the loopback forms are handled above.
+	const first = parseInt(address.split(':')[0], 16);
+	if (!Number.isFinite(first)) {
+		return false;
+	}
+
+	// fe80::/10 — link-local.
+	if ((first & 0xffc0) === 0xfe80) {
+		return true;
+	}
+	// ff00::/8 — multicast.
+	if ((first & 0xff00) === 0xff00) {
+		return true;
+	}
+
+	return false;
+};
+
+/**
+ * Whether an IP literal is off-limits as a check target.
+ *
+ * Returns false for anything that is not an IP address — a hostname is not
+ * judged here, it is resolved first by `guardTargetHost`.
+ */
+export const isBlockedIpAddress = (address: string): boolean => {
+	const stripped = address.replace(/^\[|\]$/g, '').split('%')[0];
+	const family = net.isIP(stripped);
+	if (family === 4) {
+		return isBlockedIpv4(stripped);
+	}
+	if (family === 6) {
+		return isBlockedIpv6(stripped);
+	}
+	return false;
+};
+
+/**
+ * Refuse to dial a target that resolves into the local machine or network.
+ *
+ * The Nextcloud request carries the operator's `NC-Token` (or basic
+ * credentials), so a `baseUrl` an attacker controls turns this plugin into an
+ * authenticated request to an arbitrary host. `^https?://` alone does not stop
+ * `127.0.0.1` or the cloud metadata endpoint; resolving and filtering does.
+ *
+ * A DNS failure is **not** treated as blocked: if the name cannot be resolved,
+ * the subsequent fetch cannot connect either, so there is no request to guard.
+ *
+ * Residual: this checks the name, then `fetch` resolves it again, so a
+ * rebinding DNS server could still race the two lookups. Closing that needs a
+ * custom `lookup` on the agent; the operator controls the resolvers in play, so
+ * it is left as documented residual risk.
+ *
+ * @returns A human-readable reason to refuse, or undefined when allowed.
+ */
+const guardTargetHost = async (
+	url: string,
+	resolveHost: HostResolver,
+): Promise<string | undefined> => {
+	const hostname = new URL(url).hostname.replace(/^\[|\]$/g, '');
+
+	if (net.isIP(hostname)) {
+		return isBlockedIpAddress(hostname)
+			? `${hostname} is a blocked internal address`
+			: undefined;
+	}
+
+	let addresses: string[];
+	try {
+		addresses = await resolveHost(hostname);
+	} catch {
+		return undefined;
+	}
+
+	const blocked = addresses.find((address) => isBlockedIpAddress(address));
+	return blocked
+		? `${hostname} resolves to the blocked internal address ${blocked}`
+		: undefined;
+};
+
 const buildEndpointUrl = (
 	baseUrl: string,
 	skipApps: boolean,
@@ -365,6 +522,7 @@ export const getStatusText = (code: number): string => {
 
 export const checkNextcloudServerinfo = async (
 	params: NextcloudServerInfoParams,
+	resolveHost: HostResolver = systemHostResolver,
 ): Promise<PluginReturn> => {
 	if (!params.baseUrl) {
 		return {
@@ -438,6 +596,16 @@ export const checkNextcloudServerinfo = async (
 		return {
 			message: `Nextcloud serverinfo configuration error: ${String(error)}`,
 			code: NagiosReturnCodes.UNKNOWN,
+		};
+	}
+
+	// The token travels with this request, so the destination is validated
+	// before anything is sent rather than after.
+	const blockedReason = await guardTargetHost(endpointUrl, resolveHost);
+	if (blockedReason) {
+		return {
+			message: `Nextcloud serverinfo blocked: ${blockedReason}. Point baseUrl at the Nextcloud host itself, not an internal address.`,
+			code: NagiosReturnCodes.CRITICAL,
 		};
 	}
 

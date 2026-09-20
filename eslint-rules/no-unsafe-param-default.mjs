@@ -6,36 +6,34 @@
  * 1. The overview page run form, which builds a URL query. A space works there
  *    because it is percent-encoded to `%20`.
  * 2. The admin editor, which prefills every parameter field with the declared
- *    default. Saving runs `validatePresetEntry()`, whose grammar forbids
- *    whitespace and `#` in a value (`INVALID_VALUE_CHARACTERS` in
- *    `src/lib/local-config-store.ts`) because `parseConfigLine()` splits on
- *    whitespace with no quoting support.
+ *    default. Saving runs `validatePresetEntry()`, whose grammar forbids a
+ *    newline or `#` in a value (`INVALID_VALUE_CHARACTERS` in
+ *    `src/lib/local-config-store.ts`).
  *
- * A default containing a space therefore prefills the editor with a value that
- * can never be saved: the Test/Save buttons fail with "may not contain
- * whitespace or #". Replacing the space with `+` is NOT a fix either - nothing
- * decodes `+` back to a space, and `makeInternalRequest()` percent-encodes it
- * to `%2B`, so the plugin receives a literal `+`.
+ * A space is fine: `buildConfigLine()` wraps such a value in double quotes and
+ * `tokenizeConfigLine()` strips them again, so `vdsl status` round-trips
+ * through the config file intact. A newline or `#` cannot be quoted away - the
+ * file is read line by line and `#` marks a comment - so a default containing
+ * one would prefill the editor with a value that can never be saved.
  *
  * The rule is deliberately not fixable: the right replacement depends on the
- * parameter semantics (a regex can use `.`, a plain string needs a different
- * wording), so the author has to pick it.
+ * parameter semantics, so the author has to pick it.
  */
 
-const INVALID_VALUE_CHARACTERS = /[\s#]/;
+const INVALID_VALUE_CHARACTERS = /[\r\n#]/;
 
 export default {
 	meta: {
 		type: 'problem',
 		docs: {
 			description:
-				'Forbid whitespace or # in plugin param default, which the admin editor cannot save as a preset',
+				'Forbid a newline or # in plugin param default, which the admin editor cannot save as a preset',
 			recommended: true,
 		},
 		schema: [],
 		messages: {
 			unsafeDefault:
-				'Param `default` {{value}} contains {{chars}}, which the local-preset config grammar forbids. The admin editor prefills this value and then rejects it on Test/Save. Use a value without whitespace or # (a regex can use "." to match a space; "+" is NOT decoded back to a space).',
+				'Param `default` {{value}} contains {{chars}}, which the local-preset config grammar cannot represent. The admin editor prefills this value and then rejects it on Test/Save. Spaces are fine (they are quoted automatically); a newline or # is not.',
 		},
 	},
 	create(context) {
@@ -54,8 +52,12 @@ export default {
 					return;
 				}
 
-				const found = [...new Set(value.value.match(/[\s#]/g))].map((char) =>
-					char === ' ' ? 'a space' : char === '\n' ? 'a newline' : char,
+				const found = [...new Set(value.value.match(/[\r\n#]/g))].map((char) =>
+					char === '\n'
+						? 'a newline'
+						: char === '\r'
+							? 'a carriage return'
+							: char,
 				);
 
 				context.report({

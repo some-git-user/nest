@@ -54,6 +54,40 @@ describe('check-vigor165-vdsl plugin', () => {
 			const passwordParam = meta.params.find((p) => p.name === 'password');
 			expect(passwordParam?.type).toBe('password');
 		});
+
+		it('should declare a default for every param the runtime falls back to', () => {
+			// These params all have a hardcoded runtime fallback. If the matching
+			// meta.params default is ever dropped, the run form renders an empty
+			// field while the check silently uses a value the operator never sees -
+			// exactly the mismatch this pins against.
+			const expectedDefaults: Record<string, string> = {
+				port: '22',
+				warningPercentBelow: '20',
+				criticalPercentBelow: '40',
+				timeoutMs: '10000',
+				kexAlgorithms: 'diffie-hellman-group1-sha1',
+				ciphers: '3des-cbc',
+				hostKeyAlgorithms: 'ssh-rsa',
+				prompt: 'DrayTek>',
+			};
+			for (const [name, expected] of Object.entries(expectedDefaults)) {
+				const param = meta.params.find((p) => p.name === name);
+				expect(param).toBeDefined();
+				expect(param?.default).toBe(expected);
+			}
+		});
+
+		it('should declare the command default as a real default', () => {
+			// 'vdsl status' contains a space. The config format now wraps such a
+			// value in double quotes on save and strips them on parse, so it is a
+			// genuine `default` shown in the run form and savable as a preset -
+			// not a placeholder. The runtime still falls back to DEFAULT_COMMAND
+			// when the field is left empty.
+			const commandParam = meta.params.find((p) => p.name === 'command');
+			expect(commandParam).toBeDefined();
+			expect(commandParam?.default).toBe('vdsl status');
+			expect(commandParam).not.toHaveProperty('placeholder');
+		});
 	});
 
 	describe('checkVigor165Vdsl function - parameter parsing', () => {
@@ -448,6 +482,80 @@ describe('check-vigor165-vdsl plugin', () => {
 			});
 
 			expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
+
+			// The declared meta.params defaults must be what actually reaches the
+			// SSH client when the operator leaves the fields empty. Asserting the
+			// connect() payload is the only way to pin the run-path default; the
+			// return code alone says nothing about which algorithms were used.
+			const connectArg = mockClient.connect.mock.calls[0][0] as {
+				algorithms: {
+					kex: {append: string[]};
+					cipher: {append: string[]};
+					serverHostKey: {append: string[]};
+				};
+			};
+			expect(connectArg.algorithms.kex.append).toEqual([
+				'diffie-hellman-group1-sha1',
+			]);
+			expect(connectArg.algorithms.cipher.append).toEqual(['3des-cbc']);
+			expect(connectArg.algorithms.serverHostKey.append).toEqual(['ssh-rsa']);
+		});
+
+		it('should default the percent thresholds to 20/40 when omitted', async () => {
+			const mockStderrStream = {
+				on: jest
+					.fn()
+					.mockImplementation((_event, _callback) => mockStderrStream),
+			};
+			const mockStream = {
+				setEncoding: jest.fn(),
+				stderr: mockStderrStream,
+				on: jest.fn().mockImplementation((event, callback) => {
+					if (event === 'data') {
+						callback('DrayTek>');
+						callback('Downstream: 100000000 bps\nUpstream: 50000000 bps');
+						callback('DrayTek>');
+					} else if (event === 'close') {
+						callback();
+					}
+					return mockStream;
+				}),
+				write: jest.fn(),
+				pipe: jest.fn(),
+			};
+			const mockClient = {
+				on: jest.fn().mockImplementation((event, callback) => {
+					if (event === 'ready') {
+						callback();
+					}
+					return mockClient;
+				}),
+				shell: jest.fn().mockImplementation((options, callback) => {
+					callback(null, mockStream);
+				}),
+				connect: jest.fn(),
+				end: jest.fn(),
+			};
+			(Client as any).mockImplementation(() => mockClient);
+
+			// No warningPercentBelow / criticalPercentBelow supplied: the perfdata
+			// warn/crit must reflect the 20 / 40 that meta.params now declares
+			// (80 Mbps and 60 Mbps of a 100 Mbps booking), not an unset threshold.
+			const result = await checkVigor165Vdsl({
+				host: '192.168.111.1',
+				username: 'admin',
+				password: 'secret',
+				bookedDownstreamMbps: '100',
+			});
+
+			const downstream = (result.performanceData ?? []).find(
+				(entry) => entry.label === 'downstream_mbps',
+			);
+			expect(downstream).toBeDefined();
+			// round() returns a toFixed(2) string, so the 20/40 fallbacks surface
+			// as "80.00" / "60.00" against a 100 Mbps booking.
+			expect(downstream?.warn).toBe('80.00');
+			expect(downstream?.crit).toBe('60.00');
 		});
 
 		it('should accept custom kexAlgorithms', async () => {

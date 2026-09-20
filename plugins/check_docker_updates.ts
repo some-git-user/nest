@@ -300,6 +300,19 @@ const readSourceFile = (
 	}
 };
 
+/**
+ * A reference that would be read as an option rather than an image name.
+ *
+ * Image references come from operator-supplied compose files and Dockerfiles,
+ * so they are not trusted to be well-formed. A value beginning with `-` would be
+ * parsed by the docker CLI as a flag — `--privileged`, `-H tcp://attacker`, and
+ * so on — which is argument injection: not shell injection, but the same class
+ * of "data becomes an option". Rejecting the leading dash closes it, and the
+ * `--` end-of-options separator added at each call site is a second barrier for
+ * any reference that reaches the CLI some other way.
+ */
+export const isUnsafeRef = (ref: string): boolean => ref.startsWith('-');
+
 const getLocalDigest = async (
 	runner: DockerRunner,
 	ref: string,
@@ -309,9 +322,10 @@ const getLocalDigest = async (
 	const result = await runner([
 		'image',
 		'inspect',
-		ref,
 		'--format',
 		'{{json .RepoDigests}}',
+		'--',
+		ref,
 	]);
 	if (!result.ok) {
 		return {kind: 'error'};
@@ -328,9 +342,10 @@ const getRemoteDigest = async (
 		'buildx',
 		'imagetools',
 		'inspect',
-		ref,
 		'--format',
 		'{{json .Manifest}}',
+		'--',
+		ref,
 	]);
 	if (!result.ok) {
 		return undefined;
@@ -465,7 +480,17 @@ export const checkDockerUpdates = async (
 
 	const ignoreMatch = (ref: string): boolean =>
 		config.ignore.some((token) => ref.includes(token));
-	const refs = [...new Set(collected)].filter((ref) => !ignoreMatch(ref));
+	const unique = [...new Set(collected)];
+
+	// A reference that starts with `-` is argument injection, not a typo worth
+	// trying: drop it and say why rather than hand it to the CLI.
+	const unsafeRefs = unique.filter(
+		(ref) => !ignoreMatch(ref) && isUnsafeRef(ref),
+	);
+	for (const ref of unsafeRefs) {
+		sourceErrors.push(`skipped unsafe image reference "${ref}"`);
+	}
+	const refs = unique.filter((ref) => !ignoreMatch(ref) && !isUnsafeRef(ref));
 
 	if (refs.length === 0) {
 		const reason =

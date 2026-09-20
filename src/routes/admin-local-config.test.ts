@@ -29,6 +29,7 @@ jest.mock('../config/env', () => ({
 	env: {
 		ADMIN_UI_MOUNT_PATH: '/admin',
 		ADMIN_LOGIN_RATE_LIMIT_MAX: 5,
+		ADMIN_TEST_RATE_LIMIT_MAX: 20,
 		RATE_LIMIT_WINDOW_MS: 60_000,
 		PLUGINS_DIR: 'plugins',
 		API_KEY: '',
@@ -163,11 +164,33 @@ describe('admin-local-config route', () => {
 			const options = mockedRateLimit.mock.calls.map(
 				([optionsArg]) => optionsArg,
 			);
-			// One limiter for login, one for the authenticated admin surface.
-			expect(options.length).toBeGreaterThanOrEqual(2);
+			// One limiter for login, one for the authenticated admin surface,
+			// one for the plugin-test spawn path.
+			expect(options.length).toBeGreaterThanOrEqual(3);
 			const authLimiter = options.find((opt) => opt?.skipSuccessfulRequests);
 			expect(authLimiter).toBeDefined();
 			expect(authLimiter?.max).toBe(5);
+		});
+
+		it('rate-limits successful plugin test runs', () => {
+			jest.clearAllMocks();
+			jest.isolateModules(() => {
+				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				require('./admin-local-config');
+			});
+
+			const mockedRateLimit = jest.mocked(rateLimit);
+			const options = mockedRateLimit.mock.calls.map(
+				([optionsArg]) => optionsArg,
+			);
+			// The test limiter must NOT skip successes: a successful test is a
+			// root process spawn, and that is exactly what needs counting.
+			const testLimiter = options.find(
+				(opt) => opt?.max === 20 && !opt?.skipSuccessfulRequests,
+			);
+			// A limiter counting successful test runs must exist.
+			expect(testLimiter).toBeDefined();
+			expect(testLimiter?.message).toContain('Too many plugin test runs');
 		});
 	});
 

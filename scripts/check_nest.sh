@@ -238,7 +238,22 @@ if [[ "$is_local_config" == "true" ]]; then
         curl_args+=(-H "$NEST_API_KEY_HEADER: $NEST_API_KEY")
     fi
     
-    # Build JSON body directly from command_parameters
+    # Build JSON body directly from command_parameters.
+    #
+    # Values are escaped before being embedded: a value containing `"` or `\`
+    # would otherwise produce malformed JSON (or, worse, let a value close the
+    # string and inject a sibling key). Backslash must be escaped first or it
+    # double-escapes the escapes that follow.
+    json_escape() {
+        local s="$1"
+        s="${s//\\/\\\\}"
+        s="${s//\"/\\\"}"
+        s="${s//$'\n'/\\n}"
+        s="${s//$'\r'/\\r}"
+        s="${s//$'\t'/\\t}"
+        printf '%s' "$s"
+    }
+
     json_body="{"
     first=true
     for param in "${command_parameters[@]}"; do
@@ -250,7 +265,7 @@ if [[ "$is_local_config" == "true" ]]; then
         else
             json_body+=","
         fi
-        json_body+="\"$key\":\"$value\""
+        json_body+="\"$(json_escape "$key")\":\"$(json_escape "$value")\""
     done
     json_body+="}"
     

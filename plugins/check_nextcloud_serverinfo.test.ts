@@ -3,8 +3,31 @@ import {
 	buildHeaders,
 	checkNextcloudServerinfo,
 	getStatusText,
+	isBlockedIpAddress,
 	meta,
 } from './check_nextcloud_serverinfo';
+
+// The plugin resolves the target host before dialing it, so the suite stubs DNS:
+// without it every test would perform a real lookup, and the outcome would
+// depend on the resolver of whoever runs the tests. `dns.promises` is a lazy
+// getter on the real module, so Jest's automock leaves it undefined — the
+// factory has to provide it explicitly.
+const mockLookup = jest.fn();
+jest.mock('dns', () => ({
+	__esModule: true,
+	default: {promises: {lookup: (...args: unknown[]) => mockLookup(...args)}},
+	promises: {lookup: (...args: unknown[]) => mockLookup(...args)},
+}));
+
+/**
+ * Answer every lookup with a public address.
+ *
+ * Called from beforeEach so a test that wants a specific answer can override it
+ * afterwards.
+ */
+const resolveToPublic = (): void => {
+	mockLookup.mockResolvedValue([{address: '93.184.216.34', family: 4}]);
+};
 
 type HealthyResponse = {
 	ocs: {
@@ -193,6 +216,7 @@ describe('buildHeaders utility', () => {
 describe('checkNextcloudServerinfo plugin', () => {
 	beforeEach(() => {
 		jest.restoreAllMocks();
+		resolveToPublic();
 	});
 
 	test('exports usage metadata and embedded setup guide', () => {
@@ -1225,5 +1249,234 @@ describe('checkNextcloudServerinfo plugin', () => {
 		expect(result.message).toContain('WARNING');
 		expect(result.message).toContain('free space');
 		expect(result.message).toContain('cpu load');
+	});
+});
+
+describe('isBlockedIpAddress', () => {
+	test('blocks loopback, link-local, unspecified, multicast and reserved (v4)', () => {
+		for (const address of [
+			'127.0.0.1',
+			'127.8.9.10',
+			'0.0.0.0',
+			'169.254.169.254',
+			'169.254.1.1',
+			'224.0.0.1',
+			'239.255.255.255',
+			'255.255.255.255',
+		]) {
+			expect(isBlockedIpAddress(address)).toBe(true);
+		}
+	});
+
+	test('blocks loopback, unspecified, link-local and multicast (v6)', () => {
+		for (const address of [
+			'::1',
+			'::',
+			'fe80::1',
+			'febf::dead:beef',
+			'ff02::1',
+			'ffff::1',
+		]) {
+			expect(isBlockedIpAddress(address)).toBe(true);
+		}
+	});
+
+	test('unwraps IPv4-mapped and IPv4-compatible v6 forms', () => {
+		// The bypass this closes: writing loopback as a v6 literal.
+		expect(isBlockedIpAddress('::ffff:127.0.0.1')).toBe(true);
+		expect(isBlockedIpAddress('::ffff:169.254.169.254')).toBe(true);
+		expect(isBlockedIpAddress('::127.0.0.1')).toBe(true);
+		expect(isBlockedIpAddress('[::ffff:127.0.0.1]')).toBe(true);
+	});
+
+	test('allows public addresses and the RFC1918 / ULA ranges', () => {
+		// A LAN or IPv6-ULA Nextcloud is the legitimate case; blocking these
+		// would break real monitoring rather than improve it.
+		for (const address of [
+			'93.184.216.34',
+			'8.8.8.8',
+			'10.0.0.5',
+			'172.16.4.4',
+			'192.168.1.20',
+			'fc00::1',
+			'fd12:3456::78',
+			'2001:4860:4860::8888',
+			// Leading group elided: nothing to parse, so nothing to block.
+			'::abcd:ef01',
+		]) {
+			expect(isBlockedIpAddress(address)).toBe(false);
+		}
+	});
+
+	test('allows anything that is not an IP address', () => {
+		// A hostname is not judged here; it is resolved first.
+		expect(isBlockedIpAddress('cloud.example.com')).toBe(false);
+		expect(isBlockedIpAddress('localhost')).toBe(false);
+		expect(isBlockedIpAddress('999.1.1.1')).toBe(false);
+	});
+
+	test('ignores a v6 zone id when classifying', () => {
+		expect(isBlockedIpAddress('fe80::1%eth0')).toBe(true);
+		expect(isBlockedIpAddress('[fe80::1%eth0]')).toBe(true);
+	});
+});
+
+describe('checkNextcloudServerinfo SSRF guard', () => {
+	beforeEach(() => {
+		jest.restoreAllMocks();
+		// restoreAllMocks undoes spies but leaves call counts from earlier
+		// suites, which would make the not.toHaveBeenCalled assertions here lie.
+		mockLookup.mockClear();
+	});
+
+	test('refuses an IPv4 literal loopback target without dialing it', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'http://127.0.0.1',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
+		expect(result.message).toContain('blocked');
+		expect(result.message).toContain('127.0.0.1');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('refuses the cloud instance-metadata address', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'http://169.254.169.254',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
+		expect(result.message).toContain('169.254.169.254');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('refuses an IPv6 loopback literal in bracket form', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'http://[::1]',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('refuses a hostname that resolves to a blocked address', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+		mockLookup.mockResolvedValue([{address: '127.0.0.1', family: 4}]);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://evil.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
+		expect(result.message).toContain('evil.example.com');
+		expect(result.message).toContain('127.0.0.1');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('refuses when ANY of several resolved addresses is blocked', async () => {
+		// A multi-homed name must not be allowed because one answer is public.
+		const fetchMock = mockFetch(buildHealthyResponse());
+		mockLookup.mockResolvedValue([
+			{address: '93.184.216.34', family: 4},
+			{address: '169.254.169.254', family: 4},
+		]);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://multi.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('allows a hostname that resolves only to public addresses', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+		resolveToPublic();
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.OK);
+		expect(fetchMock).toHaveBeenCalled();
+	});
+
+	test('allows a LAN address, which is the legitimate target', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+		mockLookup.mockResolvedValue([{address: '192.168.1.40', family: 4}]);
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.lan',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.OK);
+		expect(fetchMock).toHaveBeenCalled();
+	});
+
+	test('allows a public IP literal without consulting DNS', async () => {
+		const fetchMock = mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://93.184.216.34',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.OK);
+		expect(mockLookup).not.toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalled();
+	});
+
+	test('does not block on a DNS failure', async () => {
+		// An unresolvable name cannot be dialled anyway, so refusing here would
+		// only mask the real error and add a branch with no security value.
+		const fetchMock = mockFetch(buildHealthyResponse());
+		mockLookup.mockRejectedValue(new Error('ENOTFOUND'));
+
+		const result = await checkNextcloudServerinfo({
+			baseUrl: 'https://cloud.example.com',
+			token: 'monitoring-token',
+		});
+
+		expect(result.code).toBe(NagiosReturnCodes.OK);
+		expect(fetchMock).toHaveBeenCalled();
+	});
+
+	test('checks the host before the request, not after', async () => {
+		// The token must never leave toward a blocked host, so the guard runs
+		// before fetch rather than filtering the response.
+		const fetchMock = mockFetch(buildHealthyResponse());
+
+		await checkNextcloudServerinfo(
+			{baseUrl: 'http://localhost', token: 'monitoring-token'},
+			async () => ['127.0.0.1'],
+		);
+
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	test('uses the injected resolver rather than the system one', async () => {
+		const resolver = jest.fn(async () => ['10.1.2.3']);
+		mockFetch(buildHealthyResponse());
+
+		const result = await checkNextcloudServerinfo(
+			{baseUrl: 'https://cloud.example.com', token: 'monitoring-token'},
+			resolver,
+		);
+
+		expect(resolver).toHaveBeenCalledWith('cloud.example.com');
+		expect(result.code).toBe(NagiosReturnCodes.OK);
 	});
 });

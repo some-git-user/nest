@@ -173,4 +173,8 @@ export const env = cleanEnv(process.env, {
 	// Login is the only unauthenticated write endpoint, so it gets a much tighter
 	// bucket than RATE_LIMIT_MAX.
 	ADMIN_LOGIN_RATE_LIMIT_MAX: num({default: 5}),
+	// Each successful admin plugin test spawns a real plugin process, and the
+	// auth limiter deliberately ignores successes, so the spawn path needs its
+	// own counter. Loose enough for a human clicking Test in the editor.
+	ADMIN_TEST_RATE_LIMIT_MAX: num({default: 20}),
 });

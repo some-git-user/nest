@@ -56,7 +56,7 @@ export const meta: PluginMeta = {
 <pre><code>GET /plugins/check-test?nagiosReturnMessage=High+load+detected&nagiosReturnValue=1&performanceData=true</code></pre>
 
 <h3>Using check_nest.sh</h3>
-<pre><code>./check_nest.sh check-test nagiosReturnMessage=Test+message nagiosReturnValue=0 performanceData=false</code></pre>` as HtmlTemplateString,
+<pre><code>./check_nest.sh check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=false</code></pre>` as HtmlTemplateString,
 	params: [
 		{
 			name: 'nagiosReturnMessage',
