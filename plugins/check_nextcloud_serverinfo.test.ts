@@ -720,129 +720,232 @@ describe('checkNextcloudServerinfo plugin', () => {
 		expect(result.message).toContain('socket closed');
 	});
 
-	test('returns WARNING when fetch fails with SSL certificate error in error.cause', async () => {
+	test('retries insecurely on a TLS error and aggregates the cert WARNING with metrics', async () => {
 		const sslError = new Error('certificate has expired');
 		(sslError as NodeJS.ErrnoException).code = 'CERT_HAS_EXPIRED';
 		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
 		fetchError.cause = sslError;
 
 		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest.fn().mockResolvedValue(buildHealthyResponse());
 
-		const result = await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
 
-		expect(result.code).toBe(1);
+		expect(insecureFetch).toHaveBeenCalledWith(
+			expect.stringContaining('/ocs/v2.php/apps/serverinfo/api/v1/info'),
+			expect.objectContaining({'NC-Token': 'monitoring-token'}),
+		);
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
 		expect(result.message).toContain('SSL certificate issue');
 		expect(result.message).toContain('certificate has expired');
+		// The payload metrics are still collected and reported alongside.
+		expect(result.performanceData).toBeDefined();
+		expect(
+			result.performanceData?.some((p) => p.label === 'free_space_gib'),
+		).toBe(true);
 	});
 
-	test('uses https.Agent for HTTPS endpoints', async () => {
-		const response = buildHealthyResponse();
-		mockFetch(response);
-
-		await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
-
-		expect(global.fetch).toHaveBeenCalled();
-		const fetchCall = (global.fetch as jest.Mock).mock.calls[0] as [
-			string,
-			{agent?: unknown},
-		];
-		expect(fetchCall[1].agent).toBeDefined();
-	});
-
-	test('does not use https.Agent for HTTP endpoints', async () => {
-		const response = buildHealthyResponse();
-		mockFetch(response);
-
-		await checkNextcloudServerinfo({
-			baseUrl: 'http://cloud.example.com',
-			token: 'monitoring-token',
-		});
-
-		expect(global.fetch).toHaveBeenCalled();
-		const fetchCall = (global.fetch as jest.Mock).mock.calls[0] as [
-			string,
-			{agent?: unknown},
-		];
-		expect(fetchCall[1].agent).toBeUndefined();
-	});
-
-	test('returns WARNING for self-signed certificate error', async () => {
+	test('reports a WARNING with no metrics when the insecure retry also fails', async () => {
 		const sslError = new Error('self-signed certificate');
 		(sslError as NodeJS.ErrnoException).code = 'DEPTH_ZERO_SELF_SIGNED_CERT';
 		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
 		fetchError.cause = sslError;
 
 		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest
+			.fn()
+			.mockRejectedValue(new Error('socket hang up'));
 
-		const result = await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
 
-		expect(result.code).toBe(1);
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
 		expect(result.message).toContain('SSL certificate issue');
-		expect(result.message).toContain('self-signed certificate');
+		expect(result.message).toContain('socket hang up');
+		expect(result.performanceData).toBeUndefined();
 	});
 
-	test('returns WARNING when causeMessage is used for certDetails', async () => {
-		const sslError = new Error('unable to verify certificate');
-		(sslError as NodeJS.ErrnoException).code =
-			'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
-		const fetchError = new Error('request failed') as Error & {cause?: unknown};
-		fetchError.cause = sslError;
-
+	test('aggregates a cert WARNING with a low free-space CRITICAL from the retry payload', async () => {
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		fetchError.cause = new Error('unable to verify the first certificate');
 		global.fetch = jest.fn().mockRejectedValue(fetchError);
 
-		const result = await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
+		const lowSpace = buildHealthyResponse();
+		lowSpace.ocs.data.nextcloud.system.freespace = 5 * 1024 * 1024 * 1024;
+		const insecureFetch = jest.fn().mockResolvedValue(lowSpace);
 
-		expect(result.code).toBe(1);
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.CRITICAL);
 		expect(result.message).toContain('SSL certificate issue');
-		expect(result.message).toContain('unable to verify certificate');
+		expect(result.message).toContain('free space');
 	});
 
-	test('returns WARNING when error message contains SSL keywords but cause is non-Error', async () => {
-		const fetchError = new Error('certificate validation failed') as Error & {
-			cause?: unknown;
-		};
-		fetchError.cause = 'some non-error cause';
+	test('does not retry insecurely for a non-TLS failure', async () => {
+		global.fetch = jest.fn().mockRejectedValue(new Error('socket closed'));
+		const insecureFetch = jest.fn();
 
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
+		expect(result.message).toContain('request error');
+		expect(result.message).toContain('socket closed');
+		expect(insecureFetch).not.toHaveBeenCalled();
+	});
+
+	test('does not retry insecurely over plain HTTP', async () => {
+		// A TLS error cannot occur on http://, so the insecure retry must not run.
+		global.fetch = jest
+			.fn()
+			.mockRejectedValue(new Error('certificate has expired'));
+		const insecureFetch = jest.fn();
+
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'http://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.UNKNOWN);
+		expect(result.message).toContain('request error');
+		expect(insecureFetch).not.toHaveBeenCalled();
+	});
+
+	test('classifies a TLS error by cause code alone', async () => {
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		const cause = new Error('boom') as NodeJS.ErrnoException;
+		cause.code = 'ERR_TLS_CERT_ALTNAME_INVALID';
+		fetchError.cause = cause;
 		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest
+			.fn()
+			.mockRejectedValue(new Error('still broken'));
 
-		const result = await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
 
-		expect(result.code).toBe(1);
-		expect(result.message).toContain('SSL certificate issue');
-		expect(result.message).toContain('some non-error cause');
+		expect(insecureFetch).toHaveBeenCalled();
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
+		expect(result.message).toContain('still broken');
 	});
 
-	test('returns WARNING when cause is empty string and uses errorMessage for certDetails', async () => {
+	test('falls back to the wrapper message when the cause has no message', async () => {
 		const fetchError = new Error('certificate has expired') as Error & {
 			cause?: unknown;
 		};
 		fetchError.cause = '';
-
 		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest.fn().mockRejectedValue(fetchError);
 
-		const result = await checkNextcloudServerinfo({
-			baseUrl: 'https://cloud.example.com',
-			token: 'monitoring-token',
-		});
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
 
-		expect(result.code).toBe(1);
-		expect(result.message).toContain('SSL certificate issue');
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
 		expect(result.message).toContain('certificate has expired');
+	});
+
+	test('uses a string cause message as the cert detail', async () => {
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		fetchError.cause = 'self-signed certificate in chain';
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
+		expect(result.message).toContain('self-signed certificate in chain');
+	});
+
+	test('falls back to the wrapper message when the cause is a non-Error object', async () => {
+		// cause is neither Error nor string, so the detail falls through to the
+		// wrapper message.
+		const fetchError = new Error('certificate revoked') as Error & {
+			cause?: unknown;
+		};
+		fetchError.cause = {code: 42};
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		const insecureFetch = jest.fn().mockRejectedValue(fetchError);
+
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
+		expect(result.message).toContain('certificate revoked');
+	});
+
+	test('stringifies a non-Error retry rejection as the cert detail', async () => {
+		const fetchError = new Error('fetch failed') as Error & {cause?: unknown};
+		fetchError.cause = new Error('DEPTH_ZERO_SELF_SIGNED_CERT');
+		global.fetch = jest.fn().mockRejectedValue(fetchError);
+		// The insecure retry rejects with a bare string, not an Error.
+		const insecureFetch = jest.fn().mockRejectedValue('retry blew up');
+
+		const result = await checkNextcloudServerinfo(
+			{
+				baseUrl: 'https://cloud.example.com',
+				token: 'monitoring-token',
+			},
+			undefined,
+			insecureFetch,
+		);
+
+		expect(result.code).toBe(NagiosReturnCodes.WARNING);
+		expect(result.message).toContain('retry blew up');
 	});
 
 	test('returns UNKNOWN when response shape is invalid', async () => {

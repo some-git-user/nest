@@ -238,10 +238,13 @@ echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/p
 <h2>Return Codes</h2>
 <ul>
   <li><strong>OK</strong> – Endpoint reachable and all configured thresholds are healthy</li>
-  <li><strong>WARNING</strong> – CPU load, free space, or optional update checks crossed warning thresholds</li>
+  <li><strong>WARNING</strong> – CPU load, free space, or optional update checks crossed warning thresholds, or the TLS certificate could not be verified (the check retries without verification and still reports the metrics)</li>
   <li><strong>CRITICAL</strong> – CPU load or free space crossed critical thresholds</li>
   <li><strong>UNKNOWN</strong> – Request failed, authorization failed, or the response payload was not usable</li>
-</ul>` as HtmlTemplateString,
+</ul>
+
+<h2>TLS / certificate handling</h2>
+<p>The first request verifies the server's TLS certificate. If that fails specifically because of a certificate problem (self-signed, expired, hostname mismatch, untrusted issuer), the plugin retries once without certificate verification so the instance is still monitored. The certificate problem is then reported as a <strong>WARNING</strong> and shown alongside the collected metrics rather than hiding them. If the retry also fails, only the certificate problem is reported. Non-TLS failures (timeouts, HTTP errors, malformed payloads) are reported as <strong>UNKNOWN</strong> and are never retried insecurely.</p>` as HtmlTemplateString,
 };
 
 const usageMessage = (): string =>
@@ -520,9 +523,170 @@ export const getStatusText = (code: number): string => {
 	return 'UNKNOWN';
 };
 
+/**
+ * Fetch a URL while skipping TLS certificate verification.
+ *
+ * The strict first pass uses global `fetch`, which verifies certificates. When
+ * that pass fails specifically because of a certificate problem, the plugin
+ * retries through this function so a Nextcloud instance on a self-signed or
+ * otherwise unverifiable certificate is still monitored — the certificate
+ * problem is then reported as a WARNING alongside the real metrics rather than
+ * losing the check entirely.
+ *
+ * Injectable so the retry is testable without a network: the specs pass a stub
+ * and get deterministic answers for what would otherwise be a live TLS dial.
+ *
+ * @returns The parsed JSON payload. Rejects if the request itself fails.
+ */
+export type InsecureFetch = (
+	url: string,
+	headers: Record<string, string>,
+) => Promise<unknown>;
+
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * Default {@link InsecureFetch} built on Node's `https` core module.
+ *
+ * `https.request` with `rejectUnauthorized: false` is used rather than passing a
+ * `new https.Agent({rejectUnauthorized: false})` to global `fetch`: undici's
+ * `fetch` only honours a `Dispatcher` for its `agent` option, and Node's
+ * `https.Agent` is not one, so that combination silently keeps strict
+ * verification. `https.request` honours the flag directly.
+ *
+ * `https` (and `tls`) are Node core modules, so this resolves through the
+ * plugin sandbox's `createRequire` in both filesystem and single-file (SEA)
+ * builds without any extra bundling plumbing.
+ */
+export const insecureHttpsFetch: InsecureFetch = (url, headers) =>
+	new Promise((resolve, reject) => {
+		const target = new URL(url);
+		const request = https.request(
+			{
+				protocol: target.protocol,
+				hostname: target.hostname,
+				port: target.port,
+				path: `${target.pathname}${target.search}`,
+				method: 'GET',
+				headers,
+				rejectUnauthorized: false,
+				timeout: REQUEST_TIMEOUT_MS,
+			},
+			(response) => {
+				const statusCode = response.statusCode ?? 0;
+				const chunks: Buffer[] = [];
+				response.on('data', (chunk: Buffer) => chunks.push(chunk));
+				response.on('end', () => {
+					if (statusCode < 200 || statusCode >= 300) {
+						reject(
+							new Error(
+								`HTTP ${statusCode} ${response.statusMessage ?? ''}`.trim(),
+							),
+						);
+						return;
+					}
+					const body = Buffer.concat(chunks).toString('utf8');
+					try {
+						resolve(JSON.parse(body));
+					} catch (parseError) {
+						reject(
+							new Error(
+								`Invalid JSON response: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+							),
+						);
+					}
+				});
+				response.on('error', reject);
+			},
+		);
+		request.on('timeout', () => {
+			request.destroy(
+				new Error(`request timed out after ${REQUEST_TIMEOUT_MS}ms`),
+			);
+		});
+		request.on('error', reject);
+		request.end();
+	});
+
+/**
+ * Whether an error thrown by the strict `fetch` pass is a TLS/certificate
+ * problem, as opposed to a timeout, HTTP error, or malformed payload.
+ *
+ * Node surfaces certificate failures as a `fetch failed` wrapper whose `cause`
+ * carries the real reason, either as a message (`certificate has expired`) or a
+ * TLS error code (`CERT_HAS_EXPIRED`). Both the wrapper and the cause are
+ * inspected so the classification does not depend on which layer reported it.
+ */
+const isTlsCertificateError = (error: unknown): boolean => {
+	const describe = (value: unknown): string => {
+		if (value instanceof Error) {
+			return value.message;
+		}
+		if (typeof value === 'string') {
+			return value;
+		}
+		return '';
+	};
+
+	const errorText = describe(error).toLowerCase();
+	const cause = (error as Error & {cause?: unknown})?.cause;
+	const causeText = describe(cause).toLowerCase();
+	const causeCode = (cause as {code?: string} | undefined)?.code;
+
+	const tlsMessageMarkers = [
+		'certificate',
+		'cert',
+		'self-signed',
+		'expired',
+		'unable to verify',
+		'certificate authority',
+		'tls',
+		'ssl',
+	];
+	if (tlsMessageMarkers.some((marker) => errorText.includes(marker))) {
+		return true;
+	}
+	if (tlsMessageMarkers.some((marker) => causeText.includes(marker))) {
+		return true;
+	}
+
+	const tlsErrorCodes = new Set([
+		'CERT_HAS_EXPIRED',
+		'CERT_NOT_YET_VALID',
+		'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+		'DEPTH_ZERO_SELF_SIGNED_CERT',
+		'SELF_SIGNED_CERT_IN_CHAIN',
+		'ERR_TLS_CERT_ALTNAME_INVALID',
+		'CERT_REJECTED',
+		'UNABLE_TO_GET_ISSUER_CERT',
+		'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+	]);
+	return causeCode !== undefined && tlsErrorCodes.has(causeCode);
+};
+
+/**
+ * Best-effort human-readable detail for a TLS/certificate failure.
+ *
+ * Prefers the `cause` message (the specific reason, e.g. "certificate has
+ * expired") and falls back to the wrapper message when there is no cause.
+ */
+const tlsErrorDetail = (error: unknown): string => {
+	const cause = (error as Error & {cause?: unknown})?.cause;
+	const causeMessage =
+		cause instanceof Error
+			? cause.message
+			: typeof cause === 'string'
+				? cause
+				: '';
+	return (
+		causeMessage || (error instanceof Error ? error.message : String(error))
+	);
+};
+
 export const checkNextcloudServerinfo = async (
 	params: NextcloudServerInfoParams,
 	resolveHost: HostResolver = systemHostResolver,
+	insecureFetch: InsecureFetch = insecureHttpsFetch,
 ): Promise<PluginReturn> => {
 	if (!params.baseUrl) {
 		return {
@@ -609,15 +773,29 @@ export const checkNextcloudServerinfo = async (
 		};
 	}
 
-	try {
-		const httpsAgent = endpointUrl.startsWith('https://')
-			? new https.Agent({rejectUnauthorized: false})
-			: undefined;
+	const isHttps = endpointUrl.startsWith('https://');
 
+	// The payload is fetched in two passes so a certificate problem does not
+	// lose the whole check:
+	//
+	//   1. A strict pass over `fetch`, which verifies the certificate.
+	//   2. If — and only if — that pass fails specifically on a certificate
+	//      error, an insecure retry that skips verification. When the retry
+	//      succeeds the metrics are still collected and the certificate problem
+	//      is reported as a WARNING alongside them; when it fails too there is
+	//      no payload to aggregate, so the certificate problem is all we can
+	//      report.
+	//
+	// Every other failure (timeout, non-2xx, malformed payload) short-circuits
+	// to UNKNOWN exactly as before — there is nothing to retry and nothing to
+	// aggregate.
+	let payloadUnknown: unknown;
+	let certWarning: string | undefined;
+
+	try {
 		const response = await fetch(endpointUrl, {
 			headers: buildHeaders(params),
-			signal: AbortSignal.timeout(10000),
-			...(httpsAgent && {agent: httpsAgent}),
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 		});
 
 		if (!response.ok) {
@@ -627,7 +805,34 @@ export const checkNextcloudServerinfo = async (
 			};
 		}
 
-		const payloadUnknown: unknown = await response.json();
+		payloadUnknown = await response.json();
+	} catch (error) {
+		const errorText = error instanceof Error ? error.message : String(error);
+
+		if (isHttps && isTlsCertificateError(error)) {
+			try {
+				payloadUnknown = await insecureFetch(endpointUrl, buildHeaders(params));
+				certWarning = `SSL certificate issue: ${tlsErrorDetail(error)}`;
+			} catch (retryError) {
+				return {
+					message: `Nextcloud serverinfo WARNING: SSL certificate issue - ${tlsErrorDetail(retryError)}`,
+					code: NagiosReturnCodes.WARNING,
+				};
+			}
+		} else if (errorText.toLowerCase().includes('timeout')) {
+			return {
+				message: `Nextcloud serverinfo request error: Network timeout - request timed out. The server may be unreachable.`,
+				code: NagiosReturnCodes.UNKNOWN,
+			};
+		} else {
+			return {
+				message: `Nextcloud serverinfo request error: ${errorText}`,
+				code: NagiosReturnCodes.UNKNOWN,
+			};
+		}
+	}
+
+	{
 		if (!isNextcloudServerInfoResponse(payloadUnknown)) {
 			return {
 				message: 'Nextcloud serverinfo returned an unexpected payload shape.',
@@ -687,6 +892,13 @@ export const checkNextcloudServerinfo = async (
 			code = Math.max(code, candidate) as NagiosReturnCode;
 			findings.push(detail);
 		};
+
+		// A certificate problem recovered via the insecure retry is reported as a
+		// WARNING and aggregated with whatever the payload shows, rather than
+		// short-circuiting the other findings.
+		if (certWarning) {
+			bumpCode(NagiosReturnCodes.WARNING, certWarning);
+		}
 
 		if (typeof freeSpaceGiB === 'number') {
 			if (freeSpaceGiB <= criticalFreeSpaceGiB) {
@@ -813,61 +1025,6 @@ export const checkNextcloudServerinfo = async (
 			message,
 			code,
 			performanceData,
-		};
-	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		const errorString = errorMessage.toLowerCase();
-
-		// Check the error cause for SSL/certificate related errors
-		const cause = (error as Error & {cause?: unknown})?.cause;
-		const causeMessage =
-			cause instanceof Error
-				? cause.message
-				: cause != null && typeof cause === 'string'
-					? cause
-					: '';
-		const causeString = causeMessage.toLowerCase();
-		const causeCode = (cause as {code?: string} | undefined)?.code;
-
-		// Check for SSL/certificate related errors in both error and cause
-		if (
-			errorString.includes('certificate') ||
-			errorString.includes('cert') ||
-			errorString.includes('self-signed') ||
-			errorString.includes('expired') ||
-			errorString.includes('unable to verify') ||
-			errorString.includes('certificate authority') ||
-			errorString.includes('tls') ||
-			errorString.includes('ssl') ||
-			causeString.includes('certificate') ||
-			causeString.includes('cert') ||
-			causeString.includes('self-signed') ||
-			causeString.includes('expired') ||
-			causeString.includes('unable to verify') ||
-			causeString.includes('certificate authority') ||
-			causeString.includes('tls') ||
-			causeString.includes('ssl') ||
-			causeCode === 'CERT_HAS_EXPIRED' ||
-			causeCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-			causeCode === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
-			causeCode === 'SELF_SIGNED_CERT_IN_CHAIN' ||
-			causeCode === 'ERR_TLS_CERT_ALTNAME_INVALID'
-		) {
-			const certDetails = causeMessage || errorMessage;
-			return {
-				message: `Nextcloud serverinfo WARNING: SSL certificate issue - ${certDetails}`,
-				code: NagiosReturnCodes.WARNING,
-			};
-		}
-		if (errorString.includes('timeout')) {
-			return {
-				message: `Nextcloud serverinfo request error: Network timeout - request timed out. The server may be unreachable.`,
-				code: NagiosReturnCodes.UNKNOWN,
-			};
-		}
-		return {
-			message: `Nextcloud serverinfo request error: ${errorMessage}`,
-			code: NagiosReturnCodes.UNKNOWN,
 		};
 	}
 };
