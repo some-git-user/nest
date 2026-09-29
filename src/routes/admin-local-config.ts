@@ -8,6 +8,7 @@ import {
 	getAdminEntries,
 	postAdminLogin,
 	postAdminLogout,
+	postAdminRefreshSession,
 	postAdminRevert,
 	postAdminSave,
 	postAdminTest,
@@ -152,6 +153,11 @@ router.post('/logout', postAdminLogout);
 
 router.get('/api/commands', getAdminCommands);
 router.get('/api/entries', getAdminEntries);
+router.post(
+	'/api/refresh-session',
+	requireAdminApiHeader,
+	postAdminRefreshSession,
+);
 router.post('/api/validate', requireAdminApiHeader, postAdminValidate);
 router.post(
 	'/api/test',

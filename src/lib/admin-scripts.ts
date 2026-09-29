@@ -26,6 +26,12 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 	var entries = Array.isArray(state.entries) ? state.entries : [];
 	var drift = state.drift || {};
 	var contentHash = typeof state.contentHash === 'string' ? state.contentHash : '';
+	// Unix-seconds expiry of the admin session cookie, when the caller logged in
+	// with one. A header-authenticated caller has no cookie and so no expiry, and
+	// gets no countdown. Kept in seconds to match the state; compared against
+	// Date.now()/1000 in the tick.
+	var sessionExpiresAt =
+		typeof state.sessionExpiresAt === 'number' ? state.sessionExpiresAt : 0;
 	var fieldsByCommand = {};
 	commands.forEach(function (command) {
 		fieldsByCommand[command.command] = Array.isArray(command.fields) ? command.fields : [];
@@ -648,6 +654,89 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				window.location.assign('/admin/local-config');
 			});
 		});
+	}
+
+	// Session countdown, shown in the header next to Sign out. The cookie is
+	// HttpOnly, so the only way to know when it lapses is the expiry the server
+	// embedded in the page state. Tick once a second: show mm:ss remaining, turn
+	// amber under a minute, and on expiry replace the countdown with a sign-in
+	// prompt rather than letting the next save/validate fail with a bare 401.
+	//
+	// A header-authenticated caller has no cookie and no expiry, so the server
+	// renders neither the timer nor the Refresh button (sessionExpiresAt is 0 and
+	// #sessionTimer is absent): there is nothing time-limited to show or extend.
+	var sessionTimerElement = document.getElementById('sessionTimer');
+	var sessionErrorElement = document.getElementById('sessionError');
+	var refreshSessionButton = document.getElementById('refreshSessionButton');
+	if (
+		sessionExpiresAt > 0 &&
+		sessionTimerElement instanceof HTMLElement
+	) {
+		var formatRemaining = function (seconds) {
+			var mm = Math.floor(seconds / 60);
+			var ss = seconds % 60;
+			return mm + ':' + (ss < 10 ? '0' : '') + ss;
+		};
+		var SESSION_WARN_SECONDS = 60;
+		var sessionTimerId = 0;
+		var renderSessionTimer = function () {
+			var remaining = sessionExpiresAt - Math.floor(Date.now() / 1000);
+			if (remaining <= 0) {
+				sessionTimerElement.className = 'session-timer expired';
+				sessionTimerElement.textContent =
+					'Session expired. Reload to sign in again.';
+				return false;
+			}
+			sessionTimerElement.className =
+				'session-timer' +
+				(remaining <= SESSION_WARN_SECONDS ? ' warn' : '');
+			sessionTimerElement.textContent =
+				'Session expires in ' + formatRemaining(remaining);
+			return true;
+		};
+		var startSessionTimer = function () {
+			if (sessionTimerId) {
+				window.clearInterval(sessionTimerId);
+			}
+			if (renderSessionTimer()) {
+				sessionTimerId = window.setInterval(function () {
+					if (!renderSessionTimer()) {
+						window.clearInterval(sessionTimerId);
+						sessionTimerId = 0;
+					}
+				}, 1000);
+			}
+		};
+		startSessionTimer();
+
+		if (refreshSessionButton instanceof HTMLElement) {
+			refreshSessionButton.addEventListener('click', function () {
+				api('/admin/api/refresh-session', {})
+					.then(function (body) {
+						// No success toast: the countdown visibly resetting is the
+						// confirmation. A failure is shown inline in the header,
+						// next to the timer it concerns, not in the page-wide
+						// status line far below. #sessionError is always rendered
+						// beside the refresh button, so it is present here.
+						if (sessionErrorElement instanceof HTMLElement) {
+							sessionErrorElement.hidden = true;
+							sessionErrorElement.textContent = '';
+						}
+						if (typeof body.sessionExpiresAt === 'number') {
+							sessionExpiresAt = body.sessionExpiresAt;
+						}
+						startSessionTimer();
+					})
+					.catch(function (error) {
+						if (sessionErrorElement instanceof HTMLElement) {
+							sessionErrorElement.hidden = false;
+							sessionErrorElement.textContent = String(
+								error.message || error,
+							);
+						}
+					});
+			});
+		}
 	}
 
 	renderDrift();

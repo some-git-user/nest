@@ -13,6 +13,7 @@ import {
 	hasValidAdminPassword,
 	hasValidAdminSession,
 	isAdminSessionCookieValid,
+	readAdminSessionExpiry,
 	readCookie,
 	resetAdminSessionSecretCache,
 } from './admin-auth';
@@ -163,6 +164,37 @@ describe('admin-auth', () => {
 				cookie: `${ADMIN_SESSION_COOKIE_NAME}=${futureCookie()}`,
 			});
 			expect(hasValidAdminSession(req)).toBe(true);
+		});
+	});
+
+	describe('readAdminSessionExpiry', () => {
+		it('returns undefined when the cookie is absent', () => {
+			expect(readAdminSessionExpiry(requestWithHeaders({}))).toBeUndefined();
+		});
+
+		it('returns undefined for an invalid cookie value', () => {
+			const req = requestWithHeaders({
+				cookie: `${ADMIN_SESSION_COOKIE_NAME}=garbage`,
+			});
+			expect(readAdminSessionExpiry(req)).toBeUndefined();
+		});
+
+		it('returns undefined for an expired cookie', () => {
+			const req = requestWithHeaders({
+				cookie: `${ADMIN_SESSION_COOKIE_NAME}=${futureCookie(-10)}`,
+			});
+			expect(readAdminSessionExpiry(req)).toBeUndefined();
+		});
+
+		it('returns the expiry embedded in a valid cookie', () => {
+			const req = requestWithHeaders({
+				cookie: `${ADMIN_SESSION_COOKIE_NAME}=${futureCookie(600)}`,
+			});
+			const nowSeconds = Math.floor(Date.now() / 1000);
+			const expiry = readAdminSessionExpiry(req);
+
+			expect(expiry).toBeGreaterThanOrEqual(nowSeconds + 599);
+			expect(expiry).toBeLessThanOrEqual(nowSeconds + 600);
 		});
 	});
 

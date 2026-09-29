@@ -79,6 +79,7 @@ describe('admin-local-config route', () => {
 				controller.postAdminTest,
 				controller.postAdminSave,
 				controller.postAdminRevert,
+				controller.postAdminRefreshSession,
 			] as unknown as jest.Mock[]
 		).forEach((handler) => {
 			handler.mockImplementation((_req: Request, res: Response) => {
@@ -220,7 +221,13 @@ describe('admin-local-config route', () => {
 	});
 
 	describe('requireAdminApiHeader', () => {
-		const apiPaths = ['/validate', '/test', '/save', '/revert'];
+		const apiPaths = [
+			'/validate',
+			'/test',
+			'/save',
+			'/revert',
+			'/refresh-session',
+		];
 
 		it.each(apiPaths)(
 			'rejects POST /api%s with 403 when the header is missing',

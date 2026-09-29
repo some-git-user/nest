@@ -61,6 +61,33 @@ test.describe('admin authentication', () => {
 		await expect(page.locator('#saveButton')).toBeVisible();
 	});
 
+	test('the header counts the session down and can refresh it', async ({
+		page,
+	}) => {
+		await page.goto('/admin');
+		await page
+			.locator('form.login input[name="adminPassword"]')
+			.fill(ADMIN_PASSWORD);
+		await page.getByRole('button', {name: 'Sign in'}).click();
+		await expect(page).toHaveURL(/\/admin\/local-config$/);
+
+		// A cookie-authenticated session gets a live countdown in the header.
+		const timer = page.locator('#sessionTimer');
+		await expect(timer).toBeVisible();
+		await expect(timer).toContainText('Session expires in');
+
+		// Refreshing re-issues the cookie; the countdown resetting is the only
+		// feedback, so assert on the request and the still-running timer.
+		const [refreshResponse] = await Promise.all([
+			page.waitForResponse((candidate) =>
+				candidate.url().endsWith('/admin/api/refresh-session'),
+			),
+			page.locator('#refreshSessionButton').click(),
+		]);
+		expect(refreshResponse.status()).toBe(200);
+		await expect(timer).toContainText('Session expires in');
+	});
+
 	test('the session cookie is set with hardening flags', async ({browser}) => {
 		const context = await browser.newContext({
 			httpCredentials: {username: 'nest', password: API_KEY},

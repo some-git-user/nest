@@ -9,6 +9,7 @@ import {
 	createAdminSessionCookieValue,
 	hasValidAdminPassword,
 	hasValidAdminSession,
+	readAdminSessionExpiry,
 } from '../lib/admin-auth';
 import {
 	applyAdminPageSecurityHeaders,
@@ -351,6 +352,35 @@ export const postAdminLogout = (_req: Request, res: Response): void => {
 };
 
 /**
+ * POST /admin/api/refresh-session
+ *
+ * Re-issues the session cookie with a fresh TTL, so an operator working in the
+ * editor is not logged out mid-task. Only a request that already presents a
+ * valid session cookie can be refreshed: a header-authenticated caller has no
+ * cookie and no expiry to extend, and gets an error instead. The response
+ * carries the new expiry so the page countdown resets without a reload.
+ */
+export const postAdminRefreshSession = (req: Request, res: Response): void => {
+	if (readAdminSessionExpiry(req) === undefined) {
+		sendAdminJson(res, HttpStatusCodes.BAD_REQUEST, {
+			ok: false,
+			message:
+				'No admin session cookie to refresh. Session refresh only applies to cookie-authenticated browser sessions.',
+		});
+		return;
+	}
+
+	const cookieValue = createAdminSessionCookieValue();
+	res.setHeader('Set-Cookie', buildAdminSessionCookie(cookieValue));
+	sendAdminJson(res, HttpStatusCodes.OK, {
+		ok: true,
+		sessionExpiresAt: Number(
+			cookieValue.slice(0, cookieValue.lastIndexOf('.')),
+		),
+	});
+};
+
+/**
  * GET /admin/local-config
  *
  * The editor page. Unauthenticated browsers get the login form; a caller that
@@ -385,6 +415,10 @@ export const getAdminConfigPage = (req: Request, res: Response): void => {
 		contentHash: hashConfigContent(rawContent),
 		drift: driftPayload(),
 		startupValidationFailed: hasRuntimeValidationFailed(),
+		// Unix-seconds expiry of the session cookie, so the editor can show a
+		// countdown. Undefined for a header-authenticated caller, whose access
+		// is not time-limited and which therefore gets no timer.
+		sessionExpiresAt: readAdminSessionExpiry(req),
 	};
 
 	res.setHeader('Content-Type', 'text/html; charset=utf-8');

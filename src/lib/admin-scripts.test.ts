@@ -149,5 +149,29 @@ describe('admin-scripts', () => {
 		it('contains no inline </script> sequence', () => {
 			expect(ADMIN_CONFIG_SCRIPT).not.toContain('</script>');
 		});
+
+		it('counts the session down in the header', () => {
+			// The cookie is HttpOnly, so the expiry the server embedded in the
+			// state is the only countdown source. It ticks, turns amber near the
+			// end, and stops when expired.
+			expect(ADMIN_CONFIG_SCRIPT).toContain("getElementById('sessionTimer')");
+			expect(ADMIN_CONFIG_SCRIPT).toContain('state.sessionExpiresAt');
+			expect(ADMIN_CONFIG_SCRIPT).toContain("'session-timer expired'");
+			expect(ADMIN_CONFIG_SCRIPT).toContain('SESSION_WARN_SECONDS');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('window.setInterval');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('window.clearInterval');
+		});
+
+		it('refreshes the session and reports errors inline', () => {
+			// A refresh extends the cookie; the countdown resetting is the only
+			// success feedback, and a failure prints beside the timer rather than
+			// in the page-wide status line.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('/admin/api/refresh-session');
+			expect(ADMIN_CONFIG_SCRIPT).toContain("getElementById('sessionError')");
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'sessionErrorElement.hidden = false',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('startSessionTimer()');
+		});
 	});
 });

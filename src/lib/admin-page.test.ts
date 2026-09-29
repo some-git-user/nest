@@ -107,6 +107,32 @@ describe('admin-page', () => {
 			expect(html).not.toContain('</script>"');
 			expect(html).toContain('\\u003c/script>');
 		});
+
+		it('omits the session timer and refresh button without a session expiry', () => {
+			// A header-authenticated caller has no cookie and no expiry, so their
+			// access is not time-limited: the header shows only Sign out.
+			const html = renderAdminConfigPage({entries: []});
+
+			expect(html).toContain('id="logoutButton"');
+			expect(html).not.toContain('id="sessionTimer"');
+			expect(html).not.toContain('id="sessionError"');
+			expect(html).not.toContain('id="refreshSessionButton"');
+		});
+
+		it('renders the session timer and refresh button when a session exists', () => {
+			// A cookie-authenticated caller gets a live countdown and a way to
+			// extend it, plus an inline error slot beside the timer.
+			const html = renderAdminConfigPage({
+				entries: [],
+				sessionExpiresAt: 1_800_000_000,
+			});
+
+			expect(html).toContain('id="sessionTimer"');
+			expect(html).toContain('id="sessionError"');
+			expect(html).toContain('id="refreshSessionButton"');
+			expect(html).toContain('id="logoutButton"');
+			expect(html).toContain('class="session-cluster"');
+		});
 	});
 
 	describe('renderAdminNotConfiguredPage', () => {

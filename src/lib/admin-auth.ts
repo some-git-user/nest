@@ -148,6 +148,24 @@ export const hasValidAdminSession = (req: Request): boolean => {
 };
 
 /**
+ * The Unix-seconds expiry embedded in the request's admin session cookie.
+ *
+ * The editor page uses this to render a countdown so the operator knows when
+ * the session lapses. Only a cookie that passes full validation (signature and
+ * expiry) yields a value; anything else returns undefined, so a header-authenticated
+ * caller — who holds no cookie and whose access never expires — gets no timer.
+ * Validation guarantees the payload is a numeric, safe-integer expiry, so the
+ * slice here cannot produce anything else.
+ */
+export const readAdminSessionExpiry = (req: Request): number | undefined => {
+	const cookie = readCookie(req, ADMIN_SESSION_COOKIE_NAME);
+	if (!cookie || !isAdminSessionCookieValid(cookie)) {
+		return undefined;
+	}
+	return Number(cookie.slice(0, cookie.lastIndexOf('.')));
+};
+
+/**
  * Compare a candidate admin credential against the configured one.
  *
  * Exposed separately from `hasValidAdminPassword()` because the login form reads

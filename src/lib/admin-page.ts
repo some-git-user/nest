@@ -43,6 +43,11 @@ const ADMIN_EXTRA_STYLES = `
 .entry .test-result{background:var(--surface)}
 .key-warning{display:none;color:var(--danger-text);font-size:0.85rem;margin:0.25rem 0 0}
 .key-warning.show{display:block}
+.session-cluster{display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap}
+.session-timer{font-size:0.85rem;color:var(--text-muted)}
+.session-timer.warn{color:var(--warn-text);font-weight:600}
+.session-timer.expired{color:var(--danger-text);font-weight:600}
+.session-error{font-size:0.85rem;color:var(--danger-text);font-weight:600}
 `;
 
 /**
@@ -91,15 +96,31 @@ export const renderAdminLoginPage = (errorMessage?: string): string => {
  * keep in sync.
  */
 export const renderAdminConfigPage = (state: unknown): string => {
+	// The controller embeds the session expiry in the state it renders; when it is
+	// present the caller authenticated with a cookie (not a header), so the header
+	// gains a live countdown and a Refresh button. A header-authenticated caller
+	// has no expiry and gets neither, since their access is not time-limited.
+	const sessionExpiresAt = (state as {sessionExpiresAt?: number})
+		?.sessionExpiresAt;
+	const sessionHtml =
+		typeof sessionExpiresAt === 'number'
+			? `<div class="session-cluster">
+<span id="sessionTimer" class="session-timer"></span>
+<span id="sessionError" class="session-error" hidden></span>
+${renderButton({id: 'refreshSessionButton', label: 'Refresh session'})}
+${renderButton({id: 'logoutButton', label: 'Sign out', variant: 'danger'})}
+</div>`
+			: renderButton({
+					id: 'logoutButton',
+					label: 'Sign out',
+					variant: 'danger',
+				});
+
 	return renderHtmlDocument({
 		title: 'Local Config Presets',
 		backHref: '/',
 		maxPageWidth: '68rem',
-		metaHtml: renderButton({
-			id: 'logoutButton',
-			label: 'Sign out',
-			variant: 'danger',
-		}),
+		metaHtml: sessionHtml,
 		subtitle:
 			'Edit plugins/configs/local-presets.conf. Saving writes the file only: the ' +
 			'running presets stay the ones approved at startup, and the change takes ' +

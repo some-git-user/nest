@@ -7,6 +7,7 @@ import {
 	createAdminSessionCookieValue,
 	hasValidAdminPassword,
 	hasValidAdminSession,
+	readAdminSessionExpiry,
 } from '../lib/admin-auth';
 import {
 	renderAdminConfigPage,
@@ -43,6 +44,7 @@ import {
 	getAdminEntries,
 	postAdminLogin,
 	postAdminLogout,
+	postAdminRefreshSession,
 	postAdminRevert,
 	postAdminSave,
 	postAdminTest,
@@ -73,6 +75,7 @@ const mockedBuildAdminSessionClearCookie = jest.mocked(
 const mockedCreateAdminSessionCookieValue = jest.mocked(
 	createAdminSessionCookieValue,
 );
+const mockedReadAdminSessionExpiry = jest.mocked(readAdminSessionExpiry);
 const mockedRenderAdminLoginPage = jest.mocked(renderAdminLoginPage);
 const mockedRenderAdminNotConfiguredPage = jest.mocked(
 	renderAdminNotConfiguredPage,
@@ -337,6 +340,41 @@ describe('admin-local-config controller', () => {
 		});
 	});
 
+	describe('postAdminRefreshSession', () => {
+		it('rejects a caller with no session cookie', () => {
+			// A header-authenticated caller has no cookie to extend.
+			mockedReadAdminSessionExpiry.mockReturnValue(undefined);
+			const res = makeResponse();
+
+			postAdminRefreshSession(
+				{headers: {}} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.BAD_REQUEST);
+			expect(res.json).toHaveBeenCalledWith(
+				expect.objectContaining({ok: false}),
+			);
+			expect(mockedBuildAdminSessionCookie).not.toHaveBeenCalled();
+		});
+
+		it('re-issues the cookie and returns the new expiry', () => {
+			mockedReadAdminSessionExpiry.mockReturnValue(1000);
+			mockedCreateAdminSessionCookieValue.mockReturnValue('2000.deadbeef');
+			mockedBuildAdminSessionCookie.mockReturnValue('fresh-cookie');
+			const res = makeResponse();
+
+			postAdminRefreshSession(
+				{headers: {}} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.setHeader).toHaveBeenCalledWith('Set-Cookie', 'fresh-cookie');
+			expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.OK);
+			expect(res.json).toHaveBeenCalledWith({ok: true, sessionExpiresAt: 2000});
+		});
+	});
+
 	describe('getAdminConfigPage', () => {
 		it('renders the not-configured page when no admin password is set', () => {
 			mockedEnv.ADMIN_UI_PASSWORD = '';
@@ -363,6 +401,7 @@ describe('admin-local-config controller', () => {
 
 		it('renders the editor page with masked state when authenticated', () => {
 			mockedHasValidAdminSession.mockReturnValue(true);
+			mockedReadAdminSessionExpiry.mockReturnValue(undefined);
 			mockedReadConfigDocument.mockReturnValue(
 				docResult([
 					{
@@ -383,11 +422,29 @@ describe('admin-local-config controller', () => {
 				entries: {params: Record<string, string>; secretParams: string[]}[];
 				contentHash: string;
 				startupValidationFailed: boolean;
+				sessionExpiresAt: number | undefined;
 			};
 			expect(state.entries[0].params.password).toBe('');
 			expect(state.entries[0].secretParams).toEqual(['password']);
 			expect(state.contentHash).toBe('hash(raw)');
 			expect(state.startupValidationFailed).toBe(false);
+			// No cookie expiry is known, so the page renders without a countdown.
+			expect(state.sessionExpiresAt).toBeUndefined();
+		});
+
+		it('passes the session expiry to the page so it can count down', () => {
+			mockedHasValidAdminSession.mockReturnValue(true);
+			mockedReadAdminSessionExpiry.mockReturnValue(1234);
+			mockedRenderAdminConfigPage.mockReturnValue('page');
+			const res = makeResponse();
+
+			getAdminConfigPage({headers: {}} as Request, res as unknown as Response);
+
+			expect(mockedReadAdminSessionExpiry).toHaveBeenCalled();
+			const state = mockedRenderAdminConfigPage.mock.calls[0][0] as {
+				sessionExpiresAt: number | undefined;
+			};
+			expect(state.sessionExpiresAt).toBe(1234);
 		});
 	});
 
