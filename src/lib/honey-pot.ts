@@ -1,6 +1,7 @@
 import {Request} from 'express';
+import {env} from '../config/env';
 import {logger} from './logger';
-import {getClientIpFromRequest, normalizeIp} from './request-ip';
+import {getClientIpFromRequest, isLoopbackIp, normalizeIp} from './request-ip';
 
 export type HoneypotSignalReason =
 	| 'unknown-route'
@@ -193,6 +194,14 @@ export const recordHoneypotSignal = (
  *
  * Returns `false` when the socket was already counted, because Node raises both
  * `clientError` and `tlsClientError` for one failed connection.
+ *
+ * Loopback probes are dropped by default (see HONEYPOT_IGNORE_LOOPBACK_PROBES).
+ * A browser on the same host keeps a pool of speculative TLS sockets and
+ * discards them once the real request completes, and a socket torn down before a
+ * full request makes Node's parser throw `socket hang up` / `Parse Error` -
+ * which lands here looking exactly like a scanner. The honeypot exists to report
+ * *external* probes, so counting the operator's own browser would only produce
+ * false port-scan alerts attributed to the host itself.
  */
 export const recordNetworkProbeSignal = (
 	socket: unknown,
@@ -201,6 +210,11 @@ export const recordNetworkProbeSignal = (
 		'tls-client-error' | 'http-client-error'
 	>,
 ): boolean => {
+	const ip = resolveSocketIp(socket);
+	if (env.HONEYPOT_IGNORE_LOOPBACK_PROBES && isLoopbackIp(ip)) {
+		return false;
+	}
+
 	if (typeof socket === 'object' && socket !== null) {
 		if (countedSockets.has(socket)) {
 			return false;
@@ -211,7 +225,7 @@ export const recordNetworkProbeSignal = (
 	pushSignal({
 		timestamp: Date.now(),
 		path: '/_network_probe',
-		ip: resolveSocketIp(socket),
+		ip,
 		userAgent: 'network-probe',
 		reason,
 		suspicious: true,

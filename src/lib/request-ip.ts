@@ -32,6 +32,19 @@ export const normalizeIp = (value: string): string => {
 	return trimmed;
 };
 
+/**
+ * Whether an address is the host addressing itself.
+ *
+ * Covers the whole IPv4 `127.0.0.0/8` block and IPv6 `::1`, after stripping any
+ * IPv4-mapped `::ffff:` prefix so a dual-stack socket reporting
+ * `::ffff:127.0.0.1` is still recognised. Used to keep the honeypot from
+ * mistaking the server's own loopback traffic for an external probe.
+ */
+export const isLoopbackIp = (value: string): boolean => {
+	const ip = normalizeIp(value);
+	return ip === '::1' || ip.startsWith('127.');
+};
+
 // The client IP is taken from Express's own `req.ip`, which only reflects the
 // `X-Forwarded-For` header when the app has explicitly opted in via
 // `app.set('trust proxy', ...)`. Reading the header directly here would let any

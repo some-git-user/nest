@@ -1,4 +1,5 @@
 import {Request} from 'express';
+import {env} from '../config/env';
 import {
 	UNKNOWN_IP,
 	getHoneypotStats,
@@ -13,6 +14,9 @@ import {logger} from './logger';
 // pushSignal persists every probe via logger.warn; without this the suite would
 // append to the real log file on every signal.
 jest.mock('./logger');
+jest.mock('../config/env');
+
+const mockedEnv = jest.mocked(env);
 
 const makeReq = (
 	overrides: Partial<{
@@ -36,6 +40,7 @@ describe('honey-pot lib', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		resetHoneypotSignals();
+		mockedEnv.HONEYPOT_IGNORE_LOOPBACK_PROBES = true;
 	});
 	afterEach(() => resetHoneypotSignals());
 
@@ -264,6 +269,59 @@ describe('honey-pot lib', () => {
 			expect(recordNetworkProbeSignal('b', 'http-client-error')).toBe(true);
 			expect(getHoneypotStats().totalHits).toBe(2);
 		});
+
+		test('drops a loopback probe without recording it', () => {
+			// A browser on the same host tears down speculative TLS sockets, which
+			// Node reports as protocol errors. They are not external probes, so
+			// they must not be logged or counted.
+			expect(
+				recordNetworkProbeSignal({remoteAddress: '::1'}, 'http-client-error'),
+			).toBe(false);
+			expect(
+				recordNetworkProbeSignal(
+					{remoteAddress: '127.0.0.1'},
+					'tls-client-error',
+				),
+			).toBe(false);
+			expect(getHoneypotStats().totalHits).toBe(0);
+		});
+
+		test('drops a loopback probe seen through the IPv4-mapped prefix', () => {
+			expect(
+				recordNetworkProbeSignal(
+					{remoteAddress: '::ffff:127.0.0.1'},
+					'http-client-error',
+				),
+			).toBe(false);
+			expect(getHoneypotStats().totalHits).toBe(0);
+		});
+
+		test('still records an external probe alongside dropped loopback ones', () => {
+			recordNetworkProbeSignal({remoteAddress: '::1'}, 'http-client-error');
+			expect(
+				recordNetworkProbeSignal(
+					{remoteAddress: '203.0.113.30'},
+					'http-client-error',
+				),
+			).toBe(true);
+			expect(getHoneypotStats().totalHits).toBe(1);
+			expect(getHoneypotStats().latest?.ip).toBe('203.0.113.30');
+		});
+
+		test('records loopback probes when the ignore flag is off', () => {
+			// Behind a same-host reverse proxy every external probe arrives from
+			// loopback, so an operator disables the filter to keep seeing them.
+			mockedEnv.HONEYPOT_IGNORE_LOOPBACK_PROBES = false;
+
+			expect(
+				recordNetworkProbeSignal(
+					{remoteAddress: '127.0.0.1'},
+					'http-client-error',
+				),
+			).toBe(true);
+			expect(getHoneypotStats().totalHits).toBe(1);
+			expect(getHoneypotStats().latest?.ip).toBe('127.0.0.1');
+		});
 	});
 
 	describe('UNKNOWN_IP exclusion', () => {
@@ -304,8 +362,12 @@ describe('honey-pot lib', () => {
 
 		test('caps the signal buffer at 1000 entries', () => {
 			for (let i = 0; i < 1001; i++) {
+				// Non-loopback and rotating: a loopback address would be dropped
+				// by the ignore filter, leaving the buffer at exactly the cap and
+				// skipping the trim branch, and one constant address would make
+				// the unique-path count strictly increase on every signal.
 				recordNetworkProbeSignal(
-					{remoteAddress: `${i % 256}.0.0.1`},
+					{remoteAddress: `203.0.113.${(i % 250) + 1}`},
 					'tls-client-error',
 				);
 			}

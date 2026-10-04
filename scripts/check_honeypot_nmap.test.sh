@@ -141,6 +141,7 @@ start_server() {
 	HOST="$HOST" \
 	PORT="$PORT" \
 	NODE_ENV=development \
+	HONEYPOT_IGNORE_LOOPBACK_PROBES=false \
 	NEST_CONFIG_FILE="$TMP_DIR/nonexistent-e2e.conf" \
 	PLUGINS_DIR="plugins" \
 	LOG_FILE_PATH="$TMP_DIR/nest.log" \

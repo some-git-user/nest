@@ -1,6 +1,7 @@
 import {Request} from 'express';
 import {
 	getClientIpFromRequest,
+	isLoopbackIp,
 	normalizeIp,
 	parseTrustProxy,
 } from './request-ip';
@@ -95,6 +96,35 @@ describe('request-ip helpers', () => {
 
 	test('normalizeIp returns just the trimmed value when no prefix present', () => {
 		expect(normalizeIp('  10.10.10.10  ')).toBe('10.10.10.10');
+	});
+
+	// ──────────────── isLoopbackIp ────────────────
+
+	test('isLoopbackIp recognises IPv4 loopback across the whole /8 block', () => {
+		expect(isLoopbackIp('127.0.0.1')).toBe(true);
+		expect(isLoopbackIp('127.5.6.7')).toBe(true);
+	});
+
+	test('isLoopbackIp recognises IPv6 loopback', () => {
+		expect(isLoopbackIp('::1')).toBe(true);
+	});
+
+	test('isLoopbackIp sees through the IPv4-mapped IPv6 prefix', () => {
+		// A dual-stack socket reports a v4 peer as ::ffff:127.0.0.1.
+		expect(isLoopbackIp('::ffff:127.0.0.1')).toBe(true);
+	});
+
+	test('isLoopbackIp rejects non-loopback and unattributed addresses', () => {
+		expect(isLoopbackIp('192.168.111.50')).toBe(false);
+		expect(isLoopbackIp('2001:db8::1')).toBe(false);
+		expect(isLoopbackIp('unknown')).toBe(false);
+		expect(isLoopbackIp('')).toBe(false);
+	});
+
+	test('isLoopbackIp does not match an IPv6 that merely starts with 127', () => {
+		// The `127.` prefix check must not fire on a v6 address whose first hextet
+		// begins with those characters.
+		expect(isLoopbackIp('1270::1')).toBe(false);
 	});
 
 	// ──────────────── getClientIpFromRequest adversarial inputs ────────────────

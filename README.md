@@ -29,26 +29,27 @@ npm run build:deb    # Debian packages (build_deb/)
 
 Create `.env` from `.env.example`:
 
-| Variable                     | Default               | Description                                |
-| ---------------------------- | --------------------- | ------------------------------------------ |
-| `NODE_ENV`                   | `development`         | `development` or `production`              |
-| `HOST`                       | `localhost`           | Network interface to bind                  |
-| `PORT`                       | `5000`                | HTTPS server port                          |
-| `TLS_CERT_PATH`              | `certs/nest-cert.pem` | TLS certificate file                       |
-| `TLS_KEY_PATH`               | `certs/nest-key.pem`  | TLS private key file                       |
-| `PLUGINS_DIR`                | `plugins`             | Plugin directory                           |
-| `LOG_FILE_PATH`              | `logs/nest.log`       | Log file path                              |
-| `MAX_LOG_FILE_SIZE_BYTES`    | `1048576`             | Log rotation size (1MB)                    |
-| `API_KEY_HEADER`             | `x-api-key`           | API key header name                        |
-| `API_KEY`                    | (empty)               | API key for authentication                 |
-| `ALLOWED_IPS`                | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all |
-| `TRUST_PROXY`                | `false`               | Honour `X-Forwarded-For` (see note below)  |
-| `RATE_LIMIT_WINDOW_MS`       | `60000`               | Rate limit window (ms)                     |
-| `RATE_LIMIT_MAX`             | `120`                 | Max requests per window                    |
-| `ADMIN_UI_PASSWORD`          | (empty)               | Password for the `/admin` config editor    |
-| `ADMIN_SESSION_TTL_SECONDS`  | `900`                 | Admin session cookie lifetime (s)          |
-| `ADMIN_LOGIN_RATE_LIMIT_MAX` | `5`                   | Max admin login attempts per window        |
-| `ADMIN_TEST_RATE_LIMIT_MAX`  | `20`                  | Max admin plugin test runs per window      |
+| Variable                          | Default               | Description                                                  |
+| --------------------------------- | --------------------- | ------------------------------------------------------------ |
+| `NODE_ENV`                        | `development`         | `development` or `production`                                |
+| `HOST`                            | `localhost`           | Network interface to bind                                    |
+| `PORT`                            | `5000`                | HTTPS server port                                            |
+| `TLS_CERT_PATH`                   | `certs/nest-cert.pem` | TLS certificate file                                         |
+| `TLS_KEY_PATH`                    | `certs/nest-key.pem`  | TLS private key file                                         |
+| `PLUGINS_DIR`                     | `plugins`             | Plugin directory                                             |
+| `LOG_FILE_PATH`                   | `logs/nest.log`       | Log file path                                                |
+| `MAX_LOG_FILE_SIZE_BYTES`         | `1048576`             | Log rotation size (1MB)                                      |
+| `API_KEY_HEADER`                  | `x-api-key`           | API key header name                                          |
+| `API_KEY`                         | (empty)               | API key for authentication                                   |
+| `ALLOWED_IPS`                     | `127.0.0.1, ::1`      | Comma-separated allowed IPs or `*` for all                   |
+| `TRUST_PROXY`                     | `false`               | Honour `X-Forwarded-For` (see note below)                    |
+| `RATE_LIMIT_WINDOW_MS`            | `60000`               | Rate limit window (ms)                                       |
+| `RATE_LIMIT_MAX`                  | `120`                 | Max requests per window                                      |
+| `ADMIN_UI_PASSWORD`               | (empty)               | Password for the `/admin` config editor                      |
+| `ADMIN_SESSION_TTL_SECONDS`       | `900`                 | Admin session cookie lifetime (s)                            |
+| `ADMIN_LOGIN_RATE_LIMIT_MAX`      | `5`                   | Max admin login attempts per window                          |
+| `ADMIN_TEST_RATE_LIMIT_MAX`       | `20`                  | Max admin plugin test runs per window                        |
+| `HONEYPOT_IGNORE_LOOPBACK_PROBES` | `true`                | Drop TLS/HTTP protocol errors from loopback (see note below) |
 
 TLS certificates are auto-generated if missing.
 
@@ -288,6 +289,13 @@ Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST
   service user, gated by an admin session, the `x-nest-admin: 1` header, and the
   CSRF guard. Command injection is closed off; per-plugin input validation and
   privilege amplification remain the operator's concern.
+- Honeypot protocol errors (`clientError`/`tlsClientError`) from a loopback peer
+  are dropped by default (`HONEYPOT_IGNORE_LOOPBACK_PROBES=true`). A browser on
+  the same host tears down speculative TLS sockets, and Node reports that the same
+  way it reports a scanner, so browsing the admin UI locally would otherwise raise
+  false port-scan alerts attributed to the host itself. Set the flag to `false`
+  when Nest sits behind a same-host reverse proxy — every external probe then
+  arrives from loopback and must still be recorded.
 
 ## License
 

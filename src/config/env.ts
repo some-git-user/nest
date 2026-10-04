@@ -1,4 +1,4 @@
-import {cleanEnv, host, num, port, str} from 'envalid';
+import {bool, cleanEnv, host, num, port, str} from 'envalid';
 import * as fs from 'fs';
 import * as path from 'path';
 import {validateUnixFileSecurity} from '../lib/file-security';
@@ -177,4 +177,14 @@ export const env = cleanEnv(process.env, {
 	// auth limiter deliberately ignores successes, so the spawn path needs its
 	// own counter. Loose enough for a human clicking Test in the editor.
 	ADMIN_TEST_RATE_LIMIT_MAX: num({default: 20}),
+	// Protocol errors (clientError/tlsClientError) from a loopback peer are
+	// dropped by default. A browser on the same host keeps speculative TLS
+	// sockets and discards them once the real request lands, and Node reports a
+	// socket torn down before a full request exactly like a scanner probe - so
+	// browsing the admin UI would otherwise raise false port-scan alerts
+	// attributed to the host itself. Set this to false to record loopback probes
+	// too: correct when Nest sits behind a same-host reverse proxy (every
+	// external probe then arrives from loopback), and what the honeypot E2E
+	// suite uses so its local scans stay visible.
+	HONEYPOT_IGNORE_LOOPBACK_PROBES: bool({default: true}),
 });
