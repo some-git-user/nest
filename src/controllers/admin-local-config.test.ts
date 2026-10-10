@@ -690,6 +690,92 @@ describe('admin-local-config controller', () => {
 				problems: ['Preset #1: bad thing'],
 			});
 		});
+
+		it('rejects a preset missing a required parameter', () => {
+			const params = registeredPluginRouteParams as Record<string, unknown[]>;
+			params['/plugins/c'] = [
+				{name: 'host', label: 'Host', required: true, type: 'text'},
+			];
+			const res = makeResponse();
+
+			postAdminValidate(
+				{body: {entries: [{key: 'k', command: 'c', params: {}}]}} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.json).toHaveBeenCalledWith({
+				ok: false,
+				problems: ['Preset "k": Missing required parameter "Host" (host).'],
+			});
+			delete params['/plugins/c'];
+		});
+
+		it('treats a whitespace-only required parameter as missing', () => {
+			const params = registeredPluginRouteParams as Record<string, unknown[]>;
+			params['/plugins/c'] = [
+				{name: 'host', label: 'Host', required: true, type: 'text'},
+			];
+			const res = makeResponse();
+
+			postAdminValidate(
+				{
+					body: {
+						entries: [{key: 'k', command: 'c', params: {host: '   '}}],
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.json).toHaveBeenCalledWith({
+				ok: false,
+				problems: ['Preset "k": Missing required parameter "Host" (host).'],
+			});
+			delete params['/plugins/c'];
+		});
+
+		it('accepts a required parameter that declares a default when empty', () => {
+			// A required parameter with a default is never truly missing: the route
+			// falls back to the default, so an empty value is not a problem.
+			const params = registeredPluginRouteParams as Record<string, unknown[]>;
+			params['/plugins/c'] = [
+				{
+					name: 'port',
+					label: 'Port',
+					required: true,
+					type: 'number',
+					default: '443',
+				},
+			];
+			const res = makeResponse();
+
+			postAdminValidate(
+				{body: {entries: [{key: 'k', command: 'c', params: {}}]}} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.json).toHaveBeenCalledWith({ok: true, problems: []});
+			delete params['/plugins/c'];
+		});
+
+		it('accepts a preset that supplies its required parameter', () => {
+			const params = registeredPluginRouteParams as Record<string, unknown[]>;
+			params['/plugins/c'] = [
+				{name: 'host', label: 'Host', required: true, type: 'text'},
+			];
+			const res = makeResponse();
+
+			postAdminValidate(
+				{
+					body: {
+						entries: [{key: 'k', command: 'c', params: {host: 'example'}}],
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(res.json).toHaveBeenCalledWith({ok: true, problems: []});
+			delete params['/plugins/c'];
+		});
 	});
 
 	describe('postAdminTest', () => {

@@ -127,8 +127,44 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('data-role="keyWarning"');
 			// Rendered per entry, refreshed after render and on every key edit.
 			expect(ADMIN_CONFIG_SCRIPT).toContain('updateDuplicateKeyWarnings();');
+			expect(ADMIN_CONFIG_SCRIPT).toContain("role !== 'key'");
+		});
+
+		it('validates required parameters declared by the plugin', () => {
+			// A plugin marks a parameter required in meta.params; the editor must
+			// not let the operator validate or save without it. A required field
+			// that declares a default is exempt (the route falls back to it), and
+			// whitespace counts as empty, matching the server rule.
 			expect(ADMIN_CONFIG_SCRIPT).toContain(
-				"event.target.getAttribute('data-role') !== 'key'",
+				'var requiredFieldsForCommand = function',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('field.required && !field.default');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var missingRequiredFields = function',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'String(value).trim().length === 0',
+			);
+			// A masked secret is exempt: it always arrives empty and the stored
+			// value is restored on save, so empty means "keep stored", not missing.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'if (isSecret(entry, field.name)) {\n\t\t\t\treturn false;',
+			);
+			// Live inline warning, refreshed after render and on parameter edits.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('data-role="requiredWarning"');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('updateRequiredWarnings();');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"event.target.hasAttribute('data-param')",
+			);
+			// Preflight blocks the request and points at the first offending card.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var reportMissingRequired = function',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'if (reportMissingRequired(draftEntries))',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'is missing required parameter(s):',
 			);
 		});
 
@@ -144,6 +180,25 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('while (used[candidate])');
 			expect(ADMIN_CONFIG_SCRIPT).toContain('draft.splice(index + 1, 0, {');
 			expect(ADMIN_CONFIG_SCRIPT).toContain('key: uniqueCopyKey(source.key)');
+		});
+
+		it('disables every Test button while a run is in flight', () => {
+			// A Test request spawns a real plugin process on the server, so a
+			// second click must not overlap it. The in-flight count lives outside
+			// the DOM (a re-render rebuilds the buttons) and render() re-applies it;
+			// the lock is released on settle, whatever the outcome.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('var runningTestCount = 0');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('var updateTestButtons = function');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'button.disabled = runningTestCount > 0',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"runningTestCount > 0 ? ' disabled' : ''",
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('runningTestCount += 1');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('runningTestCount -= 1');
+			// Released via a trailing .then so both success and failure unlock.
+			expect(ADMIN_CONFIG_SCRIPT).toContain('.then(releaseTestLock)');
 		});
 
 		it('contains no inline </script> sequence', () => {

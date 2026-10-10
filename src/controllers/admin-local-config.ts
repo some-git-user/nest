@@ -138,6 +138,44 @@ export const declaredParamNamesForCommand = (command: string): Set<string> => {
 	return new Set(fields.map((param) => param.name));
 };
 
+/**
+ * The parameters a command requires the operator to fill in.
+ *
+ * A parameter is required when the plugin declares `required: true`, but a
+ * required parameter that also declares a `default` is never actually missing:
+ * the route falls back to that default when the value is absent, so the plugin
+ * still receives one. Only a required parameter with no default can leave the
+ * plugin without a value, so only those are enforced here.
+ *
+ * A command with no loaded fields (unknown, or a plugin declaring `params: []`)
+ * requires nothing, matching how the editor renders no fields for it.
+ */
+const requiredParamNamesForCommand = (command: string): PluginParam[] => {
+	const routePath = commandToRoutePath(command);
+	const fields = registeredPluginRouteParams[routePath] ?? [];
+	return fields.filter(
+		(param) => param.required && param.default === undefined,
+	);
+};
+
+/**
+ * Required parameters the preset leaves empty, as human-readable problems.
+ *
+ * Runs on the merged params, so a masked secret restored from the stored preset
+ * counts as present. A value of only whitespace is treated as empty: the config
+ * line format has no way to give meaning to a blank required value, and the
+ * plugin would receive an empty string.
+ */
+const missingRequiredParamProblems = (
+	entry: AdminPresetPayload,
+	mergedParams: Record<string, string>,
+): string[] =>
+	requiredParamNamesForCommand(entry.command)
+		.filter((param) => (mergedParams[param.name] ?? '').trim().length === 0)
+		.map(
+			(param) => `Missing required parameter "${param.label}" (${param.name}).`,
+		);
+
 const maskEntry = (
 	entry: PresetEntry,
 	secretNames: Set<string>,
@@ -248,6 +286,9 @@ const validateEntries = (
 			params: merged,
 		});
 		for (const problem of entryProblems) {
+			problems.push(`Preset ${label}: ${problem}`);
+		}
+		for (const problem of missingRequiredParamProblems(entry, merged)) {
 			problems.push(`Preset ${label}: ${problem}`);
 		}
 

@@ -7,7 +7,7 @@
 export const ADMIN_CONFIG_SCRIPT_PATH = '/admin/local-config.js';
 
 export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
-/* global document, window, fetch, HTMLElement, HTMLInputElement, HTMLSelectElement */
+/* global document, window, fetch, HTMLElement, HTMLInputElement, HTMLSelectElement, HTMLButtonElement */
 
 (function () {
 	var stateElement = document.getElementById('admin-state');
@@ -252,10 +252,11 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					'<select id="c' + index + '" data-role="command">' + commandOptions(entry) + '</select></label>' +
 					'</div>' +
 					'<div class="key-warning" data-role="keyWarning"></div>' +
+					'<div class="key-warning" data-role="requiredWarning"></div>' +
 					'<div class="params">' + paramRows(entry, index) + '</div>' +
 					commandHtml +
 					'<div class="entry-actions">' +
-					'<button type="button" data-action="test">Test</button>' +
+					'<button type="button" data-action="test"' + (runningTestCount > 0 ? ' disabled' : '') + '>Test</button>' +
 					'<button type="button" data-action="copy">Copy</button>' +
 					'<button type="button" data-action="remove" class="danger">Remove</button>' +
 					'</div>' +
@@ -265,6 +266,8 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			})
 			.join('');
 		updateDuplicateKeyWarnings();
+		updateRequiredWarnings();
+		updateTestButtons();
 	};
 
 	// Flag every preset whose key is used more than once, before the operator
@@ -310,6 +313,108 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				warningHost.textContent = '';
 			}
 		});
+	};
+
+	// The required parameters a preset must supply, mirroring the server. A
+	// required parameter that declares a default is exempt: the route falls back
+	// to that default when the value is absent, so the plugin still receives one.
+	// A command with no loaded fields requires nothing, matching how the editor
+	// renders no fields for it.
+	var requiredFieldsForCommand = function (command) {
+		var required = [];
+		(fieldsByCommand[command] || []).forEach(function (field) {
+			if (field.required && !field.default) {
+				required.push(field);
+			}
+		});
+		return required;
+	};
+
+	// The required parameters of an entry that are still empty. A value of only
+	// whitespace counts as empty, matching the server rule. A masked secret is
+	// exempt: it always arrives empty with its name in secretParams, and the
+	// stored value is restored on save, so an empty secret means "keep stored",
+	// not "missing". This mirrors the server, which checks the merged params.
+	var missingRequiredFields = function (entry) {
+		return requiredFieldsForCommand(entry.command).filter(function (field) {
+			if (isSecret(entry, field.name)) {
+				return false;
+			}
+			var value = entry.params[field.name];
+			return value === undefined || String(value).trim().length === 0;
+		});
+	};
+
+	// Flag every preset missing a required parameter, before the operator hits
+	// Validate or Save. The server rejects these too; this mirrors the rule live
+	// so the reason is visible next to the field rather than in the status line.
+	var updateRequiredWarnings = function () {
+		if (!(entriesHost instanceof HTMLElement)) {
+			return;
+		}
+		entriesHost.querySelectorAll('.entry').forEach(function (entryElement) {
+			if (!(entryElement instanceof HTMLElement)) {
+				return;
+			}
+			var index = Number(entryElement.getAttribute('data-index'));
+			var entry = draft[index];
+			var warningHost = entryElement.querySelector('[data-role="requiredWarning"]');
+			if (!entry || !(warningHost instanceof HTMLElement)) {
+				return;
+			}
+			var missing = missingRequiredFields(entry);
+			if (missing.length > 0) {
+				var labels = missing.map(function (field) {
+					return field.label;
+				});
+				warningHost.className = 'key-warning show';
+				warningHost.textContent =
+					'Required: ' + escapeHtml(labels.join(', ')) + '.';
+			} else {
+				warningHost.className = 'key-warning';
+				warningHost.textContent = '';
+			}
+		});
+	};
+
+	// Stop a Validate or Save request when a preset is missing a required
+	// parameter, and point at the first offending card. The server would reject
+	// it anyway; catching it here keeps the reason beside the field instead of
+	// only in the page-wide status line, and avoids a doomed round-trip.
+	var firstMissingRequiredEntry = function (entries) {
+		var first = null;
+		entries.forEach(function (entry) {
+			if (first === null && missingRequiredFields(entry).length > 0) {
+				first = entry;
+			}
+		});
+		return first;
+	};
+
+	var reportMissingRequired = function (entries) {
+		var first = firstMissingRequiredEntry(entries);
+		if (first === null) {
+			return false;
+		}
+		var labels = missingRequiredFields(first).map(function (field) {
+			return field.label;
+		});
+		var name = first.key.length > 0 ? first.key : '(untitled)';
+		setStatus(
+			'error',
+			'Preset "' + name + '" is missing required parameter(s): ' + labels.join(', ') + '.',
+		);
+		if (entriesHost instanceof HTMLElement) {
+			var cards = entriesHost.querySelectorAll('.entry');
+			for (var i = 0; i < cards.length; i++) {
+				var card = cards[i];
+				if (card instanceof HTMLElement && Number(card.getAttribute('data-index')) === draft.indexOf(first)) {
+					card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+					break;
+				}
+			}
+		}
+		return true;
 	};
 
 	// Collect the visible form back into the draft entry.
@@ -422,12 +527,36 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		setStatus('error', problems.join(' '));
 	};
 
+	// Only one plugin run at a time. A Test request spawns a real plugin process
+	// on the server, so a second click while one is in flight would overlap two
+	// spawns, and two different presets could be exercised concurrently. Every
+	// Test button is disabled while any run is pending and re-enabled once the
+	// request settles, whatever the outcome. The count lives outside the DOM so
+	// a re-render cannot lose it; render() re-applies it to the rebuilt buttons.
+	var runningTestCount = 0;
+	var updateTestButtons = function () {
+		if (!(entriesHost instanceof HTMLElement)) {
+			return;
+		}
+		entriesHost.querySelectorAll('[data-action="test"]').forEach(function (button) {
+			if (button instanceof HTMLButtonElement) {
+				button.disabled = runningTestCount > 0;
+			}
+		});
+	};
+
 	var onTest = function (element) {
 		var entry = collectEntry(element);
 		if (!entry) {
 			return;
 		}
 		var resultHost = element.querySelector('[data-role="testResult"]');
+		runningTestCount += 1;
+		updateTestButtons();
+		var releaseTestLock = function () {
+			runningTestCount -= 1;
+			updateTestButtons();
+		};
 		api('/admin/api/test', {entry: entry})
 			.then(function (body) {
 				if (!(resultHost instanceof HTMLElement)) {
@@ -443,7 +572,8 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				}
 				resultHost.className = 'test-result show';
 				resultHost.textContent = String(error.message || error);
-			});
+			})
+			.then(releaseTestLock);
 	};
 
 	// Build a key for a copied preset: the source key with a counter appended,
@@ -541,13 +671,14 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			}
 		});
 
-		// A key edit does not change the form structure, so update the duplicate
+		// A key or parameter edit does not change the form structure, so update the
 		// warnings in place instead of re-rendering, which would steal focus.
 		entriesHost.addEventListener('input', function (event) {
 			if (!(event.target instanceof HTMLElement)) {
 				return;
 			}
-			if (event.target.getAttribute('data-role') !== 'key') {
+			var role = event.target.getAttribute('data-role');
+			if (role !== 'key' && !event.target.hasAttribute('data-param')) {
 				return;
 			}
 			var entryElement = event.target.closest('.entry');
@@ -555,6 +686,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				collectEntry(entryElement);
 			}
 			updateDuplicateKeyWarnings();
+			updateRequiredWarnings();
 		});
 	}
 
@@ -586,7 +718,11 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 
 	if (validateButton instanceof HTMLElement) {
 		validateButton.addEventListener('click', function () {
-			api('/admin/api/validate', {entries: collectDraft()})
+			var draftEntries = collectDraft();
+			if (reportMissingRequired(draftEntries)) {
+				return;
+			}
+			api('/admin/api/validate', {entries: draftEntries})
 				.then(function (body) {
 					clearStatus();
 					if (body.ok) {
@@ -603,7 +739,11 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 
 	if (saveButton instanceof HTMLElement) {
 		saveButton.addEventListener('click', function () {
-			api('/admin/api/save', {entries: collectDraft(), baseHash: contentHash})
+			var draftEntries = collectDraft();
+			if (reportMissingRequired(draftEntries)) {
+				return;
+			}
+			api('/admin/api/save', {entries: draftEntries, baseHash: contentHash})
 				.then(function (body) {
 					contentHash = body.contentHash;
 					drift = body.drift || {};
