@@ -507,6 +507,9 @@ describe('server bootstrap', () => {
 			expect.stringContaining('/nagios/honey-pot?help'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
+			expect.stringContaining('/unified?help'),
+		);
+		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining('https://github.com/some-git-user/nest'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(

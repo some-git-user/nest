@@ -180,6 +180,7 @@ const buildOverviewPageHtml = (
 	const staticRoutes = [
 		{path: '/nagios', helpPath: '/nagios?help'},
 		{path: '/nagios/honey-pot', helpPath: '/nagios/honey-pot?help'},
+		{path: '/unified', helpPath: '/unified?help'},
 		// The admin UI is always mounted; when no password is configured it
 		// serves a "not configured" page rather than 404, so the link is always
 		// reachable. It has no `?help` page of its own, so no helpPath is set:

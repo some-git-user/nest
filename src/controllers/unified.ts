@@ -5,6 +5,10 @@ import {
 	resolveDialBackAuth,
 } from '../lib/dial-back-auth';
 import {getErrorMessage} from '../lib/error-message';
+import {
+	appendExternalLinkGuard,
+	applyHelpPageSecurityHeaders,
+} from '../lib/help-page';
 import {HttpStatusCodes} from '../lib/http-status-codes';
 import {
 	INTERNAL_REQUEST_TIMEOUT_MESSAGE,
@@ -14,7 +18,9 @@ import {isRecord} from '../lib/is-record';
 import {hasRuntimeValidationFailed} from '../lib/local-config';
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
+import {renderHtmlDocument} from '../lib/ui-components';
 import {
+	NEST_UNIFIED_PARAM,
 	type UnifiedPreset,
 	type UnifiedPresetResult,
 	aggregateUnifiedResults,
@@ -23,6 +29,43 @@ import {
 import type {NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 import {isKnownNagiosCode} from './dynamic-routes/helpers';
+
+const getUnifiedHelpHtml = (): string => {
+	return appendExternalLinkGuard(
+		renderHtmlDocument({
+			title: 'Help: /unified',
+			backHref: '/',
+			hideHeader: true,
+			contentHtml: `<h1>Built-in Help: /unified</h1>
+<p>Runs every local-config preset opted into the unified check and returns the
+worst Nagios status, collapsing many services into a single check.</p>
+<h2>Endpoint</h2>
+<ul>
+<li><code>/unified</code></li>
+<li><code>/unified?help</code></li>
+</ul>
+<h2>How a preset opts in</h2>
+<p>
+Add the reserved parameter <code>${NEST_UNIFIED_PARAM}=true</code> to a preset
+line, or tick <em>Include in unified check</em> in the admin editor. The flag is
+a directive for this aggregator, not a plugin input: it is stripped before the
+preset is dialled back into its plugin route.
+</p>
+<h2>Behaviour</h2>
+<ul>
+<li>Presets run in parallel, each capped at <code>UNIFIED_TIMEOUT_MS</code>.</li>
+<li>The overall status is the worst seen: CRITICAL &gt; UNKNOWN &gt; WARNING &gt; OK.</li>
+<li>Every non-OK preset is listed; OK presets are counted and still contribute performance data.</li>
+<li>A preset that errors or exceeds the timeout is reported as UNKNOWN, not allowed to stall the aggregate.</li>
+<li>With no preset opted in, the check returns UNKNOWN.</li>
+</ul>
+<h2>Example</h2>
+<ul>
+<li><code>/unified</code></li>
+</ul>`,
+		}),
+	);
+};
 
 /**
  * Run one preset and normalise its outcome.
@@ -118,6 +161,13 @@ export const unifiedCheck = async (
 	// which replies with an HTML 500 — useless to a Nagios consumer. Catch here so
 	// every path, including an unexpected throw, returns a Nagios-shaped JSON body.
 	try {
+		if ('help' in req.query) {
+			applyHelpPageSecurityHeaders(res);
+			res.setHeader('Content-Type', 'text/html; charset=utf-8');
+			res.send(getUnifiedHelpHtml());
+			return;
+		}
+
 		if (hasRuntimeValidationFailed()) {
 			res.status(HttpStatusCodes.FORBIDDEN).json({
 				code: NagiosReturnCodes.UNKNOWN,

@@ -49,16 +49,23 @@ const mockedLoggerWarn = jest.mocked(logger.warn);
 type MockResponse = {
 	status: jest.Mock;
 	json: jest.Mock;
+	setHeader: jest.Mock;
+	send: jest.Mock;
 };
 
 const makeResponse = (): MockResponse => {
-	const res: MockResponse = {status: jest.fn(), json: jest.fn()};
+	const res: MockResponse = {
+		status: jest.fn(),
+		json: jest.fn(),
+		setHeader: jest.fn(),
+		send: jest.fn(),
+	};
 	res.status.mockReturnValue(res);
 	return res;
 };
 
-const makeRequest = (method: string, headers = {}): Request =>
-	({method, headers}) as unknown as Request;
+const makeRequest = (method: string, headers = {}, query = {}): Request =>
+	({method, headers, query}) as unknown as Request;
 
 const okBody = (code: number, message: string, perf?: string): string =>
 	JSON.stringify({code, message, ...(perf ? {performanceData: perf} : {})});
@@ -70,6 +77,25 @@ describe('unified controller', () => {
 		mockedHasRuntimeValidationFailed.mockReturnValue(false);
 		mockedExtractApiKey.mockReturnValue('');
 		mockedCommandToRoutePath.mockImplementation((c) => `/plugins/${c}`);
+	});
+
+	it('serves the help page when ?help is present', async () => {
+		const res = makeResponse();
+
+		await unifiedCheck(
+			makeRequest('GET', {}, {help: ''}),
+			res as unknown as Response,
+		);
+
+		expect(res.setHeader).toHaveBeenCalledWith(
+			'Content-Type',
+			'text/html; charset=utf-8',
+		);
+		expect(res.send).toHaveBeenCalledWith(
+			expect.stringContaining('Built-in Help: /unified'),
+		);
+		// The help branch must short-circuit before any preset work.
+		expect(mockedGetUnifiedPresetEntries).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 when runtime validation failed', async () => {
