@@ -1,6 +1,9 @@
 import {Request, Response} from 'express';
 import {env} from '../config/env';
-import {extractApiKey} from '../lib/browser-auth';
+import {
+	PRESETS_UNAVAILABLE_MESSAGE,
+	resolveDialBackAuth,
+} from '../lib/dial-back-auth';
 import {getErrorMessage} from '../lib/error-message';
 import {HttpStatusCodes} from '../lib/http-status-codes';
 import {makeInternalRequest} from '../lib/internal-http-client';
@@ -44,8 +47,7 @@ const executeLocalConfig = async (
 	if (hasRuntimeValidationFailed()) {
 		res.status(HttpStatusCodes.FORBIDDEN).json({
 			code: 3,
-			message:
-				'Local config presets are currently unavailable due to hash validation failure. Please update the whitelist and restart the service.',
+			message: PRESETS_UNAVAILABLE_MESSAGE,
 		});
 		return;
 	}
@@ -69,15 +71,11 @@ const executeLocalConfig = async (
 	// For POST requests (programmatic access), API key is required, but only when
 	// authentication is actually configured (API_KEY can be empty).
 	const apiKeyHeader = env.API_KEY_HEADER;
-	// A browser delivers the key through the Basic Auth dialog, not through the
-	// custom header, so both sources have to be accepted here.
-	const incomingApiKey = extractApiKey(req, apiKeyHeader);
-	const apiKeyRequired = httpMethod === 'POST' && env.API_KEY.length > 0;
-
-	// With an API key configured, the internal request could never pass the access
-	// control middleware without one. Reject here with 401 instead of letting the
-	// internal request fail and surface as a generic 500.
-	if (apiKeyRequired && !incomingApiKey) {
+	const {apiKey, requireApiKey, missingKey} = resolveDialBackAuth(
+		req,
+		httpMethod,
+	);
+	if (missingKey) {
 		logger.warn(
 			`Rejected local config POST for '${configKey}': missing API key header`,
 		);
@@ -88,14 +86,6 @@ const executeLocalConfig = async (
 		return;
 	}
 
-	// The internal request is dialed back into this same server and therefore has
-	// to satisfy the very same access control middleware. When the caller reached
-	// this handler it was already authenticated, so falling back to the configured
-	// key never weakens authentication - it only repairs keyless GET requests, e.g.
-	// a browser that authenticated via Basic Auth and sends no API key header.
-	const apiKey =
-		incomingApiKey || (env.API_KEY.length > 0 ? env.API_KEY : undefined);
-
 	// Make internal HTTPS request with API key (optional for GET requests)
 	logger.debug(`Executing local config: ${configKey} -> ${routePath}`);
 	const internalResponse = await makeInternalRequest({
@@ -105,7 +95,7 @@ const executeLocalConfig = async (
 		body: httpMethod === 'POST' ? configEntry.params : undefined,
 		apiKey,
 		apiKeyHeader,
-		requireApiKey: apiKeyRequired,
+		requireApiKey,
 	});
 
 	// Parse and forward response

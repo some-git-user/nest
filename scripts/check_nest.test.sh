@@ -220,4 +220,16 @@ if grep -Fq '"localConfig":"a"b"' "$TMP_DIR/curl_args"; then
 fi
 assert_equals "0" "$RUN_STATUS" "succeeds with an escaped key"
 
+# Test --unified feature: a plain GET to the reserved /unified route.
+run_check env MOCK_RESPONSE="VALID_JSON:unified ok|0|a=1 b=2" "$TARGET_SCRIPT" --unified
+assert_equals "unified ok | code=0 a=1 b=2" "$RUN_OUTPUT" "supports --unified with perfdata"
+assert_equals "0" "$RUN_STATUS" "returns success for --unified"
+assert_contains "https://localhost:5000/unified" "$TMP_DIR/curl_args" "uses /unified endpoint for --unified"
+assert_not_contains "-d" "$TMP_DIR/curl_args" "does not send a body for --unified"
+
+# --unified must propagate a non-zero aggregate status to the Nagios exit code.
+run_check env MOCK_RESPONSE="VALID_JSON:2 problems|2|" "$TARGET_SCRIPT" --unified
+assert_equals "2 problems | code=2" "$RUN_OUTPUT" "reports the aggregate message"
+assert_equals "2" "$RUN_STATUS" "exits with the aggregate worst code"
+
 printf 'check_nest.sh tests passed\n'

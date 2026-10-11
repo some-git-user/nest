@@ -15,6 +15,12 @@ export interface InternalHttpRequestOptions {
 	apiKey?: string; // API key from original request (passed through)
 	apiKeyHeader?: string; // Header name from original request
 	requireApiKey?: boolean; // If true, require API key for authentication (default: true)
+	// Socket *idle* timeout in ms: the request is destroyed and rejected when no
+	// data moves for this long (the timer resets on each activity, so it is not a
+	// hard wall-clock deadline). Defaults to 30s. Callers with their own deadline
+	// (e.g. the unified check) pass a smaller value so a stalled plugin does not
+	// hold a socket open past the point where the caller has already moved on.
+	timeoutMs?: number;
 }
 
 export interface InternalHttpResponse {
@@ -22,6 +28,13 @@ export interface InternalHttpResponse {
 	headers: Record<string, string | string[] | undefined>;
 	body: string;
 }
+
+/**
+ * Message the request rejects with when its socket idle timeout elapses.
+ * Exported so a caller can distinguish a timeout from other transport failures
+ * without matching on a bare string literal.
+ */
+export const INTERNAL_REQUEST_TIMEOUT_MESSAGE = 'Internal request timeout';
 
 // Maximum allowed certificate file size (10KB)
 const MAX_CERT_FILE_SIZE = 10 * 1024;
@@ -233,9 +246,9 @@ export const makeInternalRequest = async (
 			reject(error instanceof Error ? error : new Error(errorMsg));
 		});
 
-		req.setTimeout(30000, () => {
+		req.setTimeout(options.timeoutMs ?? 30000, () => {
 			req.destroy();
-			reject(new Error('Internal request timeout'));
+			reject(new Error(INTERNAL_REQUEST_TIMEOUT_MESSAGE));
 		});
 
 		// Write body for POST requests

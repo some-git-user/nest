@@ -86,6 +86,7 @@ describe('admin-page', () => {
 				'id="logoutButton"',
 				'id="status"',
 				'id="entries"',
+				'id="unifiedCount"',
 			]) {
 				expect(html).toContain(id);
 			}

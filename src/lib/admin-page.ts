@@ -48,6 +48,8 @@ const ADMIN_EXTRA_STYLES = `
 .session-timer.warn{color:var(--warn-text);font-weight:600}
 .session-timer.expired{color:var(--danger-text);font-weight:600}
 .session-error{font-size:0.85rem;color:var(--danger-text);font-weight:600}
+.unified-toggle{display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;color:var(--text-muted);margin:0.5rem 0 0}
+.unified-count{font-size:0.85rem;color:var(--text-muted);margin-left:auto}
 `;
 
 /**
@@ -138,7 +140,8 @@ ${renderToolbar(
 			id: 'revertButton',
 			label: 'Revert to approved',
 			variant: 'danger',
-		}),
+		}) +
+		'<span id="unifiedCount" class="unified-count"></span>',
 )}
 ${renderStatus('status')}
 <div id="entries"></div>

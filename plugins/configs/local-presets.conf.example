@@ -26,3 +26,11 @@ test=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performan
 
 # Example: Test plugin with performance data
 test_perfdata=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=true
+
+# Example: presets opted into the unified check. The reserved parameter
+# nestUnified=true marks a preset so the /unified aggregate route runs it and
+# reports the worst status across all opted-in presets (one Nagios service).
+# nestUnified is a directive for the aggregator, not a plugin input: it is
+# stripped before the preset is dialled back into its plugin route.
+# disk_root=check-disk warn=80% crit=90% nestUnified=true
+# cert_expiry=check-cert-expiry nestUnified=true

@@ -49,6 +49,7 @@ Create `.env` from `.env.example`:
 | `ADMIN_SESSION_TTL_SECONDS`       | `900`                 | Admin session cookie lifetime (s)                            |
 | `ADMIN_LOGIN_RATE_LIMIT_MAX`      | `5`                   | Max admin login attempts per window                          |
 | `ADMIN_TEST_RATE_LIMIT_MAX`       | `20`                  | Max admin plugin test runs per window                        |
+| `UNIFIED_TIMEOUT_MS`              | `15000`               | Per-preset timeout for the `/unified` aggregate check (ms)   |
 | `HONEYPOT_IGNORE_LOOPBACK_PROBES` | `true`                | Drop TLS/HTTP protocol errors from loopback (see note below) |
 
 TLS certificates are auto-generated if missing.
@@ -66,6 +67,7 @@ Config loading order: `--configPath` > `NEST_CONFIG_FILE` > `/etc/nest/nest.conf
 | `GET`  | `/nagios/honey-pot` | Honeypot status     |
 | `GET`  | `/plugins/<name>`   | Plugin check        |
 | `POST` | `/local-config`     | Local config preset |
+| `GET`  | `/unified`          | Aggregate check     |
 | `GET`  | `/admin`            | Admin config editor |
 
 Add `?help` to any route for documentation. Unknown routes return 404 (Nagios code=3).
@@ -109,6 +111,44 @@ written bare, so an unchanged preset round-trips byte for byte. A value may not
 contain a newline or `#`.
 
 See `plugins/configs/local-presets.conf.example` for setup instructions and security considerations.
+
+### Unified Check
+
+The `/unified` endpoint runs a **set** of presets in one request and returns the
+worst status, so many Nagios services collapse into a single check. Opt a preset
+in by adding the reserved parameter `nestUnified=true` to its line (or tick
+**Include in unified check** in the admin editor):
+
+```
+disk_root=check-disk warn=80% crit=90% nestUnified=true
+cert_expiry=check-cert-expiry nestUnified=true
+```
+
+`nestUnified` is a directive for the aggregator, not a plugin input: it is
+stripped before the preset is dialled back into its plugin route, so a plugin
+never receives a parameter it did not declare.
+
+**Request:**
+
+```bash
+curl -k https://localhost:5000/unified -H "x-api-key: $NEST_API_KEY"
+```
+
+**Response** (worst code wins; every non-OK preset is listed, OK presets are
+counted and still contribute performance data):
+
+```json
+{
+	"message": "NEST UNIFIED: CRITICAL - 1 problem(s) of 2; disk_root: CRITICAL - / at 95%",
+	"code": 2,
+	"performanceData": "'disk_root'=95%;80;90 'cert_expiry'=42"
+}
+```
+
+Severity order is `CRITICAL > UNKNOWN > WARNING > OK`. Presets run in parallel,
+each capped at `UNIFIED_TIMEOUT_MS` (default 15 s); a preset that errors or
+exceeds the timeout is reported as `UNKNOWN` rather than stalling the aggregate.
+With no preset opted in, the check returns `UNKNOWN`.
 
 ### Admin UI (Local Config Editor)
 
@@ -263,6 +303,12 @@ file on disk, so parallel workers would fight over it.
 
 ```bash
 ./scripts/check_nest.sh check-test nagiosReturnMessage=test nagiosReturnValue=0
+```
+
+Run the aggregate check over every preset opted into the unified check:
+
+```bash
+./scripts/check_nest.sh --unified
 ```
 
 Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST_CA_CERT`, `NEST_API_KEY`, `NEST_API_KEY_HEADER`

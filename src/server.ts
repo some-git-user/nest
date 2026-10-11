@@ -70,6 +70,7 @@ import dynamicRoutes, {
 } from './routes/dynamic-routes';
 import honeyPot from './routes/honey-pot';
 import localConfig from './routes/local-config';
+import unifiedRouter from './routes/unified';
 import type {PluginParam} from './types/plugin';
 
 validateStartup();
@@ -443,6 +444,10 @@ app.use('/', dynamicRoutes);
 app.use('/nagios', appInfo);
 app.use('/nagios/honey-pot', honeyPot);
 app.use('/local-config', localConfig);
+// The unified check runs every preset opted into it and reports the worst
+// status, collapsing many Nagios services into one. Mounted like /local-config:
+// behind access control, and not under /plugins so the plugin loader ignores it.
+app.use('/unified', unifiedRouter);
 // Mounted after access control on purpose: reaching the admin UI requires the
 // global API key *and* the admin credential, so a leaked monitoring key alone
 // can never rewrite the config file.

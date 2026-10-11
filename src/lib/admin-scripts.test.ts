@@ -201,6 +201,38 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('.then(releaseTestLock)');
 		});
 
+		it('renders an Include-in-unified checkbox per preset', () => {
+			// The reserved nestUnified flag is a directive for the aggregator, not a
+			// plugin param: it gets a dedicated checkbox, is excluded from the
+			// undeclared-param list, and is collected from the checkbox state rather
+			// than a text value.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"var NEST_UNIFIED_PARAM = 'nestUnified'",
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('data-role="unified"');
+			expect(ADMIN_CONFIG_SCRIPT).toContain('Include in unified check');
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'fieldNames[name] || name === NEST_UNIFIED_PARAM',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'element.querySelectorAll(\'[data-role="unified"]\')',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				"params[NEST_UNIFIED_PARAM] = 'true'",
+			);
+		});
+
+		it('shows how many presets are in the unified check', () => {
+			// The count reflects the draft (what a save would write), refreshed on
+			// render and on every checkbox edit.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'var updateUnifiedCount = function',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain("getElementById('unifiedCount')");
+			expect(ADMIN_CONFIG_SCRIPT).toContain('updateUnifiedCount();');
+			expect(ADMIN_CONFIG_SCRIPT).toContain("role !== 'unified'");
+		});
+
 		it('contains no inline </script> sequence', () => {
 			expect(ADMIN_CONFIG_SCRIPT).not.toContain('</script>');
 		});

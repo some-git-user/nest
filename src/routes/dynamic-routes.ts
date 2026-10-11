@@ -12,6 +12,7 @@ import {
 } from '../controllers/dynamic-routes';
 import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
+import {isRecord} from '../lib/is-record';
 import {logger} from '../lib/logger';
 import {buildPluginSandbox} from '../lib/plugin-sandbox';
 import {commandToRoutePath} from '../lib/plugin-utils';
@@ -56,9 +57,6 @@ export type {
 } from '../types/plugin';
 
 export const registeredPluginRouteParams: Record<string, PluginParam[]> = {};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null;
 
 const toInputType = (value: unknown): PluginParamInputType => {
 	if (

@@ -177,6 +177,12 @@ export const env = cleanEnv(process.env, {
 	// auth limiter deliberately ignores successes, so the spawn path needs its
 	// own counter. Loose enough for a human clicking Test in the editor.
 	ADMIN_TEST_RATE_LIMIT_MAX: num({default: 20}),
+	// The unified check dials every enabled preset in parallel and waits for all
+	// of them, so one hung plugin would otherwise hold the whole aggregate open
+	// for the internal client's own 30 s timeout. Each dial-back is capped here;
+	// a preset that exceeds it is reported as UNKNOWN, not allowed to stall the
+	// rest. Kept below the internal client's 30 s so the aggregate decides first.
+	UNIFIED_TIMEOUT_MS: num({default: 15_000}),
 	// Protocol errors (clientError/tlsClientError) from a loopback peer are
 	// dropped by default. A browser on the same host keeps speculative TLS
 	// sockets and discards them once the real request lands, and Node reports a

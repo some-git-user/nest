@@ -20,6 +20,7 @@ print_help() {
 Usage:
     $0 <command> [param1=value1 param2=value2 ...]
     $0 --local-config <key>
+    $0 --unified
 
 Description:
         Calls a Nest endpoint and prints Nagios-compatible output.
@@ -34,6 +35,7 @@ Examples:
     NEST_HOST=192.168.1.10 NEST_API_KEY=topsecret $0 nagios/honey-pot
     NEST_HOST=192.168.1.10 NEST_API_KEY=topsecret $0 /nagios
     $0 --local-config test_perfdata
+    $0 --unified
 
 Environment variables:
     NEST_SCHEME           Request scheme (default: https)
@@ -57,6 +59,8 @@ Notes:
     - Duplicate parameter keys keep the last value.
     - Use --help or -h to print this help.
     - Use --local-config <key> to call a plugin using a server-side config preset.
+    - Use --unified to run the aggregate check over every preset opted into the
+      unified check (nestUnified=true) and report the worst status.
 EOF
 }
 
@@ -216,6 +220,14 @@ if [[ "$command_name" == "--local-config" ]]; then
     command_name="/local-config"
     command_parameters=("localConfig=$local_config_key")
     is_local_config=true
+fi
+
+# Check for --unified argument: run the aggregate check over every preset opted
+# into the unified check. No parameters; a plain GET to the reserved route.
+# Route: GET /unified (not under /plugins/ to avoid dynamic route conflicts)
+if [[ "$command_name" == "--unified" ]]; then
+    command_name="/unified"
+    command_parameters=()
 fi
 
 # Build URL

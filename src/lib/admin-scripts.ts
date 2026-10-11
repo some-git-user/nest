@@ -22,6 +22,12 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		return;
 	}
 
+	// Reserved parameter that opts a preset into the unified check. It is a
+	// directive for the aggregator, not a plugin input, so it is rendered as a
+	// dedicated checkbox rather than a parameter field, and stripped server-side
+	// before dial-back. Must match NEST_UNIFIED_PARAM in lib/unified-check.ts.
+	var NEST_UNIFIED_PARAM = 'nestUnified';
+
 	var commands = Array.isArray(state.commands) ? state.commands : [];
 	var entries = Array.isArray(state.entries) ? state.entries : [];
 	var drift = state.drift || {};
@@ -167,9 +173,10 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		});
 
 		// Parameters that the selected plugin does not declare are still shown, so a
-		// preset written by hand is never silently dropped on save.
+		// preset written by hand is never silently dropped on save. The reserved
+		// unified flag is excluded: it has its own checkbox, not a text field.
 		Object.keys(entry.params).forEach(function (name) {
-			if (fieldNames[name]) {
+			if (fieldNames[name] || name === NEST_UNIFIED_PARAM) {
 				return;
 			}
 			var secret = isSecret(entry, name);
@@ -254,6 +261,9 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					'<div class="key-warning" data-role="keyWarning"></div>' +
 					'<div class="key-warning" data-role="requiredWarning"></div>' +
 					'<div class="params">' + paramRows(entry, index) + '</div>' +
+					'<label class="unified-toggle"><input type="checkbox" data-role="unified"' +
+					(entry.params[NEST_UNIFIED_PARAM] === 'true' ? ' checked' : '') +
+					'> Include in unified check</label>' +
 					commandHtml +
 					'<div class="entry-actions">' +
 					'<button type="button" data-action="test"' + (runningTestCount > 0 ? ' disabled' : '') + '>Test</button>' +
@@ -268,6 +278,27 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		updateDuplicateKeyWarnings();
 		updateRequiredWarnings();
 		updateTestButtons();
+		updateUnifiedCount();
+	};
+
+	// Show how many presets are currently opted into the unified check, so the
+	// operator sees the aggregate's scope without counting checkboxes. Counts the
+	// draft, not the DOM, so it reflects exactly what a save would write.
+	var updateUnifiedCount = function () {
+		var countHost = document.getElementById('unifiedCount');
+		if (!(countHost instanceof HTMLElement)) {
+			return;
+		}
+		var included = 0;
+		draft.forEach(function (entry) {
+			if (entry.params[NEST_UNIFIED_PARAM] === 'true') {
+				included += 1;
+			}
+		});
+		countHost.textContent =
+			included === 0
+				? 'Unified check: no presets'
+				: 'Unified check: ' + included + ' preset(s)';
 	};
 
 	// Flag every preset whose key is used more than once, before the operator
@@ -452,6 +483,17 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		element.querySelectorAll('[data-role="command"]').forEach(function (input) {
 			if (input instanceof HTMLSelectElement) {
 				entry.command = input.value;
+			}
+		});
+		// The unified checkbox is a directive, not a plugin param: checked writes
+		// the reserved flag, unchecked removes it entirely (rather than storing a
+		// literal "false"), so the saved line stays clean and the server's
+		// "=== 'true'" test is the single source of truth.
+		element.querySelectorAll('[data-role="unified"]').forEach(function (input) {
+			if (input instanceof HTMLInputElement) {
+				if (input.checked) {
+					params[NEST_UNIFIED_PARAM] = 'true';
+				}
 			}
 		});
 		element.querySelectorAll('[data-param]').forEach(function (input) {
@@ -678,7 +720,11 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 				return;
 			}
 			var role = event.target.getAttribute('data-role');
-			if (role !== 'key' && !event.target.hasAttribute('data-param')) {
+			if (
+				role !== 'key' &&
+				role !== 'unified' &&
+				!event.target.hasAttribute('data-param')
+			) {
 				return;
 			}
 			var entryElement = event.target.closest('.entry');
@@ -687,6 +733,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 			}
 			updateDuplicateKeyWarnings();
 			updateRequiredWarnings();
+			updateUnifiedCount();
 		});
 	}
 

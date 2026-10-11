@@ -830,6 +830,42 @@ describe('admin-local-config controller', () => {
 			expect(res.json).toHaveBeenCalledWith({ok: false, problems: ['bad']});
 		});
 
+		it('strips the reserved unified flag before the declared-parameter check', async () => {
+			// A preset opted into the unified check carries nestUnified, which no
+			// plugin declares. Test must strip it first, or testing such a preset
+			// would fail on an "undeclared parameter" error.
+			resetTestRegistry();
+			mockedValidatePresetEntry.mockReturnValue([]);
+			mockedMakeInternalRequest.mockResolvedValue({
+				statusCode: 200,
+				headers: {},
+				body: 'OK',
+			});
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {
+							key: 'k',
+							command: 'check_disk',
+							params: {warn: '80', nestUnified: 'true'},
+						},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			expect(mockedMakeInternalRequest).toHaveBeenCalledWith(
+				expect.objectContaining({params: {warn: '80'}}),
+			);
+			expect(res.json).toHaveBeenCalledWith({
+				ok: true,
+				statusCode: 200,
+				body: 'OK',
+			});
+		});
+
 		it('runs a GET test through the internal client', async () => {
 			mockedValidatePresetEntry.mockReturnValue([]);
 			mockedMakeInternalRequest.mockResolvedValue({

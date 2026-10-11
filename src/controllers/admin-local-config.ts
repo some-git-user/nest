@@ -20,6 +20,7 @@ import {
 import {getErrorMessage} from '../lib/error-message';
 import {HttpStatusCodes} from '../lib/http-status-codes';
 import {makeInternalRequest} from '../lib/internal-http-client';
+import {isRecord} from '../lib/is-record';
 import {
 	getApprovedConfigContent,
 	getConfigDrift,
@@ -38,6 +39,7 @@ import {
 } from '../lib/local-config-store';
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
+import {stripUnifiedParam} from '../lib/unified-check';
 import {
 	registeredPluginRouteParams,
 	registeredPluginRoutes,
@@ -68,9 +70,6 @@ type AdminPresetResponse = AdminPresetPayload & {
 	/** Names whose stored value was masked, so the form can label them. */
 	secretParams: string[];
 };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const isStringRecord = (value: unknown): value is Record<string, string> =>
 	isRecord(value) && Object.values(value).every((v) => typeof v === 'string');
@@ -564,6 +563,11 @@ export const postAdminTest = async (
 	}
 
 	const draft = parsed.entries[0];
+	// The reserved unified flag is a directive for the aggregator, not a plugin
+	// input, so it is stripped before the declared-parameter check and the
+	// dial-back. Without this, testing a preset opted into the unified check
+	// would fail on an "undeclared parameter" error for a key no plugin declares.
+	draft.params = stripUnifiedParam(draft.params);
 	const problems = validatePresetEntry(draft);
 	if (problems.length > 0) {
 		sendAdminJson(res, HttpStatusCodes.BAD_REQUEST, {ok: false, problems});
