@@ -260,7 +260,7 @@ describe('checkDebianEol plugin', () => {
 		expect(result.message).toContain('is not EOL. Remaining days');
 	});
 
-	test('falls back when VERSION_ID is missing in os-release', async () => {
+	test('reports the read failure when VERSION_ID is missing in os-release', async () => {
 		mockReadFile('ID=debian\n');
 		const consoleErrorSpy = jest
 			.spyOn(console, 'error')
@@ -277,6 +277,87 @@ describe('checkDebianEol plugin', () => {
 
 		expect(consoleErrorSpy).toHaveBeenCalled();
 		expect(result.code).toBe(3);
-		expect(result.message).toContain('Debian version "null" does not match');
+		expect(result.message).toContain('could not determine the Debian version');
+	});
+
+	test('reads an unquoted VERSION_ID from os-release', async () => {
+		// The os-release key=value format allows a bare value; the regex must
+		// not require a closing quote (VERSION_ID=12, not VERSION_ID="12").
+		mockReadFile('VERSION_ID=12\n');
+		mockFetchResponse(
+			true,
+			buildApiResponse({name: '12', eolFrom: '2099-01-01', isEol: false}),
+		);
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(0);
+		expect(result.message).toContain('is not EOL. Remaining days');
+	});
+
+	test('reports UNKNOWN when the endoflife request rejects', async () => {
+		mockReadFile('VERSION_ID="12"\n');
+		global.fetch = jest
+			.fn()
+			.mockRejectedValue(
+				new Error('socket hang up'),
+			) as unknown as typeof fetch;
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('could not reach');
+		expect(result.message).toContain('socket hang up');
+	});
+
+	test('reports UNKNOWN when the endoflife request rejects with a non-Error', async () => {
+		// fetch seams (or a polyfill) can reject with anything; the message
+		// must still degrade to String(error) rather than crash.
+		mockReadFile('VERSION_ID="12"\n');
+		global.fetch = jest
+			.fn()
+			.mockRejectedValue('plain string failure') as unknown as typeof fetch;
+
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 60,
+			criticalEolRemainingDays: 30,
+		});
+
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('could not reach');
+		expect(result.message).toContain('plain string failure');
+	});
+
+	test('rejects a non-numeric threshold instead of reporting OK', async () => {
+		// A non-numeric threshold makes every `daysRemaining <= threshold`
+		// comparison false, so without validation the check reports OK for any
+		// input. It must be rejected as UNKNOWN.
+		mockReadFile('VERSION_ID="12"\n');
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 'soon' as unknown as number,
+			criticalEolRemainingDays: 30,
+		});
+		expect(result.code).toBe(3);
+		expect(result.message).toContain('must be numbers');
+	});
+
+	test('rejects criticalEolRemainingDays above warningEolRemainingDays', async () => {
+		// The critical branch is evaluated first, so a critical threshold above
+		// the warning one would skip WARNING entirely. Reject the misordering.
+		mockReadFile('VERSION_ID="12"\n');
+		const result = await checkDebianEol({
+			warningEolRemainingDays: 30,
+			criticalEolRemainingDays: 60,
+		});
+		expect(result.code).toBe(3);
+		expect(result.message).toContain(
+			'criticalEolRemainingDays must be less than or equal to warningEolRemainingDays',
+		);
 	});
 });

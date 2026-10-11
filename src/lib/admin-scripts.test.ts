@@ -114,6 +114,17 @@ describe('admin-scripts', () => {
 			expect(ADMIN_CONFIG_SCRIPT).toContain('stored: false');
 		});
 
+		it('marks reverted entries as stored so the command line survives revert', () => {
+			// The revert response is the file on disk, so every entry in it is a
+			// stored preset. Without the flag the "Run from Nagios" line would
+			// vanish after a revert until the page is reloaded. Pin the revert
+			// remap itself: it must set the stored flag on every entry.
+			expect(ADMIN_CONFIG_SCRIPT).toContain(
+				'entries = Array.isArray(body.entries) ? body.entries : [];',
+			);
+			expect(ADMIN_CONFIG_SCRIPT).toContain('stored: true,');
+		});
+
 		it('warns about duplicate keys before validate or save', () => {
 			// The server rejects duplicate keys on validate and save; the editor
 			// mirrors that rule live so the operator sees it while typing.

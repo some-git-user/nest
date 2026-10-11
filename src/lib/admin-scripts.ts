@@ -823,6 +823,10 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 							command: entry.command,
 							params: entry.params || {},
 							secretParams: Array.isArray(entry.secretParams) ? entry.secretParams : [],
+							// The revert response is the file on disk, so every entry
+							// in it is a stored preset: without the flag the
+							// "Run from Nagios" command line would vanish until reload.
+							stored: true,
 						};
 					});
 					render();

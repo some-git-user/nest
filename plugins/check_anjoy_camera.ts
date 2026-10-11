@@ -109,6 +109,23 @@ const STATUS_TEXT: Record<NagiosReturnCode, string> = {
 };
 
 /**
+ * Severity order for aggregating findings: CRITICAL > UNKNOWN > WARNING > OK.
+ *
+ * The numeric Nagios codes cannot be compared directly: UNKNOWN is 3, which is
+ * numerically ABOVE CRITICAL (2), so a plain `candidate > code` would let an
+ * indeterminate finding mask a definite failure — a stale feed (CRITICAL) plus
+ * one unreported metric (UNKNOWN) would report UNKNOWN, and the result would
+ * depend on which check ran first. This is the same ranking the unified
+ * aggregate uses (see SEVERITY_RANK in src/lib/unified-check.ts).
+ */
+const SEVERITY_RANK: Record<NagiosReturnCode, number> = {
+	2: 3,
+	3: 2,
+	1: 1,
+	0: 0,
+};
+
+/**
  * Read a numeric metric out of the feed.
  *
  * The generator writes bare numbers, `null` for "not available", and the
@@ -627,7 +644,7 @@ export const checkAnjoyCamera = async (
 	let code: NagiosReturnCode = NagiosReturnCodes.OK;
 
 	const bump = (candidate: NagiosReturnCode, detail?: string) => {
-		if (candidate > code) {
+		if (SEVERITY_RANK[candidate] > SEVERITY_RANK[code]) {
 			code = candidate;
 		}
 		if (detail) {

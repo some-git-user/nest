@@ -514,6 +514,8 @@ const buildPerformanceData = (
 	batteries: Battery[],
 	config: BatteryConfig,
 ): NagiosPerformanceData[] => {
+	const worstHealth = minOf(batteries, (b) => b.healthPercent);
+	const worstCharge = minOf(batteries, (b) => b.capacity);
 	const performanceData: NagiosPerformanceData[] = [
 		{
 			label: 'battery_count',
@@ -521,25 +523,34 @@ const buildPerformanceData = (
 			uom: '',
 			min: '0',
 		},
-		{
+	];
+	// Emit an aggregate only when at least one battery reports the metric. An
+	// empty-string value is not a number, so the route's performance-data
+	// sanitizer would drop the entry AND log "Error parsing performance data"
+	// on every single run of a host without health/charge figures. Omitting the
+	// entry matches how the per-battery entries below are guarded.
+	if (worstHealth !== undefined) {
+		performanceData.push({
 			label: 'health_percent',
-			value: String(minOf(batteries, (b) => b.healthPercent) ?? ''),
+			value: String(worstHealth),
 			uom: '%',
 			warn: String(config.warningHealthPercent),
 			crit: String(config.criticalHealthPercent),
 			min: '0',
 			max: '100',
-		},
-		{
+		});
+	}
+	if (worstCharge !== undefined) {
+		performanceData.push({
 			label: 'charge_percent',
-			value: String(minOf(batteries, (b) => b.capacity) ?? ''),
+			value: String(worstCharge),
 			uom: '%',
 			warn: String(config.warningChargePercent),
 			crit: String(config.criticalChargePercent),
 			min: '0',
 			max: '100',
-		},
-	];
+		});
+	}
 
 	for (const battery of batteries) {
 		const prefix = battery.name.replace(/[^A-Za-z0-9_]/g, '_');

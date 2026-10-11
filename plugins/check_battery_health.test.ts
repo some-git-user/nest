@@ -266,7 +266,10 @@ describe('check_battery_health plugin', () => {
 			const result = checkBatteryHealth({}, fsImpl);
 			expect(result.code).toBe(0);
 			expect(result.message).toContain('worst health n/a');
-			expect(perf(result, 'health_percent')).toBe('');
+			// An unavailable metric must omit the aggregate entry entirely: an
+			// empty-string value is not numeric, so the route's sanitizer would
+			// drop it and log a spurious "Error parsing performance data" every run.
+			expect(perf(result, 'health_percent')).toBeUndefined();
 			expect(perf(result, 'BAT0_health_percent')).toBeUndefined();
 			expect(perf(result, 'BAT0_voltage')).toBeUndefined();
 			expect(perf(result, 'BAT0_cycle_count')).toBeUndefined();
@@ -311,7 +314,7 @@ describe('check_battery_health plugin', () => {
 			});
 			const result = checkBatteryHealth({}, fsImpl);
 			expect(result.code).toBe(0);
-			expect(perf(result, 'health_percent')).toBe('');
+			expect(perf(result, 'health_percent')).toBeUndefined();
 		});
 	});
 
@@ -357,8 +360,8 @@ describe('check_battery_health plugin', () => {
 			expect(result.code).toBe(0);
 			expect(result.message).toContain('worst health n/a');
 			expect(result.message).toContain('worst charge n/a');
-			expect(perf(result, 'health_percent')).toBe('');
-			expect(perf(result, 'charge_percent')).toBe('');
+			expect(perf(result, 'health_percent')).toBeUndefined();
+			expect(perf(result, 'charge_percent')).toBeUndefined();
 			expect(perf(result, 'BAT0_charge_percent')).toBeUndefined();
 		});
 

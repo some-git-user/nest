@@ -109,6 +109,15 @@ const isEndoflifeResponse = (
 	return Array.isArray(result.releases);
 };
 
+/**
+ * Wall-clock budget for the endoflife.date request.
+ *
+ * Without a timeout a hung upstream holds the request (and, under the unified
+ * check, a dial-back socket) open indefinitely. Every other outbound plugin
+ * bounds its fetch the same way.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 // Usage: check_nest.sh check-debian-eol [warningEolRemainingDays=30] [criticalEolRemainingDays=60]
 // Check the end of life (EOL) of the Debian OS and return a Nagios compatible string
 // The parameters are optional and default to 30 and 60 days respectively
@@ -121,11 +130,32 @@ export const checkDebianEol = async (params: {
 		message: 'Should not be here',
 		code: NagiosReturnCodes.UNKNOWN,
 	};
+	// Threshold sanity, same rule as the sibling plugins: a non-numeric value
+	// would make every `daysRemaining <= threshold` comparison silently false
+	// and report OK for any input, and a critical threshold above the warning
+	// one would skip WARNING entirely (the critical branch is checked first).
+	const warningDays = Number(warningEolRemainingDays);
+	const criticalDays = Number(criticalEolRemainingDays);
+	if (![warningDays, criticalDays].every(Number.isFinite)) {
+		returnObject.message =
+			'Error: warningEolRemainingDays and criticalEolRemainingDays must be numbers';
+		return returnObject;
+	}
+	if (criticalDays > warningDays) {
+		returnObject.message =
+			'Error: criticalEolRemainingDays must be less than or equal to warningEolRemainingDays';
+		return returnObject;
+	}
 	const debianVersionFile = '/etc/os-release';
 	const debianVersion = await fs.promises
 		.readFile(debianVersionFile, 'utf-8')
 		.then((data) => {
-			const versionIdMatch = data.match(/VERSION_ID="?([^"]+)"/);
+			// Debian quotes VERSION_ID (VERSION_ID="12"), but the os-release
+			// key=value format also allows a bare value (VERSION_ID=12); the
+			// trailing quote must therefore be optional, and the value class
+			// excludes the closing quote and the newline so either form stops
+			// at the right character.
+			const versionIdMatch = data.match(/VERSION_ID="?([^"\n]+)"?/);
 			if (versionIdMatch) {
 				return versionIdMatch[1];
 			} else {
@@ -137,8 +167,28 @@ export const checkDebianEol = async (params: {
 			return null;
 		});
 
+	// Without a version there is nothing to look up. Report the actual problem
+	// instead of fetching anyway and failing with a misleading
+	// `Debian version "null" does not match any releases`.
+	if (debianVersion === null) {
+		returnObject.message = `Error: could not determine the Debian version from ${debianVersionFile}`;
+		return returnObject;
+	}
+
 	const eolUrl = 'https://endoflife.date/api/v1/products/debian/';
-	const response = await fetch(eolUrl);
+	// A transport failure or the timeout rejects; report it as UNKNOWN with the
+	// reason rather than letting the throw escape to the route's generic 500.
+	let response: Awaited<ReturnType<typeof fetch>>;
+	try {
+		response = await fetch(eolUrl, {
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		});
+	} catch (error) {
+		returnObject.message = `Error: could not reach ${eolUrl} - ${
+			error instanceof Error ? error.message : String(error)
+		}`;
+		return returnObject;
+	}
 	if (!response.ok) {
 		returnObject.message = `Error: ${response.status} ${response.statusText}`;
 		return returnObject;
@@ -183,13 +233,16 @@ export const checkDebianEol = async (params: {
 			(eolDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
 		);
 
-		if (daysRemaining <= criticalEolRemainingDays) {
+		if (daysRemaining <= criticalDays) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
 			returnObject.code = NagiosReturnCodes.CRITICAL;
-		} else if (daysRemaining <= warningEolRemainingDays) {
+		} else if (daysRemaining <= warningDays) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL in ${daysRemaining} days`;
 			returnObject.code = NagiosReturnCodes.WARNING;
-		} else if (daysRemaining > warningEolRemainingDays) {
+		} else {
+			// daysRemaining > warningDays: the condition was redundant here
+			// (the branch above already handled `<=`), so its false side was
+			// unreachable and could never be covered.
 			returnObject.message = `Debian version "${debianVersion}" is not EOL. Remaining days: ${daysRemaining}`;
 			returnObject.code = NagiosReturnCodes.OK;
 		}

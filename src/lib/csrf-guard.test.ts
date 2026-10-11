@@ -166,6 +166,19 @@ describe('csrf guard middleware', () => {
 		expect(status).not.toHaveBeenCalled();
 	});
 
+	// Regression: the default-port strip must be anchored to the end of the
+	// Host. A port that merely contains ":443" as a substring (4430-4439,
+	// 44300-44399, ...) was previously mangled (":4430" -> "0"), rejecting
+	// every same-origin browser POST on such a port.
+	test('keeps a port that merely contains the default-port substring', () => {
+		const {next, status} = invoke({
+			method: 'POST',
+			headers: {host: 'nest.example:4430', origin: 'https://nest.example:4430'},
+		});
+		expect(next).toHaveBeenCalledTimes(1);
+		expect(status).not.toHaveBeenCalled();
+	});
+
 	test('rejects a POST whose Origin omits a non-default port', () => {
 		const {next, status} = invoke({
 			method: 'POST',

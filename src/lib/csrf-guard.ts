@@ -82,7 +82,15 @@ const readHeader = (req: Request, name: string): string => {
  * listener is HTTPS-only, so the scheme is fixed rather than derived.
  */
 const expectedOrigin = (req: Request): string => {
-	const host = readHeader(req, 'host').replace(HTTPS_DEFAULT_PORT_SUFFIX, '');
+	let host = readHeader(req, 'host');
+	// Strip only a *trailing* default port. Replacing the first `:443`
+	// occurrence would also corrupt any port that merely contains it as a
+	// substring: `example.com:4430` would become `example.com0`, so every
+	// same-origin browser POST would be rejected against a real Origin of
+	// `https://example.com:4430`.
+	if (host.endsWith(HTTPS_DEFAULT_PORT_SUFFIX)) {
+		host = host.slice(0, -HTTPS_DEFAULT_PORT_SUFFIX.length);
+	}
 	return `https://${host}`;
 };
 

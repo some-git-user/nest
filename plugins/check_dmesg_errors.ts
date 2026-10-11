@@ -185,7 +185,11 @@ const filterLinesByRegex = (
 ): string[] | null => {
 	try {
 		const context = vm.createContext({pattern, lines, keepMatching});
-		const kept: unknown = vm.runInContext(
+		// The script always returns an array. If that contract were ever
+		// broken, `.map` throws on a non-array value and the catch below
+		// reports `null` exactly as it does for a timeout, so a separate
+		// Array.isArray guard would be unreachable by construction.
+		const kept = vm.runInContext(
 			`(function () {
 				const re = new RegExp(pattern, 'i');
 				const out = [];
@@ -198,10 +202,7 @@ const filterLinesByRegex = (
 			})()`,
 			context,
 			{timeout: REGEX_TIMEOUT_MS},
-		);
-		if (!Array.isArray(kept)) {
-			return null;
-		}
+		) as unknown[];
 		return kept.map((line) => String(line));
 	} catch {
 		return null;

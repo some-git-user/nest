@@ -230,8 +230,8 @@ echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/p
     <tr><td><code>criticalCpuLoad1m</code></td><td>number</td><td>8</td><td>CRITICAL when the 1-minute CPU load is greater than or equal to this threshold</td></tr>
     <tr><td><code>warningFreeSpaceGiB</code></td><td>number</td><td>20</td><td>WARNING when free disk space is less than or equal to this threshold</td></tr>
     <tr><td><code>criticalFreeSpaceGiB</code></td><td>number</td><td>10</td><td>CRITICAL when free disk space is less than or equal to this threshold</td></tr>
-    <tr><td><code>skipApps</code></td><td>boolean</td><td>true</td><td>Skip the app update section. The upstream project notes that enabling app updates triggers an external request to the Nextcloud app store.</td></tr>
-    <tr><td><code>skipUpdate</code></td><td>boolean</td><td>true</td><td>Skip the core update section.</td></tr>
+    <tr><td><code>skipApps</code></td><td>boolean</td><td>false</td><td>Skip the app update section. The upstream project notes that enabling app updates triggers an external request to the Nextcloud app store.</td></tr>
+    <tr><td><code>skipUpdate</code></td><td>boolean</td><td>false</td><td>Skip the core update section.</td></tr>
   </tbody>
 </table>
 

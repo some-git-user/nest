@@ -711,6 +711,39 @@ describe('checkAnjoyCamera - liveness dominates', () => {
 		expect(result.code).toBe(3);
 		expect(result.message).toContain('ahead');
 	});
+
+	test('a CRITICAL finding outranks an UNKNOWN one regardless of order', async () => {
+		// Nagios codes are numeric but UNKNOWN (3) is numerically above CRITICAL
+		// (2): a plain `>` comparison would let the unreported metric mask the
+		// definite failure, and the outcome would depend on check order. Here the
+		// stale feed (CRITICAL) is found first and the missing web_server state
+		// (UNKNOWN) second - the aggregate must stay CRITICAL.
+		const feed = healthyFeed() as Record<string, unknown>;
+		delete feed.web_server_running;
+		feed.generated_epoch = NOW_EPOCH - 600;
+		const result = await checkAnjoyCamera(
+			{host: 'cam'},
+			feedReturning(JSON.stringify(feed)),
+			NOW_MS,
+		);
+		expect(result.code).toBe(2);
+		expect(result.message).toContain('STALE');
+		expect(result.message).toContain('web_server state unknown');
+	});
+
+	test('a CRITICAL finding outranks an UNKNOWN staleness verdict too', async () => {
+		// Reverse order: the UNKNOWN comes first (future timestamp), the
+		// CRITICAL (watchdog down) after it via bump().
+		const result = await checkAnjoyCamera(
+			{host: 'cam'},
+			feedReturning(
+				jsonFeed({generated_epoch: NOW_EPOCH + 600, watchdog_running: 0}),
+			),
+			NOW_MS,
+		);
+		expect(result.code).toBe(2);
+		expect(result.message).toContain('watchdog NOT running');
+	});
 });
 
 describe('buildFeedUrl - missing host', () => {
