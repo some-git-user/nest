@@ -562,6 +562,19 @@ describe('local-config-store', () => {
 			);
 			expect(merged).toEqual({password: ''});
 		});
+
+		it('restores a heuristic-matched secret not declared as password', () => {
+			// A param named "token" that matches the credential heuristic but is
+			// NOT in the declared-password set must still be restored, otherwise
+			// the masked empty string would be written to disk and destroy the
+			// stored secret.
+			const merged = mergeMaskedParams(
+				new Set<string>(),
+				{token: 'enc:v1:stored'},
+				{token: ''},
+			);
+			expect(merged).toEqual({token: 'enc:v1:stored'});
+		});
 	});
 
 	describe('isSecretParamName', () => {

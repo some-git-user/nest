@@ -347,7 +347,14 @@ export const mergeMaskedParams = (
 
 	const merged: Record<string, string> = {};
 	for (const [key, value] of Object.entries(incoming)) {
-		if (value === '' && secretNames.has(key) && key in existing) {
+		// The same test {@link maskEntry} and {@link encryptSecretParams} use:
+		// a declared `password` OR a name matching the credential heuristic. If
+		// this were narrower than the mask, a heuristic-matched param that a
+		// plugin declares as a non-password type would be masked to '' on load
+		// but not restored here, so the empty string would survive to disk and
+		// destroy the stored secret.
+		const isSecret = secretNames.has(key) || isSecretParamName(key);
+		if (value === '' && isSecret && key in existing) {
 			merged[key] = existing[key];
 			continue;
 		}

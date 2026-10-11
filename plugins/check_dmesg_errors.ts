@@ -1,3 +1,4 @@
+import vm from 'vm';
 import type {NagiosReturnCode} from '../src/types/nagios';
 import type {HtmlTemplateString, PluginMeta} from '../src/types/plugin';
 import {PluginReturn} from '../src/types/plugin';
@@ -142,6 +143,70 @@ export type ExecFileFn = (
 	args: string[],
 	options?: ExecSyncOptions,
 ) => string;
+
+/**
+ * The all-zero severity counters, returned when the check cannot produce a
+ * meaningful result (invalid pattern, no access, aborted regex).
+ */
+const zeroCountPerformanceData = () => [
+	{label: 'total_messages', value: 0, uom: 'count'},
+	{label: 'emerg_count', value: 0, uom: 'count'},
+	{label: 'alert_count', value: 0, uom: 'count'},
+	{label: 'crit_count', value: 0, uom: 'count'},
+	{label: 'err_count', value: 0, uom: 'count'},
+	{label: 'warn_count', value: 0, uom: 'count'},
+];
+
+/**
+ * Wall-clock budget (ms) for applying an operator-supplied regex to the output.
+ *
+ * `new RegExp()` only proves a pattern compiles; it does not bound the work a
+ * match does. A pattern with catastrophic backtracking (e.g. `(a+)+b`) spins
+ * the single-threaded event loop indefinitely, hanging every other request the
+ * server handles. `vm.runInContext`'s `timeout` is the only reliable JS-level
+ * guard: a watchdog terminates the script from outside the running code, so a
+ * pathological pattern fails this check instead of freezing the process.
+ */
+const REGEX_TIMEOUT_MS = 2000;
+
+/**
+ * Apply a case-insensitive regex to `lines`, keeping the lines where
+ * `re.test(line)` equals `keepMatching`, under {@link REGEX_TIMEOUT_MS}.
+ *
+ * Returns the kept lines, or `null` when the match exceeded the budget. The
+ * pattern is assumed to compile (callers validate it first); a compile error
+ * here is reported the same way as a timeout so the caller still degrades
+ * cleanly rather than throwing.
+ */
+const filterLinesByRegex = (
+	lines: string[],
+	pattern: string,
+	keepMatching: boolean,
+): string[] | null => {
+	try {
+		const context = vm.createContext({pattern, lines, keepMatching});
+		const kept: unknown = vm.runInContext(
+			`(function () {
+				const re = new RegExp(pattern, 'i');
+				const out = [];
+				for (const line of lines) {
+					if (re.test(line) === keepMatching) {
+						out.push(line);
+					}
+				}
+				return out;
+			})()`,
+			context,
+			{timeout: REGEX_TIMEOUT_MS},
+		);
+		if (!Array.isArray(kept)) {
+			return null;
+		}
+		return kept.map((line) => String(line));
+	} catch {
+		return null;
+	}
+};
 
 export const checkDmesgErrors = async (params: {
 	level?: number;
@@ -341,22 +406,34 @@ export const checkDmesgErrors = async (params: {
 		};
 	}
 
-	// Filter by custom pattern if provided
+	// Filter by custom pattern if provided. The match runs under a wall-clock
+	// timeout so a catastrophic-backtracking pattern cannot hang the process
+	// (see filterLinesByRegex); the pattern is already known to compile.
 	let filteredMessages = dmesgOutput.split('\n').filter((line) => line.trim());
 
 	if (pattern) {
-		const patternRegex = new RegExp(pattern, 'i');
-		filteredMessages = filteredMessages.filter((line) =>
-			patternRegex.test(line),
-		);
+		const kept = filterLinesByRegex(filteredMessages, pattern, true);
+		if (kept === null) {
+			return {
+				message: `ERROR: Regex pattern "${pattern}" exceeded ${REGEX_TIMEOUT_MS} ms and was aborted. Simplify the pattern.`,
+				code: 3,
+				performanceData: zeroCountPerformanceData(),
+			};
+		}
+		filteredMessages = kept;
 	}
 
-	// Filter out ignored patterns if provided
+	// Filter out ignored patterns if provided (same timeout guard).
 	if (ignorePatterns) {
-		const ignoreRegex = new RegExp(ignorePatterns, 'i');
-		filteredMessages = filteredMessages.filter(
-			(line) => !ignoreRegex.test(line),
-		);
+		const kept = filterLinesByRegex(filteredMessages, ignorePatterns, false);
+		if (kept === null) {
+			return {
+				message: `ERROR: Ignore pattern "${ignorePatterns}" exceeded ${REGEX_TIMEOUT_MS} ms and was aborted. Simplify the pattern.`,
+				code: 3,
+				performanceData: zeroCountPerformanceData(),
+			};
+		}
+		filteredMessages = kept;
 	}
 
 	// Analyze messages for severity

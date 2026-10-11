@@ -167,8 +167,17 @@ export const checkDebianEol = async (params: {
 		if (latestMatchingRelease.isEol) {
 			returnObject.message = `Debian version "${debianVersion}" is EOL since ${latestMatchingRelease.eolFrom}`;
 			returnObject.code = NagiosReturnCodes.CRITICAL;
+			// Return here: the release is already past EOL, so the day-count
+			// branches below would overwrite this message with a nonsensical
+			// negative "EOL in -N days".
+			return returnObject;
 		}
 		const eolDate = new Date(latestMatchingRelease.eolFrom);
+		if (Number.isNaN(eolDate.getTime())) {
+			returnObject.message = `Debian version "${debianVersion}" has an unparseable EOL date "${latestMatchingRelease.eolFrom}" from ${eolUrl}`;
+			returnObject.code = NagiosReturnCodes.UNKNOWN;
+			return returnObject;
+		}
 		const today = new Date();
 		const daysRemaining = Math.ceil(
 			(eolDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
@@ -184,6 +193,9 @@ export const checkDebianEol = async (params: {
 			returnObject.message = `Debian version "${debianVersion}" is not EOL. Remaining days: ${daysRemaining}`;
 			returnObject.code = NagiosReturnCodes.OK;
 		}
+	} else {
+		returnObject.message = `No releases found from ${eolUrl}`;
+		returnObject.code = NagiosReturnCodes.UNKNOWN;
 	}
 
 	return returnObject;

@@ -130,7 +130,7 @@ describe('checkDebianEol plugin', () => {
 		});
 
 		expect(result.code).toBe(3);
-		expect(result.message).toBe('Should not be here');
+		expect(result.message).toContain('No releases found');
 	});
 
 	test('uses default warning and critical thresholds when parameters are omitted', async () => {
@@ -171,7 +171,7 @@ describe('checkDebianEol plugin', () => {
 		});
 
 		expect(result.code).toBe(3);
-		expect(result.message).toBe('Should not be here');
+		expect(result.message).toContain('unparseable EOL date');
 	});
 
 	test('returns not-found message when Debian version is not in releases', async () => {
@@ -203,7 +203,7 @@ describe('checkDebianEol plugin', () => {
 		});
 
 		expect(result.code).toBe(2);
-		expect(result.message).toContain('is EOL in');
+		expect(result.message).toContain('is EOL since');
 	});
 
 	test('returns critical when days remaining are below critical threshold', async () => {

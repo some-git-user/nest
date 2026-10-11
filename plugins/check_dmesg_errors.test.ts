@@ -89,6 +89,36 @@ describe('checkDmesgErrors', () => {
 			expect(result.message).toContain('Invalid ignore pattern');
 		});
 
+		it('should abort a catastrophic-backtracking pattern instead of hanging', async () => {
+			// (a+)+$ against a long run of 'a' with no trailing match forces
+			// exponential backtracking. Without the wall-clock guard this would
+			// spin the event loop indefinitely; with it, the check degrades to a
+			// clean UNKNOWN. The jest timeout proves it did not hang.
+			mockedExecSync.mockReturnValue(`${'a'.repeat(40)}b`);
+			const result = await checkDmesgErrors({
+				pattern: '(a+)+$',
+				timeRange: 60,
+				execSync: mockedExecSync,
+			});
+
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('exceeded');
+		});
+
+		it('should abort a catastrophic-backtracking ignore pattern', async () => {
+			mockedExecSync.mockReturnValue(`${'a'.repeat(40)}b`);
+			const result = await checkDmesgErrors({
+				ignorePatterns: '(a+)+$',
+				timeRange: 60,
+				execSync: mockedExecSync,
+			});
+
+			// The ignore filter runs after the (absent) pattern filter, so the
+			// pathological line reaches it and the timeout still fires.
+			expect(result.code).toBe(3);
+			expect(result.message).toContain('exceeded');
+		});
+
 		it('should return valid performance data structure', async () => {
 			mockedExecSync.mockReturnValue('');
 			const result = await checkDmesgErrors({
