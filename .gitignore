@@ -26,6 +26,9 @@ playwright/.cache/
 # certificates
 certs
 
+# secret master key (encrypts secrets in local-presets.conf)
+secrets
+
 # plugins whitelist
 plugins/plugin-whitelist.txt
 

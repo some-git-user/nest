@@ -1880,4 +1880,70 @@ test=duplicate`;
 			jest.resetModules();
 		});
 	});
+
+	describe('decrypting encrypted params at load', () => {
+		afterEach(() => {
+			resetModuleState();
+			jest.resetModules();
+		});
+
+		const loadWith = (
+			configContent: string,
+			decryptImpl: (value: string) => string,
+		) => {
+			fs.writeFileSync(mockConfigPath, configContent);
+			const configHash = crypto
+				.createHash('sha256')
+				.update(configContent)
+				.digest('hex');
+			jest.resetModules();
+			jest.dontMock('fs');
+			jest.doMock('./plugin-whitelist', () => ({
+				hashPluginFile: jest.fn(() => configHash),
+			}));
+			jest.doMock('./secret-crypto', () => ({
+				isEncryptedValue: (value: string) => value.startsWith('enc:v1:'),
+				decryptSecret: jest.fn(decryptImpl),
+			}));
+			const fresh = require('./local-config');
+			fresh.setCheckConfigFileSecurityFn(() => true);
+			fresh.setWhitelistCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
+			fresh.loadConfigAtStartup();
+			return fresh;
+		};
+
+		it('decrypts an enc:v1: param into plaintext for the plugin', () => {
+			const fresh = loadWith(
+				'vigor=check-vigor165-vdsl password=enc:v1:BLOB',
+				(value) => (value === 'enc:v1:BLOB' ? 'recovered' : value),
+			);
+			expect(fresh.hasRuntimeValidationFailed()).toBe(false);
+			expect(fresh.lookupConfig('vigor').params).toEqual({
+				password: 'recovered',
+			});
+		});
+
+		it('leaves plaintext params untouched', () => {
+			const fresh = loadWith(
+				'vigor=check-vigor165-vdsl host=1.2.3.4 password=plain',
+				() => 'should-not-be-called',
+			);
+			expect(fresh.lookupConfig('vigor').params).toEqual({
+				host: '1.2.3.4',
+				password: 'plain',
+			});
+		});
+
+		it('fails validation when a secret cannot be decrypted', () => {
+			const fresh = loadWith(
+				'vigor=check-vigor165-vdsl password=enc:v1:BADCIPHER',
+				() => {
+					throw new Error('wrong key');
+				},
+			);
+			expect(fresh.hasRuntimeValidationFailed()).toBe(true);
+		});
+	});
 });

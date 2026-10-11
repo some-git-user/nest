@@ -8,6 +8,18 @@ if [ -f /etc/nest/nest.conf ]; then
     chmod 600 /etc/nest/nest.conf
 fi
 
+# Master key for encrypting secrets in local-presets.conf. Created here, before
+# the service starts, so the app never has to. Kept OUTSIDE the plugins dir so
+# the admin editor cannot read or overwrite it. Never overwritten on upgrade:
+# replacing it would make existing encrypted secrets unrecoverable.
+# umask 077 so the redirect creates the file owner-only from the first byte,
+# rather than at the default umask and tightened afterwards.
+if [ ! -f /etc/nest/nest.key ]; then
+    (umask 077 && head -c 32 /dev/urandom > /etc/nest/nest.key)
+fi
+chown root:root /etc/nest/nest.key
+chmod 600 /etc/nest/nest.key
+
 # Load variables from /etc/nest/nest.conf
 if [ -f /etc/nest/nest.conf ]; then
     set -a

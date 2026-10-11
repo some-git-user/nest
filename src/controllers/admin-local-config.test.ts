@@ -34,6 +34,7 @@ import {
 } from '../lib/local-config-store';
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
+import {decryptSecret, isEncryptedValue} from '../lib/secret-crypto';
 import {
 	registeredPluginRouteParams,
 	registeredPluginRoutes,
@@ -59,6 +60,12 @@ jest.mock('../lib/local-config');
 jest.mock('../lib/local-config-store');
 jest.mock('../lib/logger');
 jest.mock('../lib/plugin-utils');
+jest.mock('../lib/secret-crypto', () => ({
+	__esModule: true,
+	decryptSecret: jest.fn((value: string) => `decrypted:${value}`),
+	encryptSecret: jest.fn((value: string) => `enc:v1:${value}`),
+	isEncryptedValue: jest.fn((value: string) => value.startsWith('enc:v1:')),
+}));
 jest.mock('../routes/dynamic-routes', () => ({
 	registeredPluginRoutes: [] as string[],
 	registeredPluginRouteParams: {} as Record<string, unknown>,
@@ -97,6 +104,8 @@ const mockedIsSecretParamName = jest.mocked(isSecretParamName);
 const mockedCommandToRoutePath = jest.mocked(commandToRoutePath);
 const mockedLoggerWarn = jest.mocked(logger.warn);
 const mockedLoggerError = jest.mocked(logger.error);
+const mockedDecryptSecret = jest.mocked(decryptSecret);
+const mockedIsEncryptedValue = jest.mocked(isEncryptedValue);
 
 type MockResponse = {
 	status: jest.Mock;
@@ -157,6 +166,14 @@ describe('admin-local-config controller', () => {
 		mockedHasRuntimeValidationFailed.mockReturnValue(false);
 		mockedReadConfigDocument.mockReturnValue(docResult([]));
 		mockedWriteConfigDocument.mockImplementation(() => undefined);
+		// clearAllMocks strips the pass-through impls installed by the mock
+		// factory, so re-install them for tests that exercise the decrypt branch.
+		mockedIsEncryptedValue.mockImplementation((value: string) =>
+			value.startsWith('enc:v1:'),
+		);
+		mockedDecryptSecret.mockImplementation(
+			(value: string) => `decrypted:${value}`,
+		);
 	});
 
 	describe('listAdminCommands / secretParamNamesForCommand', () => {
@@ -1069,6 +1086,105 @@ describe('admin-local-config controller', () => {
 					params: {warn: '90', password: 'stored-secret'},
 				}),
 			);
+		});
+
+		it('decrypts a stored enc:v1: secret before testing', async () => {
+			mockedValidatePresetEntry.mockReturnValue([]);
+			mockedReadConfigDocument.mockReturnValue(
+				docResult([
+					{
+						key: 'k',
+						command: 'check_disk',
+						params: {password: 'enc:v1:BLOB'},
+					},
+				]),
+			);
+			mockedMergeMaskedParams.mockImplementation(
+				(secrets, existing, incoming) => {
+					const merged: Record<string, string> = {...incoming};
+					if (
+						secrets.has('password') &&
+						incoming.password === '' &&
+						existing &&
+						'password' in existing
+					) {
+						merged.password = existing.password;
+					}
+					return merged;
+				},
+			);
+			mockedMakeInternalRequest.mockResolvedValue({
+				statusCode: 200,
+				headers: {},
+				body: 'OK',
+			});
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {key: 'k', command: 'check_disk', params: {password: ''}},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			// The stored ciphertext is decrypted before the plugin is dialed.
+			expect(mockedDecryptSecret).toHaveBeenCalledWith('enc:v1:BLOB');
+			expect(mockedMakeInternalRequest).toHaveBeenCalledWith(
+				expect.objectContaining({
+					params: {password: 'decrypted:enc:v1:BLOB'},
+				}),
+			);
+		});
+
+		it('reports a 400 when a stored secret cannot be decrypted', async () => {
+			mockedValidatePresetEntry.mockReturnValue([]);
+			mockedReadConfigDocument.mockReturnValue(
+				docResult([
+					{
+						key: 'k',
+						command: 'check_disk',
+						params: {password: 'enc:v1:ORPHANED'},
+					},
+				]),
+			);
+			mockedMergeMaskedParams.mockImplementation(
+				(secrets, existing, incoming) => {
+					const merged: Record<string, string> = {...incoming};
+					if (
+						secrets.has('password') &&
+						incoming.password === '' &&
+						existing &&
+						'password' in existing
+					) {
+						merged.password = existing.password;
+					}
+					return merged;
+				},
+			);
+			// The master key changed, so the stored blob no longer decrypts.
+			mockedDecryptSecret.mockImplementation(() => {
+				throw new Error('wrong key');
+			});
+			const res = makeResponse();
+
+			await postAdminTest(
+				{
+					body: {
+						entry: {key: 'k', command: 'check_disk', params: {password: ''}},
+					},
+				} as Request,
+				res as unknown as Response,
+			);
+
+			// A clean 400, not an unhandled rejection into a 500.
+			expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.BAD_REQUEST);
+			expect(res.json).toHaveBeenCalledWith({
+				message:
+					'Could not decrypt a stored secret - the secret key may have changed',
+			});
+			expect(mockedMakeInternalRequest).not.toHaveBeenCalled();
 		});
 	});
 

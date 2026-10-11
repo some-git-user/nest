@@ -10,6 +10,7 @@ import {
 	validateConfigFileSecurity,
 } from './local-config';
 import {logger} from './logger';
+import {isEncryptedValue} from './secret-crypto';
 
 /**
  * Allowed characters for a config preset key. Shared with the request validation
@@ -370,3 +371,40 @@ const SECRET_NAME_PATTERN =
 
 export const isSecretParamName = (name: string): boolean =>
 	SECRET_NAME_PATTERN.test(name);
+
+/**
+ * Encrypt every secret parameter of a preset that is not already encrypted.
+ *
+ * Runs at write time, after {@link mergeMaskedParams}, so it sees plaintext for
+ * a freshly typed secret and the stored value for an untouched one. The rules:
+ *
+ *   - a secret value already carrying the `enc:v1:` prefix is left untouched, so
+ *     re-saving a preset never double-encrypts;
+ *   - a plaintext secret (newly typed, or a legacy plaintext value the operator
+ *     did not change) is encrypted, which migrates old files on the next save;
+ *   - a non-secret value is always written verbatim.
+ *
+ * The `encrypt` callback is injected so this stays pure and unit-testable, and
+ * so the store does not depend on the crypto module's key handling.
+ *
+ * @param entry The preset with merged (plaintext) params
+ * @param secretNames Names the plugin declares as `password`
+ * @param encrypt Function turning plaintext into an `enc:v1:` blob
+ * @returns A copy of the entry with secret params encrypted
+ */
+export const encryptSecretParams = (
+	entry: PresetEntry,
+	secretNames: Set<string>,
+	encrypt: (plaintext: string) => string,
+): PresetEntry => {
+	const params: Record<string, string> = {};
+	for (const [name, value] of Object.entries(entry.params)) {
+		const isSecret = secretNames.has(name) || isSecretParamName(name);
+		if (isSecret && value.length > 0 && !isEncryptedValue(value)) {
+			params[name] = encrypt(value);
+			continue;
+		}
+		params[name] = value;
+	}
+	return {...entry, params};
+};

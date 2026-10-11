@@ -5,6 +5,7 @@ import {getErrorMessage} from './error-message';
 import {validateUnixFileSecurity} from './file-security';
 import {logger} from './logger';
 import {hashPluginFile as hashPluginFileImpl} from './plugin-whitelist';
+import {decryptSecret, isEncryptedValue} from './secret-crypto';
 
 // Maximum allowed config file size (100KB)
 const MAX_CONFIG_FILE_SIZE = 100 * 1024;
@@ -354,10 +355,43 @@ const parseConfigFileInternal = (
 			throw new Error(`Duplicate key "${key}" at line ${i + 1}`);
 		}
 
-		configs.set(key, parseConfigLine(value));
+		const entry = parseConfigLine(value);
+		decryptEntrySecrets(entry, key);
+		configs.set(key, entry);
 	}
 
 	return configs;
+};
+
+/**
+ * Replace every `enc:v1:` parameter value with its decrypted plaintext.
+ *
+ * Runs once at startup, after the line parses and before the entry is cached,
+ * so plugins receive plaintext exactly as they would from a plaintext preset.
+ * A value that cannot be decrypted (wrong key, tampered blob) throws, which the
+ * caller turns into a startup validation failure - a preset whose secret cannot
+ * be recovered is broken, and silently serving it with ciphertext would only
+ * produce a confusing plugin error later.
+ *
+ * @param entry The parsed entry, mutated in place
+ * @param presetKey The preset key, used only for the error message
+ */
+const decryptEntrySecrets = (
+	entry: LocalConfigEntry,
+	presetKey: string,
+): void => {
+	for (const [paramName, paramValue] of Object.entries(entry.params)) {
+		if (!isEncryptedValue(paramValue)) {
+			continue;
+		}
+		try {
+			entry.params[paramName] = decryptSecret(paramValue);
+		} catch (error) {
+			throw new Error(
+				`Could not decrypt "${paramName}" of preset "${presetKey}": ${getErrorMessage(error)}`,
+			);
+		}
+	}
 };
 
 /**

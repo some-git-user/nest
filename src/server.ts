@@ -39,6 +39,7 @@ import {
 import {logger} from './lib/logger';
 import {verifyConfigFiles} from './lib/plugin-whitelist';
 import {parseTrustProxy} from './lib/request-ip';
+import {bootstrapSecretKey} from './lib/secret-bootstrap';
 import {
 	createAccessControlMiddleware,
 	getRecommendedSecurityWarnings,
@@ -369,6 +370,15 @@ for (const warning of configVerification.warnings) {
 
 // Cache whitelist entries for runtime verification
 setWhitelistCache(configVerification.whitelistEntries);
+
+// Ensure the secret master key exists before the presets are decrypted. A
+// deployment with no key and no encrypted secrets yet gets one created; a
+// deployment whose key went missing while secrets remain is reported, not
+// silently re-keyed. Runs before loadConfigAtStartup() so decryption can use it.
+const secretKeyBootstrap = bootstrapSecretKey();
+if (secretKeyBootstrap.status !== 'present') {
+	recordStartupWarnings([secretKeyBootstrap.message]);
+}
 
 // Load config once at startup (hash validation integrated)
 loadConfigAtStartup();

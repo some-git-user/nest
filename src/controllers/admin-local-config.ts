@@ -29,6 +29,7 @@ import {
 import {
 	MAX_CONFIG_DOCUMENT_BYTES,
 	type PresetEntry,
+	encryptSecretParams,
 	hashConfigContent,
 	isSecretParamName,
 	mergeMaskedParams,
@@ -39,6 +40,11 @@ import {
 } from '../lib/local-config-store';
 import {logger} from '../lib/logger';
 import {commandToRoutePath} from '../lib/plugin-utils';
+import {
+	decryptSecret,
+	encryptSecret,
+	isEncryptedValue,
+} from '../lib/secret-crypto';
 import {stripUnifiedParam} from '../lib/unified-check';
 import {
 	registeredPluginRouteParams,
@@ -307,15 +313,23 @@ const buildDocument = (
 	storedEntriesByKey: Map<string, PresetEntry>,
 ): string => {
 	const {doc} = readConfigDocument();
-	const mergedEntries: PresetEntry[] = entries.map((entry) => ({
-		key: entry.key,
-		command: entry.command,
-		params: mergeMaskedParams(
-			secretParamNamesForCommand(entry.command),
-			storedEntriesByKey.get(entry.key)?.params,
-			entry.params,
-		),
-	}));
+	const mergedEntries: PresetEntry[] = entries.map((entry) => {
+		const secretNames = secretParamNamesForCommand(entry.command);
+		const merged: PresetEntry = {
+			key: entry.key,
+			command: entry.command,
+			params: mergeMaskedParams(
+				secretNames,
+				storedEntriesByKey.get(entry.key)?.params,
+				entry.params,
+			),
+		};
+		// Encrypt any secret that is not already ciphertext before it reaches
+		// disk. An untouched secret was restored by the merge as its stored
+		// `enc:v1:` value and is left alone; a freshly typed one (or a legacy
+		// plaintext value) is encrypted here.
+		return encryptSecretParams(merged, secretNames, encryptSecret);
+	});
 
 	return serializeConfigDocument({
 		preservedLines: doc.preservedLines,
@@ -601,11 +615,33 @@ export const postAdminTest = async (
 	// merge only substitutes for names the plugin typed as `password`.
 	const {doc} = readConfigDocument();
 	const stored = storedEntriesByKeyFrom(doc.entries).get(draft.key);
-	const testParams = mergeMaskedParams(
+	const mergedTestParams = mergeMaskedParams(
 		secretParamNamesForCommand(draft.command),
 		stored?.params,
 		draft.params,
 	);
+	// A restored secret is stored as `enc:v1:` ciphertext; the plugin expects
+	// plaintext, so decrypt it here. A freshly typed secret is already plaintext
+	// and passes through untouched. Decryption can fail when the master key was
+	// lost or rotated while an encrypted preset remains on disk - the editor
+	// reads presets from disk, so Test is reachable even after startup marked
+	// the config invalid. Report that as a clean 400 rather than letting the
+	// throw reject the async handler into Express's default 500.
+	let testParams: Record<string, string>;
+	try {
+		testParams = {};
+		for (const [name, value] of Object.entries(mergedTestParams)) {
+			testParams[name] = isEncryptedValue(value) ? decryptSecret(value) : value;
+		}
+	} catch (error) {
+		reportError(
+			res,
+			error,
+			'Could not decrypt a stored secret - the secret key may have changed',
+			HttpStatusCodes.BAD_REQUEST,
+		);
+		return;
+	}
 
 	const method =
 		isRecord(req.body) && req.body.method === 'POST'

@@ -10,6 +10,7 @@ import {
 	MAX_CONFIG_DOCUMENT_BYTES,
 	type PresetEntry,
 	buildConfigLine,
+	encryptSecretParams,
 	hashConfigContent,
 	isSecretParamName,
 	mergeMaskedParams,
@@ -614,6 +615,73 @@ describe('local-config-store', () => {
 			for (const name of ['key', 'keyword', 'author', 'authority']) {
 				expect(isSecretParamName(name)).toBe(false);
 			}
+		});
+	});
+
+	describe('encryptSecretParams', () => {
+		const encrypt = (value: string): string => `enc:v1:${value}`;
+
+		it('encrypts a plaintext secret matched by the declared set', () => {
+			const entry: PresetEntry = {
+				key: 'vigor',
+				command: 'check-vigor165-vdsl',
+				params: {host: '1.2.3.4', password: 'plain'},
+			};
+			const result = encryptSecretParams(entry, new Set(['password']), encrypt);
+			expect(result.params).toEqual({
+				host: '1.2.3.4',
+				password: 'enc:v1:plain',
+			});
+		});
+
+		it('encrypts a plaintext secret matched only by the name heuristic', () => {
+			const entry: PresetEntry = {
+				key: 'x',
+				command: 'unknown-plugin',
+				params: {apiToken: 'abc'},
+			};
+			const result = encryptSecretParams(entry, new Set(), encrypt);
+			expect(result.params.apiToken).toBe('enc:v1:abc');
+		});
+
+		it('leaves an already-encrypted value untouched (no double encryption)', () => {
+			const entry: PresetEntry = {
+				key: 'vigor',
+				command: 'check-vigor165-vdsl',
+				params: {password: 'enc:v1:existing'},
+			};
+			const result = encryptSecretParams(entry, new Set(['password']), encrypt);
+			expect(result.params.password).toBe('enc:v1:existing');
+		});
+
+		it('leaves non-secret values verbatim', () => {
+			const entry: PresetEntry = {
+				key: 'vigor',
+				command: 'check-vigor165-vdsl',
+				params: {host: '1.2.3.4'},
+			};
+			const result = encryptSecretParams(entry, new Set(['password']), encrypt);
+			expect(result.params.host).toBe('1.2.3.4');
+		});
+
+		it('leaves an empty secret value empty', () => {
+			const entry: PresetEntry = {
+				key: 'vigor',
+				command: 'check-vigor165-vdsl',
+				params: {password: ''},
+			};
+			const result = encryptSecretParams(entry, new Set(['password']), encrypt);
+			expect(result.params.password).toBe('');
+		});
+
+		it('does not mutate the input entry', () => {
+			const entry: PresetEntry = {
+				key: 'vigor',
+				command: 'check-vigor165-vdsl',
+				params: {password: 'plain'},
+			};
+			encryptSecretParams(entry, new Set(['password']), encrypt);
+			expect(entry.params.password).toBe('plain');
 		});
 	});
 

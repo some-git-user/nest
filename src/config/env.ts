@@ -148,6 +148,11 @@ export const env = cleanEnv(process.env, {
 	TLS_CERT_PATH: str({default: 'certs/nest-cert.pem'}),
 	TLS_KEY_PATH: str({default: 'certs/nest-key.pem'}),
 	PLUGINS_DIR: str({default: 'plugins'}),
+	// Master key for encrypting secrets in local-presets.conf. Kept OUTSIDE the
+	// plugins directory so the admin editor - which can read and rewrite the
+	// presets - can never read or overwrite it. Relative paths resolve against
+	// the working directory; the deb sets this to /etc/nest/nest.key.
+	SECRET_KEY_PATH: str({default: 'secrets/nest.key'}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
 	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes
 	API_KEY_HEADER: str({default: 'x-api-key'}),

@@ -19,6 +19,14 @@ jest.mock('./lib/startup-warning-registry', () => ({
 	getStartupWarnings: jest.fn(() => []),
 }));
 
+// The secret-key bootstrap touches the filesystem and the real env; server
+// bootstrap tests mock the config loader too, so decryption never runs here.
+// The bootstrap's own behaviour is covered by secret-bootstrap.test.ts.
+jest.mock('./lib/secret-bootstrap', () => ({
+	__esModule: true,
+	bootstrapSecretKey: jest.fn(() => ({status: 'present'})),
+}));
+
 describe('server bootstrap', () => {
 	type FaviconHandler = (
 		_req: unknown,
@@ -1779,5 +1787,183 @@ describe('config drift warning on the overview page', () => {
 				'<div class="route-header"><a class="route-path" href="/admin">/admin</a></div>',
 			),
 		);
+	});
+});
+
+describe('secret key bootstrap warning', () => {
+	it('records a startup warning when the bootstrap reports a problem', () => {
+		jest.resetModules();
+
+		const use = jest.fn();
+		const get = jest.fn();
+		const app = {use, get, set: jest.fn()};
+		const expressFactory = Object.assign(
+			jest.fn(() => app),
+			{
+				json: jest.fn(() => 'json-middleware'),
+				urlencoded: jest.fn(() => 'urlencoded-middleware'),
+			},
+		);
+		const listen = jest.fn(
+			(_port: number, _host: string, callback?: () => void) => {
+				callback?.();
+				return {close: jest.fn()};
+			},
+		);
+		const createServer = jest.fn(() => ({
+			listen,
+			close: jest.fn((cb?: () => void) => cb?.()),
+			on: jest.fn(),
+		}));
+		const recordStartupWarnings = jest.fn();
+		const bootstrapSecretKey = jest.fn(() => ({
+			status: 'missing-with-secrets',
+			message: 'the secret key is missing',
+		}));
+
+		const processOnSpy = jest
+			.spyOn(process, 'on')
+			.mockImplementation((() => process) as typeof process.on);
+
+		jest.doMock('express', () => ({
+			__esModule: true,
+			default: Object.assign(expressFactory, {
+				Router: jest.fn(() => ({
+					post: jest.fn(),
+					get: jest.fn(),
+					use: jest.fn(),
+				})),
+			}),
+		}));
+		jest.doMock('helmet', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'helmet-middleware'),
+		}));
+		jest.doMock('express-rate-limit', () => ({
+			__esModule: true,
+			default: jest.fn(() => 'rate-limit-middleware'),
+		}));
+		jest.doMock('fs', () => ({
+			__esModule: true,
+			default: {
+				readFileSync: jest.fn(() => 'CONTENT'),
+				readdirSync: jest.fn(() => []),
+				existsSync: jest.fn(() => false),
+				statSync: jest.fn(() => ({mode: 0o100644})),
+				mkdirSync: jest.fn(),
+			},
+			readFileSync: jest.fn(() => 'CONTENT'),
+			readdirSync: jest.fn(() => []),
+			existsSync: jest.fn(() => false),
+			statSync: jest.fn(() => ({mode: 0o100644})),
+			mkdirSync: jest.fn(),
+		}));
+		jest.doMock('https', () => ({
+			__esModule: true,
+			default: {createServer},
+			createServer,
+		}));
+		jest.doMock('./config/env', () => ({
+			env: {
+				NODE_ENV: 'production',
+				HOST: 'localhost',
+				PORT: 5000,
+				API_KEY: '',
+				API_KEY_HEADER: 'x-api-key',
+				ALLOWED_IPS: '127.0.0.1',
+				TRUST_PROXY: 'false',
+				PLUGINS_DIR: 'plugins',
+				LOG_FILE_PATH: 'logs/nest.log',
+				TLS_CERT_PATH: 'certs/nest-cert.pem',
+				TLS_KEY_PATH: 'certs/nest-key.pem',
+				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+			},
+		}));
+		jest.doMock('./lib/tls', () => ({
+			ensureTlsCertificate: jest.fn(() => ({
+				certPath: '/tmp/nest-cert.pem',
+				keyPath: '/tmp/nest-key.pem',
+			})),
+		}));
+		jest.doMock('./lib/logger', () => ({
+			logger: {info: jest.fn(), warn: jest.fn(), error: jest.fn()},
+		}));
+		jest.doMock('./lib/startup-check', () => ({validateStartup: jest.fn()}));
+		jest.doMock('./lib/startup-warning-registry', () => ({
+			recordStartupWarnings,
+			getStartupWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/startup-warning-help', () => ({
+			getStartupWarningHelpTopic: jest.fn(() => null),
+			renderStartupWarningHelpHtml: jest.fn(() => ''),
+			renderStartupWarningListItems: jest.fn(),
+		}));
+		jest.doMock('./lib/security', () => ({
+			createAccessControlMiddleware: jest.fn(() => jest.fn()),
+			getRecommendedSecurityWarnings: jest.fn(() => []),
+		}));
+		jest.doMock('./lib/plugin-whitelist', () => ({
+			verifyConfigFiles: jest.fn(() => ({
+				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
+				warnings: [],
+			})),
+		}));
+		jest.doMock('./lib/cron/scheduler', () => ({
+			scheduleCleanup: jest.fn(),
+			runScheduler: jest.fn(),
+		}));
+		jest.doMock('./lib/secret-bootstrap', () => ({
+			__esModule: true,
+			bootstrapSecretKey,
+		}));
+		jest.doMock('./lib/local-config', () => ({
+			__esModule: true,
+			parseConfigFile: jest.fn(() => new Map()),
+			setWhitelistCache: jest.fn(),
+			hasRuntimeValidationFailed: jest.fn(() => false),
+			loadConfigAtStartup: jest.fn(),
+			getConfigDrift: jest.fn(() => ({
+				approvedHash: 'a',
+				currentHash: 'a',
+				drifted: false,
+			})),
+		}));
+		jest.doMock('./lib/nagios', () => ({
+			createNagiosReturnMessage: jest.fn(() => ({message: 'x', code: 3})),
+		}));
+		jest.doMock('./routes/app-info', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/honey-pot', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./routes/dynamic-routes', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+			registeredPluginRoutes: [],
+			registeredPluginRouteParams: {},
+			pluginStartupWarnings: [],
+		}));
+		jest.doMock('./routes/local-config', () => ({
+			__esModule: true,
+			default: {handle: jest.fn()},
+		}));
+		jest.doMock('./lib/honey-pot', () => ({
+			recordHoneypotSignal: jest.fn(),
+			recordNetworkProbeSignal: jest.fn(),
+			stashSocketIp: jest.fn(),
+		}));
+
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		require('./server');
+
+		expect(bootstrapSecretKey).toHaveBeenCalled();
+		expect(recordStartupWarnings).toHaveBeenCalledWith([
+			'the secret key is missing',
+		]);
+
+		processOnSpy.mockRestore();
 	});
 });
