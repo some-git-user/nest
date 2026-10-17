@@ -103,14 +103,14 @@ describe('server bootstrap', () => {
 		const createServer = jest.fn(() => ({listen, close, on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
-			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(true) // startup file-existence probe
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
 			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
 		const statSync = jest
 			.fn()
-			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
-			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+			.mockReturnValueOnce({mode: 0o100644}) // startup file-stat probe
+			.mockReturnValueOnce({mode: 0o100644}); // startup file-stat probe
 		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
 			if (filePath.includes('nest-cert.pem')) {
 				return 'CERT_CONTENT';
@@ -118,7 +118,7 @@ describe('server bootstrap', () => {
 			if (filePath.includes('nest-key.pem')) {
 				return 'KEY_CONTENT';
 			}
-			return 'WHITELIST_CONTENT';
+			return 'FILE_CONTENT';
 		});
 		const readdirSync = jest.fn(() => [
 			'check_test.ts',
@@ -198,6 +198,7 @@ describe('server bootstrap', () => {
 				TLS_CERT_PATH: 'certs/nest-cert.pem',
 				TLS_KEY_PATH: 'certs/nest-key.pem',
 				MAX_LOG_FILE_SIZE_BYTES: 1048576,
+				LOCAL_CONFIG_HASH: 'ABCDEF1234',
 			},
 		}));
 		jest.doMock('path', () => ({
@@ -245,7 +246,7 @@ describe('server bootstrap', () => {
 			__esModule: true,
 			default: 'dynamicRoutesRouter',
 			pluginStartupWarnings: [
-				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted.',
+				'Skipping plugin plugins/check_test.ts: no manifest plugins/check_test.manifest.json. Every plugin must ship a sidecar manifest to be trusted.',
 			],
 			registeredPluginRoutes: [
 				'/plugins/check-test',
@@ -289,10 +290,11 @@ describe('server bootstrap', () => {
 				code: 3,
 			})),
 		}));
+		const setApprovedHashCacheMock = jest.fn();
 		jest.doMock('./lib/local-config', () => ({
 			__esModule: true,
 			parseConfigFile: jest.fn(() => new Map()),
-			setWhitelistCache: jest.fn(),
+			setApprovedHashCache: setApprovedHashCacheMock,
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
 			getConfigDrift: jest.fn(() => ({
@@ -304,6 +306,10 @@ describe('server bootstrap', () => {
 
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		require('./server');
+
+		expect(setApprovedHashCacheMock).toHaveBeenCalledWith(
+			new Map([['configs/local-presets.conf', 'abcdef1234']]),
+		);
 
 		const getCalls = get.mock.calls as GetRouteCall[];
 		const useCalls = use.mock.calls as UseCall[];
@@ -403,7 +409,7 @@ describe('server bootstrap', () => {
 			},
 		);
 		warningHelpHandler(
-			{params: {warningId: 'plugin-not-whitelisted'}},
+			{params: {warningId: 'plugin-no-manifest'}},
 			{
 				setHeader: warningHelpSetHeader,
 				send: warningHelpSend,
@@ -544,11 +550,11 @@ describe('server bootstrap', () => {
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
-				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted.',
+				'Skipping plugin plugins/check_test.ts: no manifest plugins/check_test.manifest.json.',
 			),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
-			expect.stringContaining('/help/startup-warnings/plugin-not-whitelisted'),
+			expect.stringContaining('/help/startup-warnings/plugin-no-manifest'),
 		);
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
@@ -704,15 +710,15 @@ describe('server bootstrap', () => {
 		const createServer = jest.fn(() => ({listen, close: jest.fn(), on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // verifyConfigFiles checks whitelist exists
-			.mockReturnValueOnce(true) // verifyConfigFiles checks config exists
+			.mockReturnValueOnce(true) // startup file-existence probe
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(false) // TLS checks cert exists (false to trigger read)
 			.mockReturnValueOnce(false); // TLS checks key exists (false to trigger read)
 		const statSync = jest.fn(() => ({mode: 0o100644}));
 		const readFileSync = jest
 			.fn()
-			.mockReturnValueOnce('WHITELIST_CONTENT') // verifyConfigFiles reads whitelist
-			.mockReturnValueOnce('CONFIG_CONTENT') // verifyConfigFiles reads config file
+			.mockReturnValueOnce('FILE_CONTENT') // startup file read
+			.mockReturnValueOnce('CONFIG_CONTENT') // startup file read
 			.mockReturnValueOnce('CERT_CONTENT') // TLS cert
 			.mockReturnValueOnce('KEY_CONTENT'); // TLS key
 		const readdirSync = jest.fn(() => []);
@@ -880,23 +886,20 @@ describe('server bootstrap', () => {
 		const createServer = jest.fn(() => ({listen, close, on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
-			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(true) // startup file-existence probe
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
 			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
 		const statSync = jest
 			.fn()
-			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
-			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+			.mockReturnValueOnce({mode: 0o100644}) // startup file-stat probe
+			.mockReturnValueOnce({mode: 0o100644}); // startup file-stat probe
 		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
 			if (filePath.includes('nest-cert.pem')) {
 				return 'CERT_CONTENT';
 			}
 			if (filePath.includes('nest-key.pem')) {
 				return 'KEY_CONTENT';
-			}
-			if (filePath.includes('plugin-whitelist.txt')) {
-				return 'WHITELIST_CONTENT';
 			}
 			return 'CONFIG_CONTENT';
 		});
@@ -1021,7 +1024,7 @@ describe('server bootstrap', () => {
 		jest.doMock('./lib/local-config', () => ({
 			__esModule: true,
 			parseConfigFile: parseConfigFileMock,
-			setWhitelistCache: jest.fn(),
+			setApprovedHashCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
 			getConfigDrift: jest.fn(() => ({
@@ -1081,23 +1084,20 @@ describe('server bootstrap', () => {
 		const createServer = jest.fn(() => ({listen, close, on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // loadWhitelistEntries: whitelist exists
-			.mockReturnValueOnce(true) // verifyFileAgainstWhitelist: config file exists
+			.mockReturnValueOnce(true) // startup file-existence probe
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(false) // TLS: cert exists (false to trigger read)
 			.mockReturnValueOnce(false); // TLS: key exists (false to trigger read)
 		const statSync = jest
 			.fn()
-			.mockReturnValueOnce({mode: 0o100644}) // loadWhitelistEntries: whitelist stat
-			.mockReturnValueOnce({mode: 0o100644}); // verifyFileAgainstWhitelist: config stat
+			.mockReturnValueOnce({mode: 0o100644}) // startup file-stat probe
+			.mockReturnValueOnce({mode: 0o100644}); // startup file-stat probe
 		const readFileSync = jest.fn((filePath: string, _encoding?: string) => {
 			if (filePath.includes('nest-cert.pem')) {
 				return 'CERT_CONTENT';
 			}
 			if (filePath.includes('nest-key.pem')) {
 				return 'KEY_CONTENT';
-			}
-			if (filePath.includes('plugin-whitelist.txt')) {
-				return 'WHITELIST_CONTENT';
 			}
 			return 'CONFIG_CONTENT';
 		});
@@ -1219,7 +1219,7 @@ describe('server bootstrap', () => {
 		jest.doMock('./lib/local-config', () => ({
 			__esModule: true,
 			parseConfigFile: parseConfigFileMock,
-			setWhitelistCache: jest.fn(),
+			setApprovedHashCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => true), // Runtime validation failed
 			loadConfigAtStartup: jest.fn(),
 			getConfigDrift: jest.fn(() => ({
@@ -1335,13 +1335,13 @@ describe('form submission filtering', () => {
 		const createServer = jest.fn(() => ({listen, close, on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // whitelist exists
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(true) // config file exists
 			.mockReturnValueOnce(false) // TLS cert
 			.mockReturnValueOnce(false); // TLS key
 		const statSync = jest
 			.fn()
-			.mockReturnValueOnce({mode: 0o100644}) // whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}) // startup file-stat probe
 			.mockReturnValueOnce({mode: 0o100644}); // config stat
 		const readFileSync = jest.fn((filePath: string) => {
 			if (filePath.includes('nest-cert.pem')) {
@@ -1350,7 +1350,7 @@ describe('form submission filtering', () => {
 			if (filePath.includes('nest-key.pem')) {
 				return 'KEY_CONTENT';
 			}
-			return 'WHITELIST_CONTENT';
+			return 'FILE_CONTENT';
 		});
 		const readdirSync = jest.fn(() => ['check_test.ts', 'check_test.js']);
 		const info = jest.fn();
@@ -1464,16 +1464,6 @@ describe('form submission filtering', () => {
 			createAccessControlMiddleware: jest.fn(() => jest.fn()),
 			getRecommendedSecurityWarnings: jest.fn(() => []),
 		}));
-		jest.doMock('./lib/plugin-whitelist', () => ({
-			verifyPluginWhitelist: jest.fn(() => ({
-				approvedFiles: new Map([['check_test.ts', 'hash123']]),
-				warnings: [],
-			})),
-			verifyConfigFiles: jest.fn(() => ({
-				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
-				warnings: [],
-			})),
-		}));
 		jest.doMock('./lib/cron/scheduler', () => ({
 			scheduleCleanup: jest.fn(),
 			runScheduler: jest.fn(),
@@ -1569,13 +1559,13 @@ describe('config drift warning on the overview page', () => {
 		const createServer = jest.fn(() => ({listen, close, on}));
 		const existsSync = jest
 			.fn()
-			.mockReturnValueOnce(true) // whitelist exists
+			.mockReturnValueOnce(true) // startup file-existence probe
 			.mockReturnValueOnce(true) // config file exists
 			.mockReturnValueOnce(false) // TLS cert
 			.mockReturnValueOnce(false); // TLS key
 		const statSync = jest
 			.fn()
-			.mockReturnValueOnce({mode: 0o100644}) // whitelist stat
+			.mockReturnValueOnce({mode: 0o100644}) // startup file-stat probe
 			.mockReturnValueOnce({mode: 0o100644}); // config stat
 		const readFileSync = jest.fn((filePath: string) => {
 			if (filePath.includes('nest-cert.pem')) {
@@ -1584,7 +1574,7 @@ describe('config drift warning on the overview page', () => {
 			if (filePath.includes('nest-key.pem')) {
 				return 'KEY_CONTENT';
 			}
-			return 'WHITELIST_CONTENT';
+			return 'FILE_CONTENT';
 		});
 		const readdirSync = jest.fn(() => ['check_test.ts', 'check_test.js']);
 		const renderListItems = jest.fn((warnings: string[]) =>
@@ -1688,16 +1678,6 @@ describe('config drift warning on the overview page', () => {
 			createAccessControlMiddleware: jest.fn(() => jest.fn()),
 			getRecommendedSecurityWarnings: jest.fn(() => []),
 		}));
-		jest.doMock('./lib/plugin-whitelist', () => ({
-			verifyPluginWhitelist: jest.fn(() => ({
-				approvedFiles: new Map([['check_test.ts', 'hash123']]),
-				warnings: [],
-			})),
-			verifyConfigFiles: jest.fn(() => ({
-				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
-				warnings: [],
-			})),
-		}));
 		jest.doMock('./lib/cron/scheduler', () => ({
 			scheduleCleanup: jest.fn(),
 			runScheduler: jest.fn(),
@@ -1728,7 +1708,7 @@ describe('config drift warning on the overview page', () => {
 		jest.doMock('./lib/local-config', () => ({
 			__esModule: true,
 			parseConfigFile: jest.fn(() => new Map()),
-			setWhitelistCache: jest.fn(),
+			setApprovedHashCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
 			getConfigDrift: jest.fn(() => drift),
@@ -1763,9 +1743,7 @@ describe('config drift warning on the overview page', () => {
 		});
 
 		expect(renderListItems).toHaveBeenCalledWith([
-			expect.stringContaining(
-				'configs/local-presets.conf current-hash" to plugins/plugin-whitelist.txt',
-			),
+			expect.stringContaining('LOCAL_CONFIG_HASH=current-hash'),
 		]);
 	});
 
@@ -1902,12 +1880,6 @@ describe('secret key bootstrap warning', () => {
 			createAccessControlMiddleware: jest.fn(() => jest.fn()),
 			getRecommendedSecurityWarnings: jest.fn(() => []),
 		}));
-		jest.doMock('./lib/plugin-whitelist', () => ({
-			verifyConfigFiles: jest.fn(() => ({
-				approvedFiles: new Map([['local-presets.conf', 'hash456']]),
-				warnings: [],
-			})),
-		}));
 		jest.doMock('./lib/cron/scheduler', () => ({
 			scheduleCleanup: jest.fn(),
 			runScheduler: jest.fn(),
@@ -1919,7 +1891,7 @@ describe('secret key bootstrap warning', () => {
 		jest.doMock('./lib/local-config', () => ({
 			__esModule: true,
 			parseConfigFile: jest.fn(() => new Map()),
-			setWhitelistCache: jest.fn(),
+			setApprovedHashCache: jest.fn(),
 			hasRuntimeValidationFailed: jest.fn(() => false),
 			loadConfigAtStartup: jest.fn(),
 			getConfigDrift: jest.fn(() => ({

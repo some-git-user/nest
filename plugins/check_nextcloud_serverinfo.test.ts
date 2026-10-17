@@ -226,7 +226,7 @@ describe('checkNextcloudServerinfo plugin', () => {
 		);
 		expect(meta.help).toContain('Step-by-Step Setup');
 		expect(meta.help).toContain('occ config:app:set serverinfo token');
-		expect(meta.help).toContain('plugin-whitelist.txt');
+		expect(meta.help).toContain('check_nextcloud_serverinfo.manifest.json');
 	});
 
 	test('returns UNKNOWN usage when baseUrl is missing', async () => {

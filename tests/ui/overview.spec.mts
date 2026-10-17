@@ -5,7 +5,7 @@ import {API_KEY, UI_TEST_BASE_URL} from './workspace.mts';
  * Smoke test for the UI harness itself.
  *
  * Written first on purpose: it exercises the entire chain — scratch workspace,
- * generated whitelist, spawned server, TLS, browser, baseURL — so any
+ * generated plugin manifests, spawned server, TLS, browser, baseURL — so any
  * plumbing mistake surfaces here rather than inside a feature spec.
  */
 test.describe('route overview', () => {
@@ -41,12 +41,12 @@ test.describe('route overview', () => {
 	});
 
 	/**
-	 * Proves the fixture whitelist worked. A plugin whose hash does not match is
+	 * Proves the fixture manifests worked. A plugin whose hash does not match is
 	 * skipped silently — no route, no error — so without this assertion a
-	 * whitelist mistake would look like a missing feature rather than a broken
+	 * manifest mistake would look like a missing feature rather than a broken
 	 * test setup.
 	 */
-	test('lists every whitelisted fixture plugin as a route', async ({page}) => {
+	test('lists every trusted fixture plugin as a route', async ({page}) => {
 		await page.goto('/');
 
 		const pluginSection = page.locator('.route-section', {
@@ -68,9 +68,10 @@ test.describe('route overview', () => {
 	});
 
 	/**
-	 * The presets only appear when the copied config file is both whitelisted
-	 * and passes the Unix permission check. This is the assertion that catches a
-	 * group-writable copy: the section silently disappears rather than erroring.
+	 * The presets only appear when the copied config file's hash is approved
+	 * (LOCAL_CONFIG_HASH) and it passes the Unix permission check. This is the
+	 * assertion that catches a group-writable copy: the section silently
+	 * disappears rather than erroring.
 	 */
 	test('shows the local config presets from the seed file', async ({page}) => {
 		await page.goto('/');

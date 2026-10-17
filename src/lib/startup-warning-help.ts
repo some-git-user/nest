@@ -60,67 +60,6 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Set RATE_LIMIT_MAX to a positive value that fits your traffic profile.',
 		],
 	},
-	'whitelist-created': {
-		id: 'whitelist-created',
-		title: 'Whitelist File Created Automatically',
-		description:
-			'The whitelist file was missing and has been created with secure permissions, but it contains no approved plugin hashes yet.',
-		handlingSteps: [
-			'Review each plugin file currently in PLUGINS_DIR.',
-			'Add approved entries in the form "<filename> <sha256>".',
-			'Restart the service after approving the intended plugins.',
-		],
-	},
-	'whitelist-create-failed': {
-		id: 'whitelist-create-failed',
-		title: 'Whitelist File Creation Failed',
-		description:
-			'The service could not create the plugin whitelist file, so plugin trust checks cannot be initialized reliably.',
-		handlingSteps: [
-			'Ensure the parent directory exists and is writable by the service user.',
-			'Create the whitelist file manually with mode 0600 if needed.',
-		],
-	},
-	'whitelist-invalid-line': {
-		id: 'whitelist-invalid-line',
-		title: 'Whitelist Contains Invalid Line',
-		description:
-			'At least one whitelist line does not match the expected "filename hash" or "hash filename" format.',
-		handlingSteps: [
-			'Fix malformed lines in the whitelist file.',
-			'Use a 64-character lowercase/uppercase SHA-256 hex value.',
-		],
-	},
-	'whitelist-duplicate-entry': {
-		id: 'whitelist-duplicate-entry',
-		title: 'Duplicate Whitelist Entry',
-		description:
-			'The same plugin appears multiple times in the whitelist file; only the last entry is used.',
-		handlingSteps: [
-			'Remove duplicate lines so each plugin appears exactly once.',
-			'Keep only the latest reviewed hash for each plugin.',
-		],
-	},
-	'whitelist-insecure-ownership': {
-		id: 'whitelist-insecure-ownership',
-		title: 'Whitelist File Ownership Is Insecure',
-		description:
-			'The whitelist file owner uid does not match the service user uid, so the file cannot be trusted.',
-		handlingSteps: [
-			'Change ownership of the whitelist file to the service account user.',
-			'On Linux, use chown with the service uid/user and verify with ls -l.',
-		],
-	},
-	'whitelist-insecure-permissions': {
-		id: 'whitelist-insecure-permissions',
-		title: 'Whitelist File Permissions Are Insecure',
-		description:
-			'The whitelist file is writable by group or others, so third parties could weaken plugin trust checks.',
-		handlingSteps: [
-			'Set restrictive mode (0600) on the whitelist file.',
-			'Confirm permissions no longer include group/other write bits.',
-		],
-	},
 	'plugin-hash-failed': {
 		id: 'plugin-hash-failed',
 		title: 'Plugin Hash Calculation Failed',
@@ -131,27 +70,27 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 			'Check filesystem errors and path configuration for PLUGINS_DIR.',
 		],
 	},
-	'plugin-not-whitelisted': {
-		id: 'plugin-not-whitelisted',
-		title: 'Plugin Not Whitelisted',
+	'plugin-no-manifest': {
+		id: 'plugin-no-manifest',
+		title: 'Plugin Has No Manifest',
 		description:
-			'The plugin is new or not listed in the whitelist file, so startup blocked route registration.',
+			'Each plugin is trusted by a sidecar manifest (<name>.manifest.json) sitting next to it. A plugin file with no manifest is refused at startup (fail-secure), so its routes are not registered.',
 		handlingSteps: [
 			'Review the plugin source code and intended behavior.',
-			'Add the provided sha256 to the whitelist file for this plugin.',
-			'Restart the service to load the now-approved plugin.',
+			'Create a sidecar manifest named "<plugin>.manifest.json" next to the plugin file, declaring at least "name", "version" and "entry".',
+			'Run "nest plugins hash" to record the plugin SHA-256 into its manifest.',
+			'Restart the service to load the now-trusted plugin.',
 		],
 	},
-	'config-not-whitelisted': {
-		id: 'config-not-whitelisted',
-		title: 'Config File Not Whitelisted',
+	'plugin-unhashed': {
+		id: 'plugin-unhashed',
+		title: 'Plugin Manifest Has No Hash',
 		description:
-			'The config file is new or not listed in the whitelist file, so the service refuses to trust it.',
+			'The plugin loaded, but its manifest declares no "hash", so it was loaded without integrity verification. Filesystem ownership and permission checks remain the security boundary for this case.',
 		handlingSteps: [
-			'Review the config file contents and ensure it is correctly formatted.',
-			'Calculate the SHA-256 hash: sha256sum plugins/configs/local-presets.conf',
-			'Add the hash to plugin-whitelist.txt: configs/local-presets.conf <hash>',
-			'Restart the service to load the now-approved config file.',
+			'Review the plugin source and confirm it is the intended code.',
+			'Run "nest plugins hash" to record the current SHA-256 into the plugin manifest.',
+			'Restart the service so the plugin is loaded with integrity verification.',
 		],
 	},
 	'plugin-insecure-permissions': {
@@ -181,10 +120,10 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 		id: 'plugin-hash-changed',
 		title: 'Plugin Hash Changed',
 		description:
-			'The current plugin file hash does not match the approved hash in the whitelist file.',
+			'The current plugin file hash does not match the hash declared in its sidecar manifest, so the plugin was not loaded.',
 		handlingSteps: [
 			'Review the plugin diff and confirm the change is expected.',
-			"Update the whitelist entry in 'plugins/plugin-whitelist.txt' with the new approved sha256 hash.",
+			'Run "nest plugins hash" to update the hash in the plugin manifest.',
 			'Restart the service to load the updated plugin.',
 		],
 	},
@@ -192,11 +131,11 @@ const WARNING_TOPICS: Record<string, StartupWarningHelpTopic> = {
 		id: 'config-drift-awaiting-approval',
 		title: 'Config File Changed Since Approval',
 		description:
-			'The local config presets file on disk no longer matches the hash stored in the whitelist file. The presets that are currently served are still the approved ones; the edited file is only loaded after the hash is approved and the service is restarted.',
+			'The local config presets file on disk no longer matches the hash stored in LOCAL_CONFIG_HASH. The presets that are currently served are still the approved ones; the edited file is only loaded after the hash is approved and the service is restarted.',
 		handlingSteps: [
 			'Review the file contents, for example with: diff <file> <backup> or the admin UI editor.',
 			'Calculate the current hash: sha256sum plugins/configs/local-presets.conf',
-			'Add or update the entry "configs/local-presets.conf <sha256>" in plugins/plugin-whitelist.txt.',
+			'Run "nest plugins hash" or set "LOCAL_CONFIG_HASH=<sha256>" in the nest config file (/etc/nest/nest.conf).',
 			'Restart the service so the approved file is loaded again.',
 			'If the edit was accidental, use "Revert to approved" in the admin UI instead of approving it.',
 		],
@@ -251,82 +190,30 @@ const CLASSIFIERS: StartupWarningClassifier[] = [
 		matcher: /rate limiting is effectively disabled/i,
 	},
 	{
-		id: 'whitelist-created',
-		matcher: /whitelist file .* was missing and has been created/i,
-	},
-	{id: 'whitelist-create-failed', matcher: /could not create whitelist file/i},
-	{
-		id: 'whitelist-invalid-line',
-		matcher: /invalid line \d+ in .*plugin-whitelist\.txt/i,
-	},
-	{id: 'whitelist-duplicate-entry', matcher: /duplicate whitelist entry/i},
-	{
-		id: 'whitelist-insecure-ownership',
-		matcher: /whitelist file .* insecure ownership/i,
-	},
-	{
-		id: 'whitelist-insecure-permissions',
-		matcher: /whitelist file .* insecure permissions/i,
-	},
-	{
 		id: 'plugin-hash-failed',
-		matcher: /could not hash .*skipping plugin registration/i,
+		matcher: /Plugin trust warning: could not hash/i,
 	},
+	{id: 'plugin-unhashed', matcher: /has no "hash" in its manifest/i},
+	{id: 'plugin-hash-changed', matcher: /hash changed\. Manifest expects/i},
 	{
-		id: 'config-not-whitelisted',
-		matcher: /Config warning: .* is new or not whitelisted/i,
-	},
-	{
-		id: 'plugin-not-whitelisted',
-		matcher: /Plugin trust warning: .* is new or not whitelisted/i,
-	},
-	{
-		id: 'config-insecure-permissions',
-		matcher: /Config warning: .* has insecure permissions/i,
+		id: 'plugin-no-manifest',
+		matcher: /: no manifest .*must ship a sidecar manifest/i,
 	},
 	{
 		id: 'plugin-insecure-permissions',
 		matcher: /Skipping plugin .* due to insecure permissions/i,
 	},
-	{id: 'plugin-hash-changed', matcher: /hash changed\. whitelist expects/i},
+	{
+		id: 'config-insecure-permissions',
+		matcher: /Config file .* has insecure permissions/i,
+	},
 	{
 		id: 'config-drift-awaiting-approval',
-		matcher: /presets file on disk is awaiting whitelist approval/i,
+		matcher: /presets file on disk is awaiting approval/i,
 	},
 	{id: 'cert-replaced', matcher: /TLS certificate replaced automatically/i},
 	{id: 'cert-generated', matcher: /TLS certificate or key was missing/i},
 ];
-
-type RenderedStartupWarning = {
-	message: string;
-	whitelistEntry?: string;
-};
-
-const extractWhitelistEntry = (warning: string): RenderedStartupWarning => {
-	const addMatch = warning.match(/add "([^"]+)" to /i);
-	if (addMatch) {
-		return {
-			message: warning.replace(
-				/add "[^"]+" to /i,
-				'add the following line to ',
-			),
-			whitelistEntry: addMatch[1],
-		};
-	}
-
-	const updateMatch = warning.match(/update "([^"]+)" in /i);
-	if (updateMatch) {
-		return {
-			message: warning.replace(
-				/update "[^"]+" in /i,
-				'update the following line in ',
-			),
-			whitelistEntry: updateMatch[1],
-		};
-	}
-
-	return {message: warning};
-};
 
 export const resolveStartupWarningTopicId = (warning: string): string => {
 	for (const classifier of CLASSIFIERS) {
@@ -350,12 +237,8 @@ export const renderStartupWarningListItems = (warnings: string[]): string => {
 		.map((warning) => {
 			const topicId = resolveStartupWarningTopicId(warning);
 			const helpPath = getStartupWarningHelpPath(topicId);
-			const renderedWarning = extractWhitelistEntry(warning);
-			const whitelistEntryHtml = renderedWarning.whitelistEntry
-				? `<pre class="startup-warning-whitelist-entry"><code>${escapeHtml(renderedWarning.whitelistEntry)}</code></pre>`
-				: '';
 
-			return `<li><p>${escapeHtml(renderedWarning.message)}</p>${whitelistEntryHtml}<p><a href="${helpPath}">How to resolve this warning</a></p></li>`;
+			return `<li><p>${escapeHtml(warning)}</p><p><a href="${helpPath}">How to resolve this warning</a></p></li>`;
 		})
 		.join('');
 };

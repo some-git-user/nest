@@ -198,14 +198,14 @@ export const meta: PluginMeta = {
   </li>
   <li>
     <strong>Approve the plugin hash for production</strong><br>
-    Nest will not load new plugins in production until they are whitelisted. Generate the SHA-256 hash and add it to <code>plugin-whitelist.txt</code>:
-    <pre><code>sha256sum /opt/nest-plugins/check_nextcloud_serverinfo.ts
-echo 'check_nextcloud_serverinfo.ts &lt;sha256&gt;' &gt;&gt; /opt/nest-plugins/plugin-whitelist.txt</code></pre>
-    Make sure the plugin file owner matches the Nest service user and that neither the plugin file nor the whitelist file is writable by group or others.
+    Nest will not load a new plugin in production until it carries a sidecar manifest with a matching hash. Create <code>check_nextcloud_serverinfo.manifest.json</code> next to the plugin and record its SHA-256 with <code>nest plugins hash</code>:
+    <pre><code>printf '{"name":"check_nextcloud_serverinfo","version":"1.0.0","entry":"check_nextcloud_serverinfo.ts"}\\n' &gt; /opt/nest-plugins/check_nextcloud_serverinfo.manifest.json
+nest plugins hash</code></pre>
+    Make sure the plugin file owner matches the Nest service user and that neither the plugin file nor its manifest is writable by group or others.
   </li>
   <li>
     <strong>Restart Nest and open this help page again if needed</strong><br>
-    After the whitelist entry is in place, restart the Nest service so the route is registered.
+    After the manifest is in place, restart the Nest service so the route is registered.
   </li>
   <li>
     <strong>Call the plugin through Nest</strong><br>

@@ -25,6 +25,12 @@ for f in "$STAGING_DIR"/*.ts; do
     cp "$f" "$PLUGINS_DIR/"
 done
 
+# Copy staged sidecar manifests (per-plugin trust: <name>.manifest.json)
+for m in "$STAGING_DIR"/*.manifest.json; do
+    [ -f "$m" ] || continue
+    cp "$m" "$PLUGINS_DIR/"
+done
+
 # Create configs directory and copy config files
 mkdir -p "$PLUGINS_DIR/configs"
 for f in "$STAGING_DIR/configs/"*; do
@@ -38,7 +44,7 @@ if [ ! -f "$PLUGINS_DIR/configs/local-presets.conf" ]; then
         cp "$PLUGINS_DIR/configs/local-presets.conf.example" "$PLUGINS_DIR/configs/local-presets.conf"
         chmod 640 "$PLUGINS_DIR/configs/local-presets.conf"
         echo "Created local-presets.conf from example."
-        echo "Edit the file and add its SHA-256 hash to plugin-whitelist.txt."
+        echo "Edit the file, then run 'nest plugins hash' to record its SHA-256 as LOCAL_CONFIG_HASH in $NEST_CONF."
     fi
 fi
 

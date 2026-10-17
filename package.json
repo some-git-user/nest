@@ -11,6 +11,7 @@
 		"start": "node dist/server.js",
 		"dev": "NODE_ENV=development nodemon --exec tsx src/server-preload.ts --inspect",
 		"dev:root": "sudo env PATH=\"$(sudo bash -c 'echo $PATH'):$PATH\" npm run dev",
+		"plugins:hash": "NODE_ENV=development tsx src/server-preload.ts plugins hash",
 		"format:check": "prettier --check .",
 		"format:fix": "prettier --write --list-different .",
 		"lint:check": "eslint . --report-unused-disable-directives --max-warnings 0",

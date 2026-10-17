@@ -126,7 +126,7 @@ ${renderButton({id: 'logoutButton', label: 'Sign out', variant: 'danger'})}
 		subtitle:
 			'Edit plugins/configs/local-presets.conf. Saving writes the file only: the ' +
 			'running presets stay the ones approved at startup, and the change takes ' +
-			'effect after the whitelist hash is updated and the service is restarted.',
+			'effect after LOCAL_CONFIG_HASH is updated and the service is restarted.',
 		contentHtml: `<div id="driftBanner"></div>
 ${renderToolbar(
 	renderButton({id: 'addEntryButton', label: 'Add preset'}) +

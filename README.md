@@ -158,10 +158,10 @@ holding the monitoring key alone can never rewrite the config file. Without a
 password every admin route renders a "not configured" help page and startup
 prints a warning.
 
-Saving never touches `plugins/plugin-whitelist.txt`. The presets in memory stay
-the whitelist-approved ones, the edited file waits on disk, and a persistent
-drift banner shows the exact `configs/local-presets.conf <sha256>` line to add
-to the whitelist plus a restart. "Revert to approved" restores the bytes
+Saving never changes the approved hash. The presets in memory stay the
+approved ones, the edited file waits on disk, and a persistent drift banner
+shows the exact `LOCAL_CONFIG_HASH=<sha256>` line to set in the nest config
+file plus a restart. "Revert to approved" restores the bytes
 captured at startup if the edit was accidental.
 
 ## Plugin Development
@@ -211,15 +211,29 @@ export const meta = {
 };
 ```
 
-### Plugin whitelist
+### Plugin trust (sidecar manifests)
 
-Nest maintains plugin integrity via `<PLUGINS_DIR>/plugin-whitelist.txt`:
+Each plugin is trusted by a sidecar manifest sitting next to it:
+`check_test.ts` is approved by `check_test.manifest.json`.
 
-```text
-check_test.ts 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```json
+{
+	"name": "check_test",
+	"version": "1.0.0",
+	"entry": "check_test.ts",
+	"hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
 ```
 
-On startup, missing or changed plugins are skipped until whitelisted. The whitelist file is auto-created with secure permissions (`0600`).
+On startup, a plugin with no manifest is refused (fail-secure), and a plugin
+whose file no longer matches its manifest `hash` is skipped. When a manifest
+declares no `hash`, the plugin still loads but a warning is recorded — the
+filesystem ownership/permission checks remain the security boundary there.
+
+Run `nest plugins hash` to (re)compute each plugin's SHA-256 into its manifest
+and to refresh the `LOCAL_CONFIG_HASH` line in the nest config file. Because
+trust is per-plugin, a third party can drop their own plugin + manifest into
+`PLUGINS_DIR` without editing a file the package manager owns.
 
 ### Example
 
@@ -331,7 +345,7 @@ Environment: `NEST_SCHEME`, `NEST_HOST`, `NEST_PORT`, `NEST_TLS_INSECURE`, `NEST
   an argv array (`execFile`/`spawn`), and the custom `no-shell-exec` ESLint rule
   bans `exec`/`execSync` and `shell: true` across `src/` and `plugins/`, so the
   rule cannot silently regress.
-- The admin UI's "Test" button runs an _approved_ (whitelisted) plugin as the
+- The admin UI's "Test" button runs an _approved_ (manifest-trusted) plugin as the
   service user, gated by an admin session, the `x-nest-admin: 1` header, and the
   CSRF guard. Command injection is closed off; per-plugin input validation and
   privilege amplification remain the operator's concern.

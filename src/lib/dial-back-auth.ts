@@ -3,12 +3,12 @@ import {env} from '../config/env';
 import {extractApiKey} from './browser-auth';
 
 /**
- * Message returned when the startup whitelist hash check failed, so no preset
+ * Message returned when the startup approved-hash check failed, so no preset
  * can be executed. Shared by every route that runs presets (single-key and
  * unified) so the operator sees one consistent reason.
  */
 export const PRESETS_UNAVAILABLE_MESSAGE =
-	'Local config presets are currently unavailable due to hash validation failure. Please update the whitelist and restart the service.';
+	'Local config presets are currently unavailable due to hash validation failure. Please update LOCAL_CONFIG_HASH and restart the service.';
 
 /** The outcome of resolving the API key for an internal dial-back. */
 export type DialBackAuth = {

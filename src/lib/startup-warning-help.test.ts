@@ -22,9 +22,15 @@ describe('startup warning help', () => {
 
 		expect(
 			resolveStartupWarningTopicId(
-				'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc.',
+				'Skipping plugin /opt/nest-plugins/check_test.ts: no manifest /opt/nest-plugins/check_test.manifest.json. Every plugin must ship a sidecar manifest to be trusted.',
 			),
-		).toBe('plugin-not-whitelisted');
+		).toBe('plugin-no-manifest');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'Plugin trust warning: check_test has no "hash" in its manifest. Loading without integrity verification - run "nest plugins hash" to record the current hash.',
+			),
+		).toBe('plugin-unhashed');
 
 		expect(
 			resolveStartupWarningTopicId(
@@ -34,21 +40,21 @@ describe('startup warning help', () => {
 
 		expect(
 			resolveStartupWarningTopicId(
-				'Plugin trust warning: whitelist file plugins/plugin-whitelist.txt has insecure permissions; it must not be writable by group or others. Refusing to trust whitelist entries.',
+				'Plugin trust warning: /opt/nest-plugins/check_test.ts hash changed. Manifest expects oldHash, current sha256 is newHash. Run "nest plugins hash" to update it.',
 			),
-		).toBe('whitelist-insecure-permissions');
+		).toBe('plugin-hash-changed');
 
 		expect(
 			resolveStartupWarningTopicId(
-				'Config warning: plugins/configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
+				'Plugin trust warning: could not hash /opt/nest-plugins/check_test.ts. Error: EACCES.',
+			),
+		).toBe('plugin-hash-failed');
+
+		expect(
+			resolveStartupWarningTopicId(
+				'Config file configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
 			),
 		).toBe('config-insecure-permissions');
-
-		expect(
-			resolveStartupWarningTopicId(
-				'Config warning: plugins/configs/local-presets.conf is new or not whitelisted. Current sha256: abc123. Add "configs/local-presets.conf abc123" to plugins/plugin-whitelist.txt.',
-			),
-		).toBe('config-not-whitelisted');
 
 		expect(
 			resolveStartupWarningTopicId(
@@ -64,7 +70,7 @@ describe('startup warning help', () => {
 
 		expect(
 			resolveStartupWarningTopicId(
-				'Config drift: the local config presets file on disk is awaiting whitelist approval (sha256 abc).',
+				'Config drift: the local config presets file on disk is awaiting approval. Run "nest plugins hash" or set "LOCAL_CONFIG_HASH=abc" in the nest config file and restart the service to activate the file on disk.',
 			),
 		).toBe('config-drift-awaiting-approval');
 	});
@@ -78,48 +84,27 @@ describe('startup warning help', () => {
 	test('renders warning list entries with dedicated help links', () => {
 		const html = renderStartupWarningListItems([
 			'Security recommendation: API_KEY is not configured; requests are not protected by shared-secret authentication.',
-			'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc.',
+			'Skipping plugin /opt/nest-plugins/check_test.ts: no manifest /opt/nest-plugins/check_test.manifest.json. Every plugin must ship a sidecar manifest to be trusted.',
 			'Skipping plugin /opt/nest-plugins/check_nvidia_smi.ts due to insecure permissions: plugin files must not be writable by group or others.',
-			'Config warning: plugins/configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
-			'Config warning: plugins/configs/local-presets.conf is new or not whitelisted. Current sha256: abc123. Add "configs/local-presets.conf abc123" to plugins/plugin-whitelist.txt.',
+			'Config file configs/local-presets.conf has insecure permissions (0660); it must not be writable by group or others.',
 		]);
 
 		expect(html).toContain('/help/startup-warnings/api-key-missing');
-		expect(html).toContain('/help/startup-warnings/plugin-not-whitelisted');
+		expect(html).toContain('/help/startup-warnings/plugin-no-manifest');
 		expect(html).toContain(
 			'/help/startup-warnings/plugin-insecure-permissions',
 		);
 		expect(html).toContain(
 			'/help/startup-warnings/config-insecure-permissions',
 		);
-		expect(html).toContain('/help/startup-warnings/config-not-whitelisted');
 		expect(html).toContain('How to resolve this warning');
 	});
 
-	test('renders whitelist line additions as a dedicated single-line code block', () => {
-		const html = renderStartupWarningListItems([
-			'Plugin trust warning: plugins/check_test.ts is new or not whitelisted. Current sha256: abc123. Review it and add "check_test.ts abc123" to plugins/plugin-whitelist.txt before enabling it.',
-		]);
-
-		expect(html).toContain(
-			'add the following line to plugins/plugin-whitelist.txt',
-		);
-		expect(html).toContain(
-			'<pre class="startup-warning-whitelist-entry"><code>check_test.ts abc123</code></pre>',
-		);
-	});
-
-	test('renders whitelist line updates as a dedicated single-line code block', () => {
-		const html = renderStartupWarningListItems([
-			'Plugin trust warning: plugins/check_test.ts hash changed. Whitelist expects oldHash, current sha256 is newHash. Review it and update "check_test.ts newHash" in plugins/plugin-whitelist.txt before enabling it.',
-		]);
-
-		expect(html).toContain(
-			'update the following line in plugins/plugin-whitelist.txt',
-		);
-		expect(html).toContain(
-			'<pre class="startup-warning-whitelist-entry"><code>check_test.ts newHash</code></pre>',
-		);
+	test('renders manifest hash guidance in the help topic', () => {
+		const topic = getStartupWarningHelpTopic('plugin-hash-changed');
+		expect(topic).toBeDefined();
+		const html = renderStartupWarningHelpHtml(topic!);
+		expect(html).toContain('nest plugins hash');
 	});
 
 	test('renders certificate warning entries with a link to the new topics', () => {

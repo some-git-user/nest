@@ -1,0 +1,6 @@
+{
+	"name": "check_nvidia_smi",
+	"version": "1.0.0",
+	"entry": "check_nvidia_smi.ts",
+	"hash": "c0ee7408bbf534dd87aaa6c59349b81b51abb3f3f68cb4bc8073850189579bbe"
+}

@@ -14,13 +14,19 @@ import {getErrorMessage} from '../lib/error-message';
 import {validateUnixFileSecurity} from '../lib/file-security';
 import {isRecord} from '../lib/is-record';
 import {logger} from '../lib/logger';
+import {
+	loadPluginManifest,
+	manifestPathForEntry,
+	satisfiesMinVersion,
+	verifyManifestHash,
+} from '../lib/plugin-manifest';
 import {buildPluginSandbox} from '../lib/plugin-sandbox';
 import {commandToRoutePath} from '../lib/plugin-utils';
-import {verifyPluginWhitelist} from '../lib/plugin-whitelist';
 import {
 	recordStartupWarning,
 	recordStartupWarnings,
 } from '../lib/startup-warning-registry';
+import {getAppVersion} from '../lib/version';
 import type {
 	HtmlTemplateString,
 	PluginMeta,
@@ -42,19 +48,12 @@ export const vmApi = {
 
 const router = express.Router();
 const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
+const APP_VERSION = getAppVersion();
 const pluginRoutePrefix = '/plugins';
 const requireFn = createRequire(__filename);
-const pluginWhitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
 
 export const pluginStartupWarnings: string[] = [];
 export const registeredPluginRoutes: string[] = [];
-
-export type {
-	PluginMeta,
-	PluginMetaUsage,
-	PluginParam,
-	PluginParamInputType,
-} from '../types/plugin';
 
 export const registeredPluginRouteParams: Record<string, PluginParam[]> = {};
 
@@ -478,25 +477,18 @@ const effectivePluginFiles = pluginFiles.filter((file) => {
 	return true;
 });
 
-const pluginWhitelistVerification = verifyPluginWhitelist({
-	pluginsDir,
-	pluginFiles: effectivePluginFiles,
-	whitelistPath: pluginWhitelistPath,
-});
-pluginStartupWarnings.push(...pluginWhitelistVerification.warnings);
-recordStartupWarnings(pluginWhitelistVerification.warnings);
-for (const warning of pluginStartupWarnings) {
-	logger.warn(warning);
-}
-
 const routePathToFilePath = new Map<string, string>();
 
-effectivePluginFiles.forEach((file) => {
-	if (!pluginWhitelistVerification.approvedFiles.has(file)) {
-		return;
-	}
-
-	const filePath = path.join(pluginsDir, file);
+/**
+ * Register a single plugin entry file as a route. Shared by the flat
+ * (whitelist) layout and the per-plugin manifest layout. `commandName` is the
+ * plugin command used to derive the route path and help page; `filePath` is the
+ * absolute path to the entry file.
+ */
+const registerPluginFromFile = (
+	filePath: string,
+	commandName: string,
+): void => {
 	const fileStat = fs.statSync(filePath);
 	if (!fileStat.isFile()) {
 		return;
@@ -506,14 +498,15 @@ effectivePluginFiles.forEach((file) => {
 		return;
 	}
 
-	const runtimePluginPath = resolveRuntimePluginPath(filePath, file);
+	const runtimePluginPath = resolveRuntimePluginPath(
+		filePath,
+		path.basename(filePath),
+	);
 	if (!runtimePluginPath) {
 		return;
 	}
 
-	const kebabCasePath = commandToRoutePath(
-		path.basename(file, path.extname(file)),
-	);
+	const kebabCasePath = commandToRoutePath(commandName);
 	const helpUrl = buildPluginHelpUrl(kebabCasePath);
 	const existingFilePath = routePathToFilePath.get(kebabCasePath);
 	if (existingFilePath) {
@@ -558,7 +551,7 @@ effectivePluginFiles.forEach((file) => {
 				}
 			}
 			helpContext = {
-				pluginName: path.basename(file, path.extname(file)),
+				pluginName: commandName,
 				helpHtml: getPluginMetaHelp(pluginModule),
 				usageHttp,
 				usageShell,
@@ -583,7 +576,58 @@ effectivePluginFiles.forEach((file) => {
 	if (pluginParams.length > 0) {
 		registeredPluginRouteParams[kebabCasePath] = pluginParams;
 	}
-});
+};
+
+// Each plugin is trusted by a sidecar manifest: `check_test.ts` is approved by
+// `check_test.manifest.json` sitting next to it. A plugin file with no manifest
+// is refused (fail-secure), the same posture the shared whitelist used for
+// "not whitelisted" entries. This decentralizes trust: third parties drop their
+// own plugin + manifest into the directory without editing a shared file.
+for (const file of effectivePluginFiles) {
+	const filePath = path.join(pluginsDir, file);
+	const manifestPath = manifestPathForEntry(filePath);
+	const {manifest, warnings} = loadPluginManifest(manifestPath);
+	recordStartupWarnings(warnings);
+	pluginStartupWarnings.push(...warnings);
+	for (const warning of warnings) {
+		logger.warn(warning);
+	}
+
+	if (!manifest) {
+		const warning = `Skipping plugin ${filePath}: no manifest ${manifestPath}. Every plugin must ship a sidecar manifest to be trusted.`;
+		recordStartupWarning(warning);
+		logger.warn(warning);
+		continue;
+	}
+
+	if (!satisfiesMinVersion(APP_VERSION, manifest.minNestVersion)) {
+		const warning = `Skipping plugin ${manifest.name}: requires nest >= ${manifest.minNestVersion}, current version is ${APP_VERSION}.`;
+		recordStartupWarning(warning);
+		logger.warn(warning);
+		continue;
+	}
+
+	const entryPath = path.join(pluginsDir, manifest.entry);
+	if (!fs.existsSync(entryPath)) {
+		const warning = `Skipping plugin ${manifest.name}: manifest entry "${manifest.entry}" does not exist in ${pluginsDir}.`;
+		recordStartupWarning(warning);
+		logger.warn(warning);
+		continue;
+	}
+
+	const hashResult = verifyManifestHash(manifest, entryPath);
+	recordStartupWarnings(hashResult.warnings);
+	pluginStartupWarnings.push(...hashResult.warnings);
+	for (const warning of hashResult.warnings) {
+		logger.warn(warning);
+	}
+
+	if (!hashResult.approved) {
+		continue;
+	}
+
+	registerPluginFromFile(entryPath, manifest.name);
+}
 
 registeredPluginRoutes.sort((a, b) => a.localeCompare(b));
 

@@ -1,0 +1,6 @@
+{
+	"name": "check_reboot_required",
+	"version": "1.0.0",
+	"entry": "check_reboot_required.ts",
+	"hash": "4beb2d64a7f472145e63a241b0fab21c77e15bcb85e07b8ab0c772ab2d13912f"
+}

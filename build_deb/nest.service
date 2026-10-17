@@ -11,7 +11,7 @@ After=network.target
 # directory. Enforcing a sandbox would break those checks.
 #
 # Residual risk is mitigated in application code instead:
-#   - plugins must be SHA-256 whitelisted to be registered
+#   - plugins must carry a sidecar manifest with a matching SHA-256 to load
 #   - exec uses argv arrays (no shell) to avoid command injection, enforced
 #     at lint time by the custom no-shell-exec ESLint rule
 #   - the admin write API requires a password + header and is rate limited

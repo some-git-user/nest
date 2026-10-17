@@ -1,0 +1,6 @@
+{
+	"name": "check_lmsensors",
+	"version": "1.0.0",
+	"entry": "check_lmsensors.ts",
+	"hash": "69eba56d9dfc20dbb8490197b7775a7ed0340a042c1adc24bba0677ba8c43d57"
+}

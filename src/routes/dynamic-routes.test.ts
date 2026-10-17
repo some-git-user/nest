@@ -44,7 +44,6 @@ type BuildAppOptions = {
 	pluginFileMode?: number;
 	pluginModule?: unknown;
 	pluginsDir?: string;
-	pluginWhitelistPath?: string;
 };
 
 describe('dynamic routes (plugins)', () => {
@@ -68,10 +67,21 @@ describe('dynamic routes (plugins)', () => {
 		const pluginSource = 'export const checkTest = async () => ({})';
 		const pluginFiles = options.pluginFiles ?? ['check_test.ts'];
 		const pluginsDir = options.pluginsDir ?? 'plugins';
-		const whitelistPath = path.join(
-			path.resolve(process.cwd(), pluginsDir),
-			'plugin-whitelist.txt',
-		);
+		const resolvedPluginsDir = path.resolve(process.cwd(), pluginsDir);
+		const manifestPathFor = (file: string): string =>
+			path.join(
+				resolvedPluginsDir,
+				file.replace(/\.[^.]+$/, '') + '.manifest.json',
+			);
+		const isManifestPath = (fsPath: string): boolean =>
+			fsPath.endsWith('.manifest.json');
+		const manifestFor = (file: string): string =>
+			JSON.stringify({
+				name: file.replace(/\.[^.]+$/, ''),
+				version: '1.0.0',
+				entry: file,
+				hash: crypto.createHash('sha256').update(pluginSource).digest('hex'),
+			});
 		const approvedHash = crypto
 			.createHash('sha256')
 			.update(pluginSource)
@@ -166,17 +176,19 @@ describe('dynamic routes (plugins)', () => {
 		const statSyncMock = (fsPath: string) => ({
 			isFile: () => true,
 			mtimeMs: 0,
-			uid: fsPath === whitelistPath ? currentUid : pluginFileUid,
-			mode: fsPath === whitelistPath ? 0o100600 : pluginFileMode,
+			uid: isManifestPath(fsPath) ? currentUid : pluginFileUid,
+			mode: isManifestPath(fsPath) ? 0o100600 : pluginFileMode,
 		});
 
 		jest.doMock('fs', () => ({
 			__esModule: true,
 			default: {
 				existsSync: (fsPath: string) => {
-					// Whitelist file always exists
-					if (fsPath === whitelistPath) {
-						return true;
+					// Manifest files exist for every plugin file
+					if (isManifestPath(fsPath)) {
+						return pluginFiles.some((file) =>
+							fsPath.endsWith(file.replace(/\.[^.]+$/, '') + '.manifest.json'),
+						);
 					}
 					// Plugin files exist
 					if (pluginFiles.some((file) => fsPath.endsWith(file))) {
@@ -188,11 +200,11 @@ describe('dynamic routes (plugins)', () => {
 					return pluginFiles;
 				},
 				readFileSync: (fsPath: string) => {
-					if (fsPath === whitelistPath) {
-						return pluginFiles
-							.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
-							.map((file) => `${file} ${approvedHash}`)
-							.join('\n');
+					if (isManifestPath(fsPath)) {
+						const file = pluginFiles.find((f) =>
+							fsPath.endsWith(f.replace(/\.[^.]+$/, '') + '.manifest.json'),
+						);
+						return file ? manifestFor(file) : '';
 					}
 					if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
 						return pluginSource;
@@ -204,8 +216,10 @@ describe('dynamic routes (plugins)', () => {
 				statSync: statSyncMock,
 			},
 			existsSync: (fsPath: string) => {
-				if (fsPath === whitelistPath) {
-					return true;
+				if (isManifestPath(fsPath)) {
+					return pluginFiles.some((file) =>
+						fsPath.endsWith(file.replace(/\.[^.]+$/, '') + '.manifest.json'),
+					);
 				}
 				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 					return true;
@@ -216,11 +230,11 @@ describe('dynamic routes (plugins)', () => {
 				return pluginFiles;
 			},
 			readFileSync: (fsPath: string) => {
-				if (fsPath === whitelistPath) {
-					return pluginFiles
-						.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
-						.map((file) => `${file} ${approvedHash}`)
-						.join('\n');
+				if (isManifestPath(fsPath)) {
+					const file = pluginFiles.find((f) =>
+						fsPath.endsWith(f.replace(/\.[^.]+$/, '') + '.manifest.json'),
+					);
+					return file ? manifestFor(file) : '';
 				}
 				if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
 					return pluginSource;

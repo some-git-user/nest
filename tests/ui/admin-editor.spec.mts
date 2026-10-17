@@ -273,8 +273,8 @@ test.describe('admin editor — validate / save / revert', () => {
 
 	/**
 	 * Save writes the file but does NOT self-approve: the drift banner must show
-	 * the exact whitelist line the operator has to add. Reverting restores the
-	 * approved bytes, which also returns the scratch file to its seed state so
+	 * the exact LOCAL_CONFIG_HASH line the operator has to set. Reverting restores
+	 * the approved bytes, which also returns the scratch file to its seed state so
 	 * the suite leaves no residue.
 	 */
 	test('save shows the drift line, revert clears it', async ({page}) => {
@@ -284,9 +284,9 @@ test.describe('admin editor — validate / save / revert', () => {
 		await expect(page.locator('#status')).toContainText('Saved');
 
 		const drift = page.locator('#driftBanner');
-		await expect(drift).toContainText('configs/local-presets.conf');
+		await expect(drift).toContainText('LOCAL_CONFIG_HASH');
 		await expect(drift.locator('pre')).toContainText(
-			/configs\/local-presets\.conf [0-9a-f]{64}/,
+			/LOCAL_CONFIG_HASH=[0-9a-f]{64}/,
 		);
 
 		// Revert asks for confirmation; accept it.
@@ -294,7 +294,7 @@ test.describe('admin editor — validate / save / revert', () => {
 		await page.locator('#revertButton').click();
 
 		await expect(page.locator('#driftBanner')).toContainText(
-			'File matches the whitelist',
+			'File matches the approved hash',
 		);
 	});
 });

@@ -7,7 +7,7 @@ import {getNagiosStatusText} from './nagios';
  * Reserved parameter name that opts a preset into the unified check.
  *
  * It is stored in the preset line like any other parameter, so the selection
- * survives the whitelist-hash gate exactly like a normal edit. The unified
+ * survives the approved-hash gate exactly like a normal edit. The unified
  * executor strips it before dialling back into the plugin route, so a plugin
  * never receives a parameter it did not declare.
  */
@@ -54,7 +54,7 @@ export type UnifiedPreset = {
  * The presets opted into the unified check, from the startup-approved cache.
  *
  * Reads the same in-memory cache the single-key `/local-config` route uses, so
- * the aggregate honours the whitelist gate: a drifted or unapproved file yields
+ * the aggregate honours the approved-hash gate: a drifted or unapproved file yields
  * no keys here, exactly as it does there. Keys are returned in the cache's
  * insertion order (file order), so the aggregate output is stable.
  */

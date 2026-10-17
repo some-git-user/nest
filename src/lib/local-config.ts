@@ -2,16 +2,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {env} from '../config/env';
 import {getErrorMessage} from './error-message';
+import {hashFile as hashFileImpl} from './file-hash';
 import {validateUnixFileSecurity} from './file-security';
 import {logger} from './logger';
-import {hashPluginFile as hashPluginFileImpl} from './plugin-whitelist';
 import {decryptSecret, isEncryptedValue} from './secret-crypto';
+import {recordStartupWarning} from './startup-warning-registry';
 
 // Maximum allowed config file size (100KB)
 const MAX_CONFIG_FILE_SIZE = 100 * 1024;
 
 // Hash function - can be overridden in tests
-let hashPluginFileFn: (path: string) => string = hashPluginFileImpl;
+let hashFileFn: (path: string) => string = hashFileImpl;
 
 // File security check function - can be overridden in tests
 let checkConfigFileSecurityFn: (
@@ -31,7 +32,7 @@ let checkConfigFileSecurityFn: (
  * @param fn The hash function to use
  */
 export const setHashFunction = (fn: (path: string) => string): void => {
-	hashPluginFileFn = fn;
+	hashFileFn = fn;
 };
 
 /**
@@ -48,7 +49,7 @@ export const setCheckConfigFileSecurityFn = (
  * Reset module state (for testing purposes)
  */
 export const resetModuleState = (): void => {
-	hashPluginFileFn = hashPluginFileImpl;
+	hashFileFn = hashFileImpl;
 	checkConfigFileSecurityFn = (
 		filePath: string,
 		expectedUid: number,
@@ -60,7 +61,7 @@ export const resetModuleState = (): void => {
 			return false;
 		}
 	};
-	cachedWhitelistEntries = null;
+	cachedApprovedHashes = null;
 	cachedConfig = null;
 	approvedConfigContent = null;
 	startupLoadingCompleted = false;
@@ -80,15 +81,16 @@ export interface LocalConfigEntry {
 const CONFIG_FILE_NAME = 'local-presets.conf';
 
 /**
- * Key this file is registered under in `plugins/plugin-whitelist.txt`.
+ * Key this file is registered under in the approved-hash cache (seeded from the
+ * LOCAL_CONFIG_HASH value in the nest config file).
  */
-const WHITELIST_RELATIVE_PATH = 'configs/local-presets.conf';
+const APPROVED_CONFIG_RELATIVE_PATH = 'configs/local-presets.conf';
 
 /**
- * Cached whitelist entries for runtime verification
+ * Cached approved hashes for runtime verification
  * Populated at startup, used for runtime hash checks
  */
-let cachedWhitelistEntries: Map<string, string> | null = null;
+let cachedApprovedHashes: Map<string, string> | null = null;
 
 /**
  * Cached config loaded at startup (memory-only after initial load)
@@ -96,11 +98,11 @@ let cachedWhitelistEntries: Map<string, string> | null = null;
 let cachedConfig: Map<string, LocalConfigEntry> | null = null;
 
 /**
- * Exact bytes of the whitelist-approved config file, captured at startup.
+ * Exact bytes of the approved config file, captured at startup.
  *
  * The admin editor offers a revert action that restores these bytes, which is
  * the escape hatch for an operator who saved a file they then chose not to
- * whitelist. Without it they would have to hand-edit the file to get back to a
+ * approve. Without it they would have to hand-edit the file to get back to a
  * restart-safe state.
  */
 let approvedConfigContent: string | null = null;
@@ -116,12 +118,12 @@ let startupLoadingCompleted = false;
 let startupValidationFailed = false;
 
 /**
- * Set cached whitelist entries (called at startup)
+ * Set cached approved hashes (called at startup)
  *
- * @param entries Whitelist entries to cache
+ * @param entries Approved-hash entries to cache
  */
-export const setWhitelistCache = (entries: Map<string, string>): void => {
-	cachedWhitelistEntries = entries;
+export const setApprovedHashCache = (entries: Map<string, string>): void => {
+	cachedApprovedHashes = entries;
 };
 
 /**
@@ -396,7 +398,7 @@ const decryptEntrySecrets = (
 
 /**
  * Load and validate config once at startup (only disk I/O point)
- * This should be called after setWhitelistCache
+ * This should be called after setApprovedHashCache
  */
 export const loadConfigAtStartup = (): void => {
 	// Prevent double-loading
@@ -404,10 +406,10 @@ export const loadConfigAtStartup = (): void => {
 		return;
 	}
 
-	// Whitelist cache must be set before loading config
-	if (!cachedWhitelistEntries) {
+	// Approved-hash cache must be set before loading config
+	if (!cachedApprovedHashes) {
 		logger.error(
-			'Whitelist cache not populated before config validation - this is a bug',
+			'Approved-hash cache not populated before config validation - this is a bug',
 		);
 		startupValidationFailed = true;
 		startupLoadingCompleted = true;
@@ -415,7 +417,7 @@ export const loadConfigAtStartup = (): void => {
 	}
 
 	const configPath = getConfigFilePath();
-	const relativePath = WHITELIST_RELATIVE_PATH;
+	const relativePath = APPROVED_CONFIG_RELATIVE_PATH;
 
 	// File is optional - empty cache if missing
 	if (!fs.existsSync(configPath)) {
@@ -433,10 +435,11 @@ export const loadConfigAtStartup = (): void => {
 			const mode = ((fileStat.mode & 0o7777) >>> 0)
 				.toString(8)
 				.padStart(4, '0');
-			logger.warn(
+			const warning =
 				`Config file ${relativePath} has insecure permissions (${mode}); it must not be writable by group or others. ` +
-					`Restart the service after fixing the file permissions.`,
-			);
+				`Restart the service after fixing the file permissions.`;
+			logger.warn(warning);
+			recordStartupWarning(warning);
 			startupValidationFailed = true;
 			startupLoadingCompleted = true;
 			return;
@@ -444,24 +447,24 @@ export const loadConfigAtStartup = (): void => {
 	}
 
 	// Hash validation (only at startup)
-	const approvedHash = cachedWhitelistEntries.get(relativePath);
+	const approvedHash = cachedApprovedHashes.get(relativePath);
 	if (approvedHash) {
-		const currentHash = hashPluginFileFn(configPath);
+		const currentHash = hashFileFn(configPath);
 		if (currentHash !== approvedHash) {
 			logger.warn(
-				`Config file ${relativePath} hash changed from whitelisted value. ` +
-					`Whitelist expects ${approvedHash}, current sha256 is ${currentHash}. ` +
-					`Restart the service after updating the whitelist.`,
+				`Config file ${relativePath} hash changed from the approved value. ` +
+					`LOCAL_CONFIG_HASH is ${approvedHash}, current sha256 is ${currentHash}. ` +
+					`Run "nest plugins hash" and restart the service to approve the file on disk.`,
 			);
 			startupValidationFailed = true;
 			startupLoadingCompleted = true;
 			return;
 		}
 	} else {
-		// Config file exists but is not whitelisted — fail secure
+		// Config file exists but has no approved hash — fail secure
 		logger.warn(
-			`Config file ${relativePath} is not whitelisted. ` +
-				`Add the hash to the whitelist to approve this config file.`,
+			`Config file ${relativePath} has no approved hash. ` +
+				`Run "nest plugins hash" or set LOCAL_CONFIG_HASH to approve this config file.`,
 		);
 		startupValidationFailed = true;
 		startupLoadingCompleted = true;
@@ -471,7 +474,7 @@ export const loadConfigAtStartup = (): void => {
 	// Load and parse config (only disk I/O point)
 	try {
 		cachedConfig = parseConfigFileInternal(configPath);
-		// Remember the exact bytes the whitelist hash covers. This is the restore
+		// Remember the exact bytes the approved hash covers. This is the restore
 		// target for the admin editor's revert action, and it is only ever captured
 		// here, from a file that passed the security and hash checks above.
 		approvedConfigContent = fs.readFileSync(configPath, 'utf-8');
@@ -591,27 +594,27 @@ export const safeLookupConfig = (
 };
 
 export type ConfigDriftStatus = {
-	/** Hash recorded in the whitelist; undefined when the file is not whitelisted. */
+	/** Hash recorded in LOCAL_CONFIG_HASH; undefined when none is configured. */
 	approvedHash: string | undefined;
 	/** Hash of the file as it is on disk right now; undefined when it is missing. */
 	currentHash: string | undefined;
-	/** True when the file on disk is not the bytes the whitelist approves. */
+	/** True when the file on disk is not the bytes the approved hash covers. */
 	drifted: boolean;
 };
 
 /**
- * Compare the config file on disk against the whitelist-approved hash.
+ * Compare the config file on disk against the approved hash.
  *
  * Strictly read-only: it never touches `cachedConfig` and never clears
  * `startupValidationFailed`. Applying a changed file stays a restart, which is
- * what keeps the whitelist a real approval gate - editing the file through the
- * admin UI must not be able to make new presets executable on its own.
+ * what keeps the approved hash a real approval gate - editing the file through
+ * the admin UI must not be able to make new presets executable on its own.
  *
  * Works regardless of the startup outcome, because a drifted file is exactly
  * the situation where the startup cache is disabled.
  */
 export const getConfigDrift = (): ConfigDriftStatus => {
-	const approvedHash = cachedWhitelistEntries?.get(WHITELIST_RELATIVE_PATH);
+	const approvedHash = cachedApprovedHashes?.get(APPROVED_CONFIG_RELATIVE_PATH);
 	const configPath = getConfigFilePath();
 
 	if (!fs.existsSync(configPath)) {
@@ -623,12 +626,12 @@ export const getConfigDrift = (): ConfigDriftStatus => {
 		};
 	}
 
-	const currentHash = hashPluginFileFn(configPath);
+	const currentHash = hashFileFn(configPath);
 	return {approvedHash, currentHash, drifted: currentHash !== approvedHash};
 };
 
 /**
- * The exact bytes of the whitelist-approved config file, captured at startup.
+ * The exact bytes of the approved config file, captured at startup.
  *
  * @returns The approved content, or null when startup never loaded an approved
  *   file - in that case there is nothing safe to restore and revert is refused.

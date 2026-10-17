@@ -293,7 +293,7 @@ describe('POST /local-config controller', () => {
 		expect(jsonMock).toHaveBeenCalledWith({
 			code: 3,
 			message:
-				'Local config presets are currently unavailable due to hash validation failure. Please update the whitelist and restart the service.',
+				'Local config presets are currently unavailable due to hash validation failure. Please update LOCAL_CONFIG_HASH and restart the service.',
 		});
 	});
 
@@ -468,7 +468,7 @@ describe('GET /local-config controller', () => {
 		expect(jsonMock).toHaveBeenCalledWith({
 			code: 3,
 			message:
-				'Local config presets are currently unavailable due to hash validation failure. Please update the whitelist and restart the service.',
+				'Local config presets are currently unavailable due to hash validation failure. Please update LOCAL_CONFIG_HASH and restart the service.',
 		});
 	});
 

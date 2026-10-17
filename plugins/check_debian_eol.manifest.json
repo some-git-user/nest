@@ -1,0 +1,6 @@
+{
+	"name": "check_debian_eol",
+	"version": "1.0.0",
+	"entry": "check_debian_eol.ts",
+	"hash": "04dc8de83d749338c5c7197ce98166dcbb30efa86d8928c868b30463e8279b45"
+}

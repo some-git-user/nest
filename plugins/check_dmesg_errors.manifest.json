@@ -1,0 +1,6 @@
+{
+	"name": "check_dmesg_errors",
+	"version": "1.0.0",
+	"entry": "check_dmesg_errors.ts",
+	"hash": "5b4edf3d7d8e4bf3ac9fd20082155e176e4cb0d88dec34d434dcf2aaf19b7904"
+}

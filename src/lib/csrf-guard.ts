@@ -8,12 +8,12 @@ import {HttpStatusCodes} from './http-status-codes';
  * Why this is needed on top of the API key
  * ────────────────────────────────────────
  * An empty `API_KEY` is an accepted default: a fresh install is reachable from
- * loopback only and no plugin is whitelisted, so there is nothing to exploit.
+ * loopback only and no plugin is approved, so there is nothing to exploit.
  * That default has a consequence for browsers, though. A page on the internet
  * can make a *simple* cross-origin POST (urlencoded or a CORS-preflight-free
  * body) to `http(s)://127.0.0.1:5000/...` without a preflight, and with no key
  * configured the access control middleware lets it through. Once an operator
- * whitelists plugins - and `local-config` presets carry plugin credentials -
+ * approves plugins - and `local-config` presets carry plugin credentials -
  * that page can invoke them from the operator's own browser.
  *
  * Why an Origin check is the right cut here

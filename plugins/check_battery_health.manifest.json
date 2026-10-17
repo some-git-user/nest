@@ -1,0 +1,6 @@
+{
+	"name": "check_battery_health",
+	"version": "1.0.0",
+	"entry": "check_battery_health.ts",
+	"hash": "782a3d69c372f0bb8a5b975ab0ecb4277bf1c5259cefb5cc50bed44072fb7833"
+}

@@ -1,0 +1,6 @@
+{
+	"name": "check_anjoy_camera",
+	"version": "1.0.0",
+	"entry": "check_anjoy_camera.ts",
+	"hash": "cd892c5415491f44fe76ac7b53f67eb58ee6f58dfe0cd8f9b7d3f41ce608142e"
+}

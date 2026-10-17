@@ -1,0 +1,6 @@
+{
+	"name": "check_mdadm_raid",
+	"version": "1.0.0",
+	"entry": "check_mdadm_raid.ts",
+	"hash": "7274357a0048079188b1d10c91e2d5fcf7df7408a7864d01196fb89ac6bfd76a"
+}

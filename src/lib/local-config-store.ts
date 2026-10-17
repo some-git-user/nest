@@ -259,7 +259,7 @@ export type ReadConfigDocumentResult = {
  * Read the presets file from disk for editing.
  *
  * Deliberately independent of the startup cache: the editor has to see what is
- * actually on disk, including changes that were never whitelist-approved.
+ * actually on disk, including changes that were never approved.
  */
 export const readConfigDocument = (): ReadConfigDocumentResult => {
 	const configPath = getConfigFilePath();

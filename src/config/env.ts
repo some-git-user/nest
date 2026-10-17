@@ -141,6 +141,13 @@ const resolvedConfigPath = getConfigPath();
 validateConfigFileSecurity(resolvedConfigPath);
 loadEnvFile(resolvedConfigPath);
 
+/**
+ * Absolute path of the config file this process loaded (nest.conf in production,
+ * .env in development). Exported so `nest plugins hash` can rewrite the
+ * LOCAL_CONFIG_HASH line in the same file the server reads.
+ */
+export const CONFIG_FILE_PATH = resolvedConfigPath;
+
 export const env = cleanEnv(process.env, {
 	NODE_ENV: str({default: 'development'}),
 	HOST: host({default: 'localhost'}),
@@ -153,6 +160,13 @@ export const env = cleanEnv(process.env, {
 	// presets - can never read or overwrite it. Relative paths resolve against
 	// the working directory; the deb sets this to /etc/nest/nest.key.
 	SECRET_KEY_PATH: str({default: 'secrets/nest.key'}),
+	// Approved SHA-256 of the local config presets file (configs/local-presets.conf).
+	// Replaces the old shared plugin-whitelist.txt entry for the config file: the
+	// trusted hash now lives in the protected nest.conf (root:root, a dpkg
+	// conffile) instead of the plugins directory. Empty means no approved hash, so
+	// the presets file is treated as unapproved at startup. `nest plugins hash`
+	// writes this value.
+	LOCAL_CONFIG_HASH: str({default: ''}),
 	LOG_FILE_PATH: str({default: 'logs/nest.log'}),
 	MAX_LOG_FILE_SIZE_BYTES: num({default: 1024 * 1024}), // 1MB in bytes
 	API_KEY_HEADER: str({default: 'x-api-key'}),

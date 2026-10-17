@@ -1,0 +1,6 @@
+{
+	"name": "check_docker_updates",
+	"version": "1.0.0",
+	"entry": "check_docker_updates.ts",
+	"hash": "222ecabdc73a20bcb34ff88a3c39200c740f06c507c5067ff51e29aa06be9ab9"
+}

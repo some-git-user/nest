@@ -59,8 +59,8 @@ type RouterLoadOptions = {
 	pluginFileMode?: number;
 	processUid?: number;
 	omitProcessGetuid?: boolean;
-	whitelistContent?: string;
-	whitelistExists?: boolean;
+	manifestHash?: string;
+	manifestExists?: boolean;
 	sourceMtimeMs?: number;
 	cacheMtimeMs?: number;
 	transpileError?: unknown;
@@ -114,16 +114,27 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		.createHash('sha256')
 		.update(pluginSource)
 		.digest('hex');
-	const whitelistPath = `${process.cwd()}/plugins/plugin-whitelist.txt`;
-	const whitelistExists = options.whitelistExists ?? true;
-	const whitelistContent =
-		options.whitelistContent ??
-		pluginFiles
-			.filter((file) => file.endsWith('.ts') || file.endsWith('.js'))
-			.map((file) => `${file} ${approvedHash}`)
-			.join('\n');
+	const manifestExists = options.manifestExists ?? true;
+	const manifestHash = options.manifestHash ?? approvedHash;
+	const isManifestPath = (fsPath: string): boolean =>
+		fsPath.endsWith('.manifest.json');
+	const manifestContentFor = (fsPath: string): string => {
+		const file = pluginFiles.find((f) =>
+			fsPath.endsWith(f.replace(/\.[^.]+$/, '') + '.manifest.json'),
+		);
+		if (!file) {
+			return '';
+		}
+
+		return JSON.stringify({
+			name: file.replace(/\.[^.]+$/, ''),
+			version: '1.0.0',
+			entry: file,
+			hash: manifestHash,
+		});
+	};
 	const statSyncMock = (fsPath: string) => {
-		if (fsPath === whitelistPath) {
+		if (isManifestPath(fsPath)) {
 			return {
 				isFile: () => true,
 				mtimeMs: sourceMtimeMsRaw,
@@ -188,8 +199,8 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 		__esModule: true,
 		default: {
 			existsSync: (fsPath: string) => {
-				if (fsPath === whitelistPath) {
-					return whitelistExists;
+				if (isManifestPath(fsPath)) {
+					return manifestExists;
 				}
 				if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 					return true;
@@ -200,8 +211,8 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 				return pluginFiles;
 			},
 			readFileSync: (fsPath: string) => {
-				if (fsPath === whitelistPath) {
-					return whitelistContent;
+				if (isManifestPath(fsPath)) {
+					return manifestContentFor(fsPath);
 				}
 				if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
 					return pluginSource;
@@ -213,8 +224,8 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			statSync: statSyncMock,
 		},
 		existsSync: (fsPath: string) => {
-			if (fsPath === whitelistPath) {
-				return whitelistExists;
+			if (isManifestPath(fsPath)) {
+				return manifestExists;
 			}
 			if (pluginFiles.some((file) => fsPath.endsWith(file))) {
 				return true;
@@ -225,8 +236,8 @@ const buildAppForPlugin = (options: RouterLoadOptions = {}) => {
 			return pluginFiles;
 		},
 		readFileSync: (fsPath: string) => {
-			if (fsPath === whitelistPath) {
-				return whitelistContent;
+			if (isManifestPath(fsPath)) {
+				return manifestContentFor(fsPath);
 			}
 			if (fsPath.endsWith('.ts') || fsPath.endsWith('.js')) {
 				return pluginSource;
@@ -524,27 +535,24 @@ describe('dynamic routes (branch coverage)', () => {
 		);
 	});
 
-	test('skips plugin when it is not present in the whitelist file', async () => {
+	test('skips plugin when it has no sidecar manifest', async () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
-			whitelistContent: '',
+			manifestExists: false,
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
 		expect(res.status).toBe(HttpStatusCodes.NOT_FOUND);
 		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining('is new or not whitelisted'),
-		);
-		expect(logger.warn).toHaveBeenCalledWith(
-			expect.stringContaining('plugin-whitelist.txt'),
+			expect.stringContaining('no manifest'),
 		);
 	});
 
-	test('skips plugin when its whitelist hash changed', async () => {
+	test('skips plugin when its manifest hash changed', async () => {
 		const {app, logger} = buildAppForPlugin({
 			pluginFiles: ['check_fake.ts'],
-			whitelistContent:
-				'check_fake.ts deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+			manifestHash:
+				'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
 		});
 
 		const res = await request(app).get('/plugins/check-fake');
@@ -810,8 +818,14 @@ describe('dynamic routes (branch coverage)', () => {
 			.createHash('sha256')
 			.update(pluginSource)
 			.digest('hex');
-		const whitelistPath = `${process.cwd()}/plugins/plugin-whitelist.txt`;
-		const whitelistContent = `check_fake.ts ${approvedHash}`;
+		const manifestContent = JSON.stringify({
+			name: 'check_fake',
+			version: '1.0.0',
+			entry: 'check_fake.ts',
+			hash: approvedHash,
+		});
+		const isManifest = (fsPath: string): boolean =>
+			fsPath.endsWith('check_fake.manifest.json');
 
 		const transpileSpy = jest.fn().mockImplementation(() => {
 			// Return output with an invalid NagiosReturnCodes reference to trigger fallback
@@ -829,14 +843,14 @@ describe('dynamic routes (branch coverage)', () => {
 			__esModule: true,
 			default: {
 				existsSync: (fsPath: string) =>
-					fsPath === whitelistPath || fsPath.endsWith('check_fake.ts'),
+					isManifest(fsPath) || fsPath.endsWith('check_fake.ts'),
 				readdirSync: () => pluginFiles,
 				readFileSync: (fsPath: string) =>
-					fsPath === whitelistPath ? whitelistContent : pluginSource,
+					isManifest(fsPath) ? manifestContent : pluginSource,
 				writeFileSync: () => undefined,
 				mkdirSync: () => undefined,
 				statSync: (fsPath: string) => {
-					if (fsPath === whitelistPath) {
+					if (isManifest(fsPath)) {
 						return {
 							isFile: () => true,
 							mtimeMs: 0,
@@ -853,14 +867,14 @@ describe('dynamic routes (branch coverage)', () => {
 				},
 			},
 			existsSync: (fsPath: string) =>
-				fsPath === whitelistPath || fsPath.endsWith('check_fake.ts'),
+				isManifest(fsPath) || fsPath.endsWith('check_fake.ts'),
 			readdirSync: () => pluginFiles,
 			readFileSync: (fsPath: string) =>
-				fsPath === whitelistPath ? whitelistContent : pluginSource,
+				isManifest(fsPath) ? manifestContent : pluginSource,
 			writeFileSync: () => undefined,
 			mkdirSync: () => undefined,
 			statSync: (fsPath: string) => {
-				if (fsPath === whitelistPath) {
+				if (isManifest(fsPath)) {
 					return {
 						isFile: () => true,
 						mtimeMs: 0,

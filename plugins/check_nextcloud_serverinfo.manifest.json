@@ -1,0 +1,6 @@
+{
+	"name": "check_nextcloud_serverinfo",
+	"version": "1.0.0",
+	"entry": "check_nextcloud_serverinfo.ts",
+	"hash": "841a8d1927d0a8d9847cde1217383d2dce2bd237ca7de2890920483e106b777e"
+}

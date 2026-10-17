@@ -40,6 +40,14 @@ const noUnsafeParamDefault = (
 	await import(path.join(__dirname, 'eslint-rules/no-unsafe-param-default.mjs'))
 ).default;
 
+const noReExport = (
+	await import(path.join(__dirname, 'eslint-rules/no-re-export.mjs'))
+).default;
+
+const noIndexModule = (
+	await import(path.join(__dirname, 'eslint-rules/no-index-module.mjs'))
+).default;
+
 const tsRecommendedConfigs = compat
 	.extends(
 		'plugin:@typescript-eslint/recommended',
@@ -140,6 +148,8 @@ export default [
 				rules: {
 					'enforce-get-error-message': enforceGetErrorMessage,
 					'no-shell-exec': noShellExec,
+					'no-re-export': noReExport,
+					'no-index-module': noIndexModule,
 				},
 			},
 		},
@@ -148,6 +158,10 @@ export default [
 			'custom/enforce-get-error-message': 'error',
 			// Forbid shell-based child_process execution (command injection)
 			'custom/no-shell-exec': 'error',
+			// Never re-export (export ... from). Import symbols from the defining module.
+			'custom/no-re-export': 'error',
+			// Never use index.* module files or index imports; name modules explicitly.
+			'custom/no-index-module': 'error',
 			// Only require explicit return types on exported functions (module boundaries)
 			// This allows internal helper functions to use type inference
 			'@typescript-eslint/explicit-module-boundary-types': [

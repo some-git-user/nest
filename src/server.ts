@@ -3,8 +3,6 @@ import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import helmet from 'helmet';
 import https from 'https';
-// Verify config files against whitelist
-import path from 'path';
 import {env} from './config/env';
 import {ADMIN_UI_MOUNT_PATH} from './lib/admin-auth';
 import {
@@ -34,10 +32,9 @@ import {
 	hasRuntimeValidationFailed,
 	loadConfigAtStartup,
 	parseConfigFile,
-	setWhitelistCache,
+	setApprovedHashCache,
 } from './lib/local-config';
 import {logger} from './lib/logger';
-import {verifyConfigFiles} from './lib/plugin-whitelist';
 import {parseTrustProxy} from './lib/request-ip';
 import {bootstrapSecretKey} from './lib/secret-bootstrap';
 import {
@@ -135,13 +132,13 @@ const renderPluginRunFormHtml = (
 };
 
 /**
- * Warning shown while the file on disk and the whitelist disagree.
+ * Warning shown while the presets file on disk and the approved hash disagree.
  *
- * Saving through the admin UI rewrites the file without touching the whitelist,
- * so this state is expected after every edit and must stay visible: an operator
- * who forgets to approve the hash loses *all* presets at the next restart, not
- * just the ones they changed. The message embeds the exact whitelist line so it
- * can be copied verbatim.
+ * Saving through the admin UI rewrites the file without touching the approved
+ * hash, so this state is expected after every edit and must stay visible: an
+ * operator who forgets to approve the hash loses *all* presets at the next
+ * restart, not just the ones they changed. The message embeds the exact
+ * LOCAL_CONFIG_HASH value so it can be copied verbatim.
  */
 const getConfigDriftWarning = (): string | undefined => {
 	const drift = getConfigDrift();
@@ -151,16 +148,16 @@ const getConfigDriftWarning = (): string | undefined => {
 
 	if (drift.currentHash === undefined) {
 		return (
-			'Config drift: the local config presets file on disk is awaiting whitelist approval ' +
+			'Config drift: the local config presets file on disk is awaiting approval ' +
 			'because the file was removed after startup. Restore it from a backup, or write it ' +
 			'again and approve the new hash, then restart the service.'
 		);
 	}
 
 	return (
-		'Config drift: the local config presets file on disk is awaiting whitelist approval. ' +
-		`The presets currently served are the previously approved ones. Add "configs/local-presets.conf ${drift.currentHash}" to ` +
-		'plugins/plugin-whitelist.txt and restart the service to activate the file on disk.'
+		'Config drift: the local config presets file on disk is awaiting approval. ' +
+		'The presets currently served are the previously approved ones. Run "nest plugins hash" ' +
+		`or set "LOCAL_CONFIG_HASH=${drift.currentHash}" in the nest config file and restart the service to activate the file on disk.`
 	);
 };
 
@@ -354,22 +351,19 @@ app.use(createCsrfGuardMiddleware());
 
 const securityWarnings = getRecommendedSecurityWarnings(env);
 
-const pluginsDir = path.resolve(process.cwd(), env.PLUGINS_DIR);
-const pluginWhitelistPath = path.join(pluginsDir, 'plugin-whitelist.txt');
-const configFiles = ['configs/local-presets.conf'];
-
-const configVerification = verifyConfigFiles({
-	pluginsDir,
-	configFiles,
-	whitelistPath: pluginWhitelistPath,
-});
-recordStartupWarnings(configVerification.warnings);
-for (const warning of configVerification.warnings) {
-	logger.warn(warning);
+// The approved hash for the local config presets file now lives in nest.conf
+// (LOCAL_CONFIG_HASH), not in the plugins directory. Seed the runtime cache with
+// that single entry so local-config drift detection keeps working unchanged.
+const approvedConfigHashes = new Map<string, string>();
+if (env.LOCAL_CONFIG_HASH) {
+	approvedConfigHashes.set(
+		'configs/local-presets.conf',
+		env.LOCAL_CONFIG_HASH.toLowerCase(),
+	);
 }
 
-// Cache whitelist entries for runtime verification
-setWhitelistCache(configVerification.whitelistEntries);
+// Cache the approved hash for runtime verification
+setApprovedHashCache(approvedConfigHashes);
 
 // Ensure the secret master key exists before the presets are decrypted. A
 // deployment with no key and no encrypted secrets yet gets one created; a
@@ -390,7 +384,6 @@ const getStartupWarningsAtRuntime = (): string[] => {
 			...getStartupWarnings(),
 			...pluginStartupWarnings,
 			...securityWarnings,
-			...configVerification.warnings,
 			// A drift that appears after startup - typically an edit made through the
 			// admin UI - has to be as visible as one detected during boot.
 			...(driftWarning ? [driftWarning] : []),

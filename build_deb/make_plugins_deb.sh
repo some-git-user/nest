@@ -21,6 +21,13 @@ for f in "$PLUGINS_SRC"/*.ts; do
     fi
 done
 
+# Sidecar manifests to package (per-plugin trust: <name>.manifest.json next to
+# <name>.ts). Every plugin must ship one or the loader refuses it (fail-secure).
+MANIFEST_FILES=()
+for m in "$PLUGINS_SRC"/*.manifest.json; do
+    MANIFEST_FILES+=("$(basename "$m")")
+done
+
 # Config files to package
 CONFIG_FILES=(
     local-presets.conf.example
@@ -30,6 +37,15 @@ CONFIG_FILES=(
 for f in "${PLUGIN_FILES[@]}"; do
     if [ ! -f "$PLUGINS_SRC/$f" ]; then
         echo "Plugin source not found: $PLUGINS_SRC/$f" >&2
+        exit 1
+    fi
+done
+
+# Every plugin source must have a matching sidecar manifest.
+for f in "${PLUGIN_FILES[@]}"; do
+    manifest="${f%.ts}.manifest.json"
+    if [ ! -f "$PLUGINS_SRC/$manifest" ]; then
+        echo "Missing sidecar manifest for plugin: $PLUGINS_SRC/$manifest" >&2
         exit 1
     fi
 done
@@ -53,6 +69,11 @@ for f in "${PLUGIN_FILES[@]}"; do
     cp "$PLUGINS_SRC/$f" "$BUILD_DIR/usr/share/nest-plugins/$f"
 done
 
+# Stage sidecar manifests
+for m in "${MANIFEST_FILES[@]}"; do
+    cp "$PLUGINS_SRC/$m" "$BUILD_DIR/usr/share/nest-plugins/$m"
+done
+
 # Stage config files
 for f in "${CONFIG_FILES[@]}"; do
     cp "$PLUGINS_SRC/configs/$f" "$BUILD_DIR/usr/share/nest-plugins/configs/$f"
@@ -65,7 +86,9 @@ cp plugins-postrm   "$BUILD_DIR/DEBIAN/postrm"
 # Set permissions
 chmod 755 "$BUILD_DIR/DEBIAN/postinst"
 chmod 755 "$BUILD_DIR/DEBIAN/postrm"
-chmod 644 "$BUILD_DIR/usr/share/nest-plugins/"*.ts
+chmod 644 "$BUILD_DIR/usr/share/nest-plugins/"*.ts 2>/dev/null || true
+chmod 644 "$BUILD_DIR/usr/share/nest-plugins/"*.manifest.json 2>/dev/null || true
+find "$BUILD_DIR/usr/share/nest-plugins" -mindepth 2 -type f -exec chmod 644 {} +
 chmod 644 "$BUILD_DIR/usr/share/nest-plugins/configs/"*
 
 # Create control file

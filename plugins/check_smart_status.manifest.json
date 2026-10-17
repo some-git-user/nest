@@ -1,0 +1,6 @@
+{
+	"name": "check_smart_status",
+	"version": "1.0.0",
+	"entry": "check_smart_status.ts",
+	"hash": "a94f7b225d3ebd6d7a7e94d6acb04390c06309e81d4a7e27257c98f4d147c857"
+}

@@ -26,7 +26,7 @@ const {
 	parseConfigLine,
 	quoteConfigValue,
 	safeLookupConfig,
-	setWhitelistCache,
+	setApprovedHashCache,
 	setHashFunction,
 	setCheckConfigFileSecurityFn,
 	resetModuleState,
@@ -166,8 +166,10 @@ test=check-dmesg`;
 			// Set mock hash function
 			setHashFunction(() => 'abc123hash');
 
-			const whitelist = new Map([['configs/local-presets.conf', 'abc123hash']]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', 'abc123hash'],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			// Validation should fail due to duplicate key
@@ -185,8 +187,10 @@ invalidLineWithoutEquals`;
 			// Set mock hash function
 			setHashFunction(() => 'abc123hash');
 
-			const whitelist = new Map([['configs/local-presets.conf', 'abc123hash']]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', 'abc123hash'],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			// Validation should fail due to invalid format
@@ -204,8 +208,10 @@ invalidLineWithoutEquals`;
 			// Set mock hash function
 			setHashFunction(() => 'abc123hash');
 
-			const whitelist = new Map([['configs/local-presets.conf', 'abc123hash']]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', 'abc123hash'],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			// Validation should fail due to empty key
@@ -292,9 +298,11 @@ test_perfdata=check-test nagiosReturnValue=0`;
 			// Set mock hash function to return the correct hash
 			setHashFunction(() => configHash);
 
-			// Set whitelist cache and load config for tests
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			// Set approved-hash cache and load config for tests
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -342,13 +350,13 @@ test_perfdata=check-test nagiosReturnValue=0`;
 					parseConfigFile: parseConfigFileFresh,
 				} = require('./local-config');
 				const {
-					setWhitelistCache: setWhitelistCacheFresh,
+					setApprovedHashCache: setApprovedHashCacheFresh,
 				} = require('./local-config');
 				const {
 					loadConfigAtStartup: loadConfigAtStartupFresh,
 				} = require('./local-config');
 
-				setWhitelistCacheFresh(new Map());
+				setApprovedHashCacheFresh(new Map());
 				loadConfigAtStartupFresh();
 
 				const result = parseConfigFileFresh();
@@ -389,10 +397,10 @@ test_perfdata=check-test nagiosReturnValue=0`;
 				const {
 					parseConfigFile: parseConfigFileMocked,
 					loadConfigAtStartup: loadConfigAtStartupMocked,
-					setWhitelistCache: setWhitelistCacheMocked,
+					setApprovedHashCache: setApprovedHashCacheMocked,
 				} = require('./local-config');
 
-				setWhitelistCacheMocked(new Map());
+				setApprovedHashCacheMocked(new Map());
 				loadConfigAtStartupMocked();
 
 				expect(() => parseConfigFileMocked()).toThrow(
@@ -415,8 +423,10 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -448,8 +458,10 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			const result = lookupConfig('test');
@@ -473,8 +485,10 @@ test_perfdata=check-test nagiosReturnValue=0`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(() => lookupConfig('nonexistent')).toThrow(
@@ -496,8 +510,10 @@ test2=check-test`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(() => lookupConfig('nonexistent')).toThrow(
@@ -515,13 +531,13 @@ test2=check-test`;
 				return crypto.createHash('sha256').update('').digest('hex');
 			});
 
-			const whitelist = new Map([
+			const approvedHashes = new Map([
 				[
 					'configs/local-presets.conf',
 					crypto.createHash('sha256').update('').digest('hex'),
 				],
 			]);
-			setWhitelistCache(whitelist);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(() => lookupConfig('nonexistent')).toThrow(
@@ -545,10 +561,10 @@ test2=check-test`;
 			// Set mock hash function with wrong hash to trigger validation failure
 			setHashFunction(() => 'wronghash123');
 
-			const whitelist = new Map([
+			const approvedHashes = new Map([
 				['configs/local-presets.conf', 'correcthash456'],
 			]);
-			setWhitelistCache(whitelist);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(() => lookupConfig('test')).toThrow(
@@ -569,8 +585,10 @@ test2=check-test`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(() => lookupConfig('nonexistent')).toThrow(
@@ -596,7 +614,9 @@ test2=check-test`;
 				.digest('hex');
 
 			setHashFunction(() => configHash);
-			setWhitelistCache(new Map([['configs/local-presets.conf', configHash]]));
+			setApprovedHashCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -616,10 +636,10 @@ test2=check-test`;
 
 			setHashFunction(() => 'wronghash123');
 
-			const whitelist = new Map([
+			const approvedHashes = new Map([
 				['configs/local-presets.conf', 'correcthash456'],
 			]);
-			setWhitelistCache(whitelist);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			expect(safeLookupConfig('test')).toBeUndefined();
@@ -651,7 +671,9 @@ test2=check-test`;
 				.update(configContent)
 				.digest('hex');
 			setHashFunction(() => configHash);
-			setWhitelistCache(new Map([['configs/local-presets.conf', configHash]]));
+			setApprovedHashCache(
+				new Map([['configs/local-presets.conf', configHash]]),
+			);
 			// Mock file security check to always pass
 			setCheckConfigFileSecurityFn(() => true);
 			loadConfigAtStartup();
@@ -671,13 +693,13 @@ test2=check-test`;
 
 			const {configKeyExists: configKeyExistsFresh} = require('./local-config');
 			const {
-				setWhitelistCache: setWhitelistCacheFresh,
+				setApprovedHashCache: setApprovedHashCacheFresh,
 			} = require('./local-config');
 			const {
 				loadConfigAtStartup: loadConfigAtStartupFresh,
 			} = require('./local-config');
 
-			setWhitelistCacheFresh(new Map());
+			setApprovedHashCacheFresh(new Map());
 			loadConfigAtStartupFresh();
 
 			expect(configKeyExistsFresh('test')).toBe(false);
@@ -691,7 +713,7 @@ test2=check-test`;
 
 			// Use wrong hash to trigger validation failure
 			setHashFunction(() => 'wronghash123');
-			setWhitelistCache(
+			setApprovedHashCache(
 				new Map([['configs/local-presets.conf', 'correcthash456']]),
 			);
 			loadConfigAtStartup();
@@ -729,8 +751,10 @@ debian_eol=check-debian-eol`;
 
 			setHashFunction(() => configHash);
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			loadConfigAtStartup();
 
 			const keys = getConfigKeys();
@@ -771,10 +795,10 @@ debian_eol=check-debian-eol`;
 				const {
 					getConfigKeys: getConfigKeysMocked,
 					loadConfigAtStartup: loadConfigAtStartupMocked,
-					setWhitelistCache: setWhitelistCacheMocked,
+					setApprovedHashCache: setApprovedHashCacheMocked,
 				} = require('./local-config');
 
-				setWhitelistCacheMocked(new Map());
+				setApprovedHashCacheMocked(new Map());
 				loadConfigAtStartupMocked();
 
 				const keys = getConfigKeysMocked();
@@ -787,14 +811,14 @@ debian_eol=check-debian-eol`;
 			// Ensure file doesn't exist
 			fs.rmSync(mockConfigPath, {force: true});
 
-			setWhitelistCache(new Map());
+			setApprovedHashCache(new Map());
 			loadConfigAtStartup();
 
 			const keys = getConfigKeys();
 			expect(keys).toEqual([]);
 		});
 
-		it('should return empty array when config file exists but is not whitelisted', () => {
+		it('should return empty array when config file exists but has no approved hash', () => {
 			resetModuleState();
 
 			// Create config file
@@ -803,8 +827,8 @@ debian_eol=check-debian-eol`;
 			// Set mock hash function
 			setHashFunction(() => 'somehash');
 
-			// Empty whitelist - file exists but not whitelisted
-			setWhitelistCache(new Map());
+			// Empty approved-hash cache - file exists but has no approved hash
+			setApprovedHashCache(new Map());
 			loadConfigAtStartup();
 
 			const keys = getConfigKeys();
@@ -819,7 +843,7 @@ debian_eol=check-debian-eol`;
 
 			// Set wrong hash to trigger validation failure
 			setHashFunction(() => 'wronghash');
-			setWhitelistCache(
+			setApprovedHashCache(
 				new Map([['configs/local-presets.conf', 'correcthash']]),
 			);
 			loadConfigAtStartup();
@@ -846,7 +870,7 @@ debian_eol=check-debian-eol`;
 			jest.resetModules();
 		});
 
-		it('should fail secure when whitelist cache is not populated', () => {
+		it('should fail secure when approved-hash cache is not populated', () => {
 			// Mock fs
 			const mockFs = {
 				readFileSync: jest.fn(),
@@ -881,42 +905,44 @@ debian_eol=check-debian-eol`;
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
-			// Don't call setWhitelistCache - simulate bug scenario
+			// Don't call setApprovedHashCache - simulate bug scenario
 			loadConfigAtStartup();
 
 			expect(mockLogger.error).toHaveBeenCalledWith(
-				'Whitelist cache not populated before config validation - this is a bug',
+				'Approved-hash cache not populated before config validation - this is a bug',
 			);
 			expect(hasRuntimeValidationFailed()).toBe(true);
 		});
 
-		it('should load config successfully when whitelist cache is set and hash matches', () => {
+		it('should load config successfully when approved-hash cache is set and hash matches', () => {
 			// Create actual config file
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
 
-			// Mock plugin-whitelist to return a fixed hash
+			// Mock file-hash to return a fixed hash
 			const mockHash = 'abc123';
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => mockHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => mockHash),
 			}));
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
-			// Create whitelist with correct hash
-			const whitelist = new Map([['configs/local-presets.conf', mockHash]]);
-			setWhitelistCache(whitelist);
+			// Create approved-hash cache with correct hash
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', mockHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			loadConfigAtStartup();
 
 			expect(hasRuntimeValidationFailed()).toBe(false);
 		});
 
-		it('should fail validation when config hash does not match whitelist', () => {
+		it('should fail validation when config hash does not match the approved hash', () => {
 			// Mock fs
 			const mockFs = {
 				readFileSync: jest.fn(),
@@ -946,22 +972,24 @@ debian_eol=check-debian-eol`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist to return a different hash
+			// Mock file-hash to return a different hash
 			const mockHash = 'currenthash123';
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => mockHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => mockHash),
 			}));
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
-			// Create whitelist with wrong hash
+			// Create approved-hash cache with wrong hash
 			const wrongHash = 'wronghash123';
-			const whitelist = new Map([['configs/local-presets.conf', wrongHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', wrongHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			loadConfigAtStartup();
 
@@ -1000,14 +1028,14 @@ debian_eol=check-debian-eol`;
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 				parseConfigFile,
 			} = require('./local-config');
 
 			// Don't create config file
-			const whitelist = new Map();
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map();
+			setApprovedHashCache(approvedHashes);
 
 			loadConfigAtStartup();
 
@@ -1059,7 +1087,7 @@ debian_eol=check-debian-eol`;
 			});
 		});
 
-		it('should fail validation when config file exists but is not in whitelist', () => {
+		it('should fail validation when config file exists but has no approved hash', () => {
 			// Create actual config file
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
@@ -1079,13 +1107,13 @@ debian_eol=check-debian-eol`;
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
-			// Create whitelist without the config file (file is not whitelisted)
-			const whitelist = new Map([['other-file.txt', 'somehash']]);
-			setWhitelistCache(whitelist);
+			// Create approved-hash cache without the config file (no approved hash)
+			const approvedHashes = new Map([['other-file.txt', 'somehash']]);
+			setApprovedHashCache(approvedHashes);
 
 			loadConfigAtStartup();
 
@@ -1129,7 +1157,7 @@ debian_eol=check-debian-eol`;
 
 				const {
 					loadConfigAtStartup,
-					setWhitelistCache,
+					setApprovedHashCache,
 					hasRuntimeValidationFailed,
 					setCheckConfigFileSecurityFn,
 				} = require('./local-config');
@@ -1140,8 +1168,10 @@ debian_eol=check-debian-eol`;
 					.update(configContent)
 					.digest('hex');
 
-				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-				setWhitelistCache(whitelist);
+				const approvedHashes = new Map([
+					['configs/local-presets.conf', configHash],
+				]);
+				setApprovedHashCache(approvedHashes);
 
 				// Mock security check to fail (return false)
 				setCheckConfigFileSecurityFn(() => false);
@@ -1152,6 +1182,15 @@ debian_eol=check-debian-eol`;
 					expect.stringContaining('has insecure permissions'),
 				);
 				expect(hasRuntimeValidationFailed()).toBe(true);
+
+				// The warning must also reach the startup-warning registry so it
+				// surfaces on the overview page with its help link, not just the log.
+				const {getStartupWarnings} = require('./startup-warning-registry') as {
+					getStartupWarnings: () => string[];
+				};
+				expect(getStartupWarnings().join('\n')).toContain(
+					'has insecure permissions',
+				);
 			});
 		});
 
@@ -1197,20 +1236,22 @@ invalidLineWithoutEquals`;
 					.update(configContent)
 					.digest('hex');
 
-				// Mock plugin-whitelist to return the correct hash
-				jest.doMock('./plugin-whitelist', () => ({
-					hashPluginFile: jest.fn(() => configHash),
+				// Mock file-hash to return the correct hash
+				jest.doMock('./file-hash', () => ({
+					hashFile: jest.fn(() => configHash),
 				}));
 
 				const {
 					loadConfigAtStartup,
-					setWhitelistCache,
+					setApprovedHashCache,
 					hasRuntimeValidationFailed,
 					setCheckConfigFileSecurityFn,
 				} = require('./local-config');
 
-				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-				setWhitelistCache(whitelist);
+				const approvedHashes = new Map([
+					['configs/local-presets.conf', configHash],
+				]);
+				setApprovedHashCache(approvedHashes);
 
 				// Mock security check to pass
 				setCheckConfigFileSecurityFn(() => true);
@@ -1266,20 +1307,22 @@ invalidLineWithoutEquals`;
 					.update(configContent)
 					.digest('hex');
 
-				// Mock plugin-whitelist to return the correct hash
-				jest.doMock('./plugin-whitelist', () => ({
-					hashPluginFile: jest.fn(() => configHash),
+				// Mock file-hash to return the correct hash
+				jest.doMock('./file-hash', () => ({
+					hashFile: jest.fn(() => configHash),
 				}));
 
 				const {
 					loadConfigAtStartup,
-					setWhitelistCache,
+					setApprovedHashCache,
 					hasRuntimeValidationFailed,
 					setCheckConfigFileSecurityFn,
 				} = require('./local-config');
 
-				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-				setWhitelistCache(whitelist);
+				const approvedHashes = new Map([
+					['configs/local-presets.conf', configHash],
+				]);
+				setApprovedHashCache(approvedHashes);
 
 				// Mock security check to pass
 				setCheckConfigFileSecurityFn(() => true);
@@ -1335,20 +1378,22 @@ test=duplicate`;
 					.update(configContent)
 					.digest('hex');
 
-				// Mock plugin-whitelist to return the correct hash
-				jest.doMock('./plugin-whitelist', () => ({
-					hashPluginFile: jest.fn(() => configHash),
+				// Mock file-hash to return the correct hash
+				jest.doMock('./file-hash', () => ({
+					hashFile: jest.fn(() => configHash),
 				}));
 
 				const {
 					loadConfigAtStartup,
-					setWhitelistCache,
+					setApprovedHashCache,
 					hasRuntimeValidationFailed,
 					setCheckConfigFileSecurityFn,
 				} = require('./local-config');
 
-				const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-				setWhitelistCache(whitelist);
+				const approvedHashes = new Map([
+					['configs/local-presets.conf', configHash],
+				]);
+				setApprovedHashCache(approvedHashes);
 
 				// Mock security check to pass
 				setCheckConfigFileSecurityFn(() => true);
@@ -1396,25 +1441,27 @@ test=duplicate`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist to return current hash
+			// Mock file-hash to return current hash
 			const currentHash = crypto
 				.createHash('sha256')
 				.update(configContent)
 				.digest('hex');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => currentHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => currentHash),
 			}));
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				setCheckConfigFileSecurityFn,
 			} = require('./local-config');
 
-			// Set whitelist with different hash
+			// Set approved-hash cache with different hash
 			const approvedHash = 'approvedHash123';
-			const whitelist = new Map([['configs/local-presets.conf', approvedHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', approvedHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			// Mock security check to pass
 			setCheckConfigFileSecurityFn(() => true);
@@ -1423,12 +1470,12 @@ test=duplicate`;
 
 			expect(mockLogger.warn).toHaveBeenCalledWith(
 				expect.stringContaining(
-					`Whitelist expects ${approvedHash}, current sha256 is ${currentHash}`,
+					`LOCAL_CONFIG_HASH is ${approvedHash}, current sha256 is ${currentHash}`,
 				),
 			);
 		});
 
-		it('should log specific not whitelisted warning message', () => {
+		it('should log the specific no-approved-hash warning message', () => {
 			// Create actual config file
 			const configContent = `test=check-test`;
 			fs.writeFileSync(mockConfigPath, configContent);
@@ -1464,13 +1511,13 @@ test=duplicate`;
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				setCheckConfigFileSecurityFn,
 			} = require('./local-config');
 
-			// Set whitelist without this config file
-			const whitelist = new Map([['other-config.conf', 'somehash']]);
-			setWhitelistCache(whitelist);
+			// Set approved-hash cache without this config file
+			const approvedHashes = new Map([['other-config.conf', 'somehash']]);
+			setApprovedHashCache(approvedHashes);
 
 			// Mock security check to pass
 			setCheckConfigFileSecurityFn(() => true);
@@ -1479,7 +1526,7 @@ test=duplicate`;
 
 			expect(mockLogger.warn).toHaveBeenCalledWith(
 				expect.stringContaining(
-					`Config file configs/local-presets.conf is not whitelisted`,
+					`Config file configs/local-presets.conf has no approved hash`,
 				),
 			);
 		});
@@ -1521,24 +1568,26 @@ test=duplicate`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist
+			// Mock file-hash
 			const configHash = crypto
 				.createHash('sha256')
 				.update(configContent)
 				.digest('hex');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => configHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => configHash),
 			}));
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				setCheckConfigFileSecurityFn,
 				resetModuleState,
 			} = require('./local-config');
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 			setCheckConfigFileSecurityFn(() => true);
 
 			// Call twice - second call should be a no-op
@@ -1599,24 +1648,26 @@ test=duplicate`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist
+			// Mock file-hash
 			const configHash = crypto
 				.createHash('sha256')
 				.update(configContent)
 				.digest('hex');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => configHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => configHash),
 			}));
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 				resetModuleState,
 			} = require('./local-config');
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			// Use default checkConfigFileSecurityFn (not overridden)
 			loadConfigAtStartup();
@@ -1670,24 +1721,26 @@ test=duplicate`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => 'testhash'),
+			// Mock file-hash
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => 'testhash'),
 			}));
 
 			const {
 				resetModuleState,
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 			} = require('./local-config');
 
 			// Reset module state to set default checkConfigFileSecurityFn
 			resetModuleState();
 
-			// Set whitelist cache
-			const whitelist = new Map([['configs/local-presets.conf', 'testhash']]);
-			setWhitelistCache(whitelist);
+			// Set approved-hash cache
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', 'testhash'],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			// Call loadConfigAtStartup - this will use the default function from resetModuleState
 			// which should catch the stat error at line 59 and return false
@@ -1734,13 +1787,13 @@ test=duplicate`;
 				logger: mockLogger,
 			}));
 
-			// Mock plugin-whitelist
+			// Mock file-hash
 			const configHash = crypto
 				.createHash('sha256')
 				.update(configContent)
 				.digest('hex');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => configHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => configHash),
 			}));
 
 			// Mock process.getuid to be undefined (not a function)
@@ -1749,13 +1802,15 @@ test=duplicate`;
 
 			const {
 				loadConfigAtStartup,
-				setWhitelistCache,
+				setApprovedHashCache,
 				hasRuntimeValidationFailed,
 				resetModuleState,
 			} = require('./local-config');
 
-			const whitelist = new Map([['configs/local-presets.conf', configHash]]);
-			setWhitelistCache(whitelist);
+			const approvedHashes = new Map([
+				['configs/local-presets.conf', configHash],
+			]);
+			setApprovedHashCache(approvedHashes);
 
 			// Should load successfully without checking uid when getuid is not available
 			loadConfigAtStartup();
@@ -1777,7 +1832,7 @@ test=duplicate`;
 		});
 
 		it('reports no drift when the file is missing and nothing is approved', () => {
-			setWhitelistCache(new Map());
+			setApprovedHashCache(new Map());
 			setHashFunction(() => 'unused');
 
 			const status = getConfigDrift();
@@ -1790,7 +1845,7 @@ test=duplicate`;
 		});
 
 		it('reports drift when the file is missing but a hash is approved', () => {
-			setWhitelistCache(
+			setApprovedHashCache(
 				new Map([['configs/local-presets.conf', 'approved-hash']]),
 			);
 			setHashFunction(() => 'unused');
@@ -1806,7 +1861,9 @@ test=duplicate`;
 
 		it('reports no drift when the on-disk hash matches the approved hash', () => {
 			fs.writeFileSync(mockConfigPath, 'test=check-test');
-			setWhitelistCache(new Map([['configs/local-presets.conf', 'same-hash']]));
+			setApprovedHashCache(
+				new Map([['configs/local-presets.conf', 'same-hash']]),
+			);
 			setHashFunction(() => 'same-hash');
 
 			const status = getConfigDrift();
@@ -1820,7 +1877,7 @@ test=duplicate`;
 
 		it('reports drift when the on-disk hash differs from the approved hash', () => {
 			fs.writeFileSync(mockConfigPath, 'test=check-test');
-			setWhitelistCache(
+			setApprovedHashCache(
 				new Map([['configs/local-presets.conf', 'approved-hash']]),
 			);
 			setHashFunction(() => 'current-hash');
@@ -1864,12 +1921,12 @@ test=duplicate`;
 			// file-security check sees the fake uid and fails on runners
 			// whose uid is not 1000 (GitHub runners use 1001).
 			jest.dontMock('fs');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => configHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => configHash),
 			}));
 
 			const fresh = require('./local-config');
-			fresh.setWhitelistCache(
+			fresh.setApprovedHashCache(
 				new Map([['configs/local-presets.conf', configHash]]),
 			);
 			fresh.loadConfigAtStartup();
@@ -1898,8 +1955,8 @@ test=duplicate`;
 				.digest('hex');
 			jest.resetModules();
 			jest.dontMock('fs');
-			jest.doMock('./plugin-whitelist', () => ({
-				hashPluginFile: jest.fn(() => configHash),
+			jest.doMock('./file-hash', () => ({
+				hashFile: jest.fn(() => configHash),
 			}));
 			jest.doMock('./secret-crypto', () => ({
 				isEncryptedValue: (value: string) => value.startsWith('enc:v1:'),
@@ -1907,7 +1964,7 @@ test=duplicate`;
 			}));
 			const fresh = require('./local-config');
 			fresh.setCheckConfigFileSecurityFn(() => true);
-			fresh.setWhitelistCache(
+			fresh.setApprovedHashCache(
 				new Map([['configs/local-presets.conf', configHash]]),
 			);
 			fresh.loadConfigAtStartup();

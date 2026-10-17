@@ -526,7 +526,7 @@ const reportError = (
  *
  * Checks a draft without writing it, which is what makes "test before adding"
  * possible: the operator sees syntax and duplicate-key problems before the file
- * - and therefore the whitelist hash - is touched.
+ * - and therefore its approved hash - is touched.
  */
 export const postAdminValidate = (req: Request, res: Response): void => {
 	const parsed = readEntriesPayload(req.body);
@@ -685,7 +685,7 @@ const readSingleEntry = (body: unknown): unknown => {
 /**
  * POST /admin/api/save
  *
- * Writes the draft to disk. The whitelist is deliberately never touched: the
+ * Writes the draft to disk. The approved hash is deliberately never touched: the
  * file's hash changes, the running presets stay the approved ones, and the drift
  * banner tells the operator what to approve. `baseHash` is the revision the form
  * was built from, so a concurrent manual edit is rejected instead of overwritten.
@@ -736,7 +736,7 @@ export const postAdminSave = (req: Request, res: Response): void => {
 		writeConfigDocument(content);
 		const after = readConfigDocument();
 		logger.warn(
-			'Local config presets file was rewritten through the admin UI. A restart is required and the whitelist hash must be updated.',
+			'Local config presets file was rewritten through the admin UI. A restart is required and LOCAL_CONFIG_HASH must be updated.',
 		);
 
 		sendAdminJson(res, HttpStatusCodes.OK, {
@@ -752,7 +752,7 @@ export const postAdminSave = (req: Request, res: Response): void => {
 /**
  * POST /admin/api/revert
  *
- * Restores the exact bytes that were whitelist-approved at startup. This is the
+ * Restores the exact bytes that were approved at startup. This is the
  * escape hatch for the footgun the save flow creates: without it, an operator
  * who saved a file they never approved would have to hand-edit the file to get
  * back to a restart-safe state.
@@ -763,7 +763,7 @@ export const postAdminRevert = (_req: Request, res: Response): void => {
 		sendAdminJson(res, HttpStatusCodes.CONFLICT, {
 			ok: false,
 			message:
-				'There is no whitelist-approved version to restore: startup never loaded an approved config file.',
+				'There is no approved version to restore: startup never loaded an approved config file.',
 		});
 		return;
 	}

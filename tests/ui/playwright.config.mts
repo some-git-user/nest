@@ -5,7 +5,7 @@ import {API_KEY, UI_TEST_BASE_URL} from './workspace.mjs';
  * Playwright configuration for the Nest UI suite.
  *
  * The server is started by `global-setup.ts`, not by Playwright's `webServer`
- * option, because the fixture workspace (plugin dir, whitelist, TLS material)
+ * option, because the fixture workspace (plugin dir, manifests, TLS material)
  * is created at runtime and `webServer.env` is resolved when this file is
  * loaded. The port is fixed so `baseURL` can be a constant.
  *

@@ -116,26 +116,27 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 		}
 		if (!drift.drifted) {
 			driftHost.innerHTML =
-				'<section class="banner ok"><h2>File matches the whitelist</h2>' +
+				'<section class="banner ok"><h2>File matches the approved hash</h2>' +
 				'<p>The config file on disk is the one the service approved at startup.</p></section>';
 			return;
 		}
 
-		var whitelistLine =
-			'configs/local-presets.conf ' + escapeHtml(drift.currentHash || 'unknown');
+		var hashLine =
+			'LOCAL_CONFIG_HASH=' + escapeHtml(drift.currentHash || 'unknown');
 		var approved = drift.approvedHash
-			? 'Whitelist approves <code>' + escapeHtml(drift.approvedHash) + '</code>.'
-			: 'The file is not in the whitelist at all.';
+			? 'LOCAL_CONFIG_HASH is <code>' + escapeHtml(drift.approvedHash) + '</code>.'
+			: 'LOCAL_CONFIG_HASH is not set, so the file is not approved at all.';
 
 		driftHost.innerHTML =
 			'<section class="banner"><h2>Changes are waiting for manual approval</h2>' +
-			'<p>The file on disk is not the file the whitelist approves, so a restart ' +
+			'<p>The file on disk is not the file the approved hash matches, so a restart ' +
 			'would disable <strong>every</strong> local preset until the hash is updated. ' +
 			'The presets that were approved at startup are still the ones being served.</p>' +
 			'<p>' + approved + '</p>' +
-			'<pre>' + whitelistLine + '</pre>' +
-			'<p>Add that line to <code>plugins/plugin-whitelist.txt</code>, then restart ' +
-			'the service. Use <em>Revert to approved</em> to discard the changes instead.</p></section>';
+			'<pre>' + hashLine + '</pre>' +
+			'<p>Run <code>nest plugins hash</code> or set that line in ' +
+			'<code>/etc/nest/nest.conf</code>, then restart the service. Use ' +
+			'<em>Revert to approved</em> to discard the changes instead.</p></section>';
 	};
 
 	// Values the server masked away. A secret never leaves the server, so the
@@ -798,7 +799,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					clearStatus();
 					setStatus(
 						'ok',
-						'Saved. The file on disk changed, so it now needs whitelist approval and a restart.',
+						'Saved. The file on disk changed, so it now needs approval (LOCAL_CONFIG_HASH) and a restart.',
 					);
 				})
 				.catch(function (error) {
@@ -809,7 +810,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 
 	if (revertButton instanceof HTMLElement) {
 		revertButton.addEventListener('click', function () {
-			if (!window.confirm('Replace the file with the version the whitelist approves? Unsaved edits are lost.')) {
+			if (!window.confirm('Replace the file with the version the approved hash matches? Unsaved edits are lost.')) {
 				return;
 			}
 			api('/admin/api/revert', {})
@@ -831,7 +832,7 @@ export const ADMIN_CONFIG_SCRIPT = `// Admin config editor
 					});
 					render();
 					renderDrift();
-					setStatus('ok', 'Restored the whitelist-approved file.');
+					setStatus('ok', 'Restored the approved file.');
 				})
 				.catch(function (error) {
 					setStatus('error', String(error.message || error));

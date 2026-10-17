@@ -183,7 +183,7 @@ button:disabled{opacity:.55;cursor:default}
 .plugin-example-link:hover{background:var(--surface-hover);border-color:var(--text-muted)}
 .warnings{border-left:4px solid var(--warn);background:var(--warn-bg);padding:.7rem 1rem;margin:1rem 0;border-radius:0 var(--radius-sm) var(--radius-sm) 0}
 .warnings h2{margin:.1rem 0 .4rem;color:var(--warn-text);font-size:1.05rem}
-.startup-warning-whitelist-entry{background:var(--warn-bg);border-color:var(--warn-border);white-space:pre-wrap}
+.startup-warning-entry{background:var(--warn-bg);border-color:var(--warn-border);white-space:pre-wrap}
 .shell-auth-hint{margin-top:1.5rem;padding:.8rem 1rem;border-left:4px solid var(--info);background:var(--info-bg);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
 .shell-auth-hint h2{margin-top:0}
 .sandbox-frame{width:100%;min-height:70vh;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}

@@ -134,7 +134,7 @@ describe('APP_STYLESHEET', () => {
 			'.plugin-example-method{',
 			'.plugin-example-link{',
 			'.warnings{',
-			'.startup-warning-whitelist-entry{',
+			'.startup-warning-entry{',
 			'.shell-auth-hint{',
 			'.sandbox-frame{',
 			'.theme-toggle{',

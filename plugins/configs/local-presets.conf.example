@@ -11,15 +11,17 @@
 # 1. Copy this file to: plugins/configs/local-presets.conf
 # 2. Edit the config entries as needed
 # 3. Set file permissions: chmod 600 plugins/configs/local-presets.conf
-# 4. Calculate SHA-256 hash: sha256sum plugins/configs/local-presets.conf
-# 5. Add hash to plugins/plugin-whitelist.txt:
-#    local-presets.conf <sha256-hash-from-step-4>
-# 6. Restart Nest server
-# 7. Verify hash in Web UI at /help/startup-warnings/config-not-whitelisted (if hash mismatch or not whitelisted)
+# 4. Record the approved hash: run "nest plugins hash". This computes the
+#    SHA-256 of local-presets.conf and writes it as LOCAL_CONFIG_HASH in the
+#    nest config file (/etc/nest/nest.conf). Alternatively set
+#    "LOCAL_CONFIG_HASH=<sha256>" there by hand.
+# 5. Restart Nest server
+# 6. Verify in the Web UI at /help/startup-warnings/config-drift-awaiting-approval
+#    (if the hash is missing or does not match)
 #
-# SECURITY: The actual config file (local-presets.conf) must be added to
-#           plugins/plugin-whitelist.txt with SHA-256 hash. This example file
-#           is NOT hashed and is only for reference.
+# SECURITY: The actual config file (local-presets.conf) must have its SHA-256
+#           recorded as LOCAL_CONFIG_HASH in the protected nest config file. This
+#           example file is NOT hashed and is only for reference.
 
 # Example: Test plugin with basic message (space in the value is quoted)
 test=check-test nagiosReturnMessage="Test message" nagiosReturnValue=0 performanceData=false

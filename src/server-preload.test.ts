@@ -25,6 +25,13 @@ describe('server-preload', () => {
 				}),
 				{virtual: true},
 			);
+			jest.doMock(
+				'./cli/dispatch.js',
+				() => ({
+					runCli: jest.fn(() => false),
+				}),
+				{virtual: true},
+			);
 			jest.doMock('./server', () => ({}), {virtual: true});
 
 			jest.isolateModules(() => {
@@ -33,6 +40,49 @@ describe('server-preload', () => {
 			});
 
 			expect(mockSetupSsh2Interception).toHaveBeenCalledTimes(1);
+		});
+
+		test('exits without starting the server when runCli handles a command', () => {
+			const mockSetupSsh2Interception = jest.fn();
+			const serverRequireMarker = jest.fn();
+			process.exitCode = undefined;
+			// process.exit never returns in production; throwing here models that so
+			// the require('./server') line below it is never reached.
+			const exitError = new Error('process.exit');
+			const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+				throw exitError;
+			}) as never);
+
+			jest.doMock('ssh2', () => ({}), {virtual: true});
+			jest.doMock(
+				'./preload/ssh2-preload.js',
+				() => ({
+					setupSsh2Interception: mockSetupSsh2Interception,
+				}),
+				{virtual: true},
+			);
+			jest.doMock(
+				'./cli/dispatch.js',
+				() => ({
+					runCli: jest.fn(() => true),
+				}),
+				{virtual: true},
+			);
+			jest.doMock('./server', () => {
+				serverRequireMarker();
+				return {};
+			});
+
+			expect(() => {
+				jest.isolateModules(() => {
+					// eslint-disable-next-line @typescript-eslint/no-require-imports
+					require('./server-preload');
+				});
+			}).toThrow(exitError);
+
+			expect(mockExit).toHaveBeenCalledWith(0);
+			expect(serverRequireMarker).not.toHaveBeenCalled();
+			mockExit.mockRestore();
 		});
 	});
 });
