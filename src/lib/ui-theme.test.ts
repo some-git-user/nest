@@ -141,6 +141,10 @@ describe('APP_STYLESHEET', () => {
 			'.theme-toggle:hover{',
 			'.theme-toggle:focus-visible{',
 			'.theme-toggle-icon{',
+			'.top-nav{',
+			'.top-nav-link{',
+			'.top-nav-link:hover{',
+			'.top-nav-link:focus-visible{',
 		]) {
 			expect(APP_STYLESHEET).toContain(selector);
 		}

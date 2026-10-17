@@ -36,8 +36,18 @@ test.describe('route overview', () => {
 			builtIn.locator('.route-path:text-is("/nagios/honey-pot")'),
 		).toBeVisible();
 		await expect(
-			builtIn.locator('.route-path:text-is("/admin")'),
+			builtIn.locator('.route-path:text-is("/unified")'),
 		).toBeVisible();
+	});
+
+	test('surfaces the admin UI as a top-right action', async ({page}) => {
+		await page.goto('/');
+
+		const nav = page.locator('.top-nav');
+		await expect(nav.locator('.top-nav-link:text-is("Admin")')).toHaveAttribute(
+			'href',
+			'/admin',
+		);
 	});
 
 	/**

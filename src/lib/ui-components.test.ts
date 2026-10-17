@@ -6,8 +6,20 @@ import {
 	renderMetaList,
 	renderStatus,
 	renderToolbar,
+	renderTopNavLink,
 } from './ui-components';
 import {APP_STYLESHEET} from './ui-theme';
+
+describe('renderTopNavLink', () => {
+	it('renders a pill link and escapes href and label', () => {
+		expect(renderTopNavLink({href: '/admin', label: 'Admin'})).toBe(
+			'<a class="top-nav-link" href="/admin">Admin</a>',
+		);
+		expect(renderTopNavLink({href: '/a"x', label: '<b>label</b>'})).toBe(
+			'<a class="top-nav-link" href="/a&quot;x">&lt;b&gt;label&lt;/b&gt;</a>',
+		);
+	});
+});
 
 describe('renderButton', () => {
 	it('renders a plain button by default', () => {
@@ -272,17 +284,29 @@ describe('renderHtmlDocument', () => {
 		);
 	});
 
-	it('renders the theme toggle as the first element in the body', () => {
+	it('renders the theme toggle inside the fixed top-nav cluster', () => {
 		const html = renderHtmlDocument({
 			title: 'Overview',
 			contentHtml: '<p>Body</p>',
 		});
 
 		expect(html).toContain(
-			'<body>\n<button id="theme-toggle" class="theme-toggle"',
+			'<body>\n<div class="top-nav"><button id="theme-toggle" class="theme-toggle"',
 		);
 		expect(html).toContain('aria-pressed="false"');
 		expect(html).toContain('<span class="theme-toggle-icon"');
 		expect(html).toContain('<span class="theme-toggle-label">Dark</span>');
+	});
+
+	it('renders nav links before the theme toggle in the top-nav cluster', () => {
+		const html = renderHtmlDocument({
+			title: 'Overview',
+			contentHtml: '<p>Body</p>',
+			navHtml: renderTopNavLink({href: '/admin', label: 'Admin'}),
+		});
+
+		expect(html).toContain(
+			'<div class="top-nav"><a class="top-nav-link" href="/admin">Admin</a><button id="theme-toggle"',
+		);
 	});
 });

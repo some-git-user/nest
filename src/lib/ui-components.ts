@@ -30,6 +30,16 @@ import {APP_STYLESHEET} from './ui-theme';
 export const renderThemeToggle = (): string =>
 	`<button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false"><span class="theme-toggle-icon" aria-hidden="true">&#x263D;</span><span class="theme-toggle-label">Dark</span></button>`;
 
+export type TopNavLink = {href: string; label: string};
+
+/**
+ * A link in the fixed top-right cluster (`.top-nav`), styled as a pill to match
+ * the theme toggle it sits beside. The route overview uses it to surface the
+ * admin UI as a persistent action rather than as a listed route.
+ */
+export const renderTopNavLink = (link: TopNavLink): string =>
+	`<a class="top-nav-link" href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a>`;
+
 export type ButtonVariant = 'default' | 'primary' | 'danger';
 
 export type UiElementOptions = {
@@ -193,6 +203,12 @@ export type PageOptions = {
 	extraStyles?: string;
 	/** Additional pre-rendered `<head>` children, e.g. a `<script src>` tag. */
 	headHtml?: string;
+	/**
+	 * Pre-rendered links for the fixed top-right cluster, rendered before the
+	 * theme toggle. The route overview uses it to surface the admin UI as a
+	 * persistent action instead of listing it as a route.
+	 */
+	navHtml?: string;
 };
 
 /**
@@ -232,7 +248,7 @@ export const renderHtmlDocument = (options: PageOptions): string => {
 	}</style>${styleOverride}${options.headHtml ?? ''}${themeScriptHtml}
 </head>
 <body>
-${renderThemeToggle()}
+<div class="top-nav">${options.navHtml ?? ''}${renderThemeToggle()}</div>
 ${backHtml}${headerHtml}
 ${subtitleHtml}${options.contentHtml}
 </body>

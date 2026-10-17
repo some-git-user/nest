@@ -1757,12 +1757,12 @@ describe('config drift warning on the overview page', () => {
 		expect(renderListItems).toHaveBeenCalledWith([
 			expect.stringContaining('the file was removed after startup'),
 		]);
-		// The admin UI link is always advertised on the overview page, and it is
-		// the only static route without a help link: the editor page is its own
-		// destination, so a second link to it would be a dead end.
+		// The admin UI is surfaced as a persistent top-right action rather than a
+		// listed route: it is a page an operator navigates to, not an endpoint to
+		// probe. The link is always advertised because the UI is always mounted.
 		expect(rootSend).toHaveBeenCalledWith(
 			expect.stringContaining(
-				'<div class="route-header"><a class="route-path" href="/admin">/admin</a></div>',
+				'<a class="top-nav-link" href="/admin">Admin</a>',
 			),
 		);
 	});

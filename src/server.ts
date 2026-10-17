@@ -57,6 +57,7 @@ import {
 	renderField,
 	renderHtmlDocument,
 	renderMetaList,
+	renderTopNavLink,
 } from './lib/ui-components';
 import {getAppVersion} from './lib/version';
 import adminLocalConfig from './routes/admin-local-config';
@@ -179,12 +180,13 @@ const buildOverviewPageHtml = (
 		{path: '/nagios', helpPath: '/nagios?help'},
 		{path: '/nagios/honey-pot', helpPath: '/nagios/honey-pot?help'},
 		{path: '/unified', helpPath: '/unified?help'},
-		// The admin UI is always mounted; when no password is configured it
-		// serves a "not configured" page rather than 404, so the link is always
-		// reachable. It has no `?help` page of its own, so no helpPath is set:
-		// pointing one at the editor would just duplicate the path link.
-		{path: adminUiPath},
 	];
+
+	// The admin UI is surfaced as a persistent top-right action rather than a
+	// listed route: it is a page an operator navigates to, not a monitoring
+	// endpoint to probe. It is always mounted (it serves a "not configured" page
+	// when no password is set), so the link is always reachable.
+	const navHtml = renderTopNavLink({href: adminUiPath, label: 'Admin'});
 
 	/**
 	 * The heading row of a route list item: the route path, linking to a runnable
@@ -254,6 +256,7 @@ const buildOverviewPageHtml = (
 	return renderHtmlDocument({
 		title: 'Nest Route Overview',
 		headHtml: `\n<script src="${PLUGIN_EXAMPLE_FORM_SCRIPT_PATH}" defer></script>`,
+		navHtml,
 		metaHtml: renderMetaList([
 			{
 				label: 'Project Origin',
