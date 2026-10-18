@@ -1,6 +1,6 @@
 {
 	"name": "nest",
-	"version": "0.1.5.7",
+	"version": "0.1.5.8",
 	"description": "Nagios Rest Server",
 	"main": "dist/server.js",
 	"module": "ESNext",
