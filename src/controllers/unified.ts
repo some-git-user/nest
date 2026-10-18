@@ -17,14 +17,13 @@ import {
 import {isRecord} from '../lib/is-record';
 import {hasRuntimeValidationFailed} from '../lib/local-config';
 import {logger} from '../lib/logger';
-import {commandToRoutePath} from '../lib/plugin-utils';
 import {renderHtmlDocument} from '../lib/ui-components';
 import {
 	NEST_UNIFIED_PARAM,
-	type UnifiedPreset,
+	type UnifiedCheck,
 	type UnifiedPresetResult,
 	aggregateUnifiedResults,
-	getUnifiedPresetEntries,
+	getUnifiedChecks,
 } from '../lib/unified-check';
 import type {NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
@@ -37,13 +36,20 @@ const getUnifiedHelpHtml = (): string => {
 			backHref: '/',
 			hideHeader: true,
 			contentHtml: `<h1>Built-in Help: /unified</h1>
-<p>Runs every local-config preset opted into the unified check and returns the
-worst Nagios status, collapsing many services into a single check.</p>
+<p>Runs the built-in monitoring routes plus every local-config preset opted into
+the unified check, and returns the worst Nagios status, collapsing many services
+into a single check.</p>
 <h2>Endpoint</h2>
 <ul>
 <li><code>/unified</code></li>
 <li><code>/unified?help</code></li>
 </ul>
+<h2>What runs</h2>
+<p>
+The built-in routes <code>/nagios</code> (process and host health) and
+<code>/nagios/honey-pot</code> (intrusion signals) are <em>always</em> included;
+they need no opt-in. Plugin presets join them only when opted in.
+</p>
 <h2>How a preset opts in</h2>
 <p>
 Add the reserved parameter <code>${NEST_UNIFIED_PARAM}=true</code> to a preset
@@ -53,11 +59,10 @@ preset is dialled back into its plugin route.
 </p>
 <h2>Behaviour</h2>
 <ul>
-<li>Presets run in parallel, each capped at <code>UNIFIED_TIMEOUT_MS</code>.</li>
+<li>Checks run in parallel, each capped at <code>UNIFIED_TIMEOUT_MS</code>.</li>
 <li>The overall status is the worst seen: CRITICAL &gt; UNKNOWN &gt; WARNING &gt; OK.</li>
-<li>Every non-OK preset is listed; OK presets are counted and still contribute performance data.</li>
-<li>A preset that errors or exceeds the timeout is reported as UNKNOWN, not allowed to stall the aggregate.</li>
-<li>With no preset opted in, the check returns UNKNOWN.</li>
+<li>Every non-OK check is listed; OK checks are counted and still contribute performance data.</li>
+<li>A check that errors or exceeds the timeout is reported as UNKNOWN, not allowed to stall the aggregate.</li>
 </ul>
 <h2>Example</h2>
 <ul>
@@ -68,27 +73,27 @@ preset is dialled back into its plugin route.
 };
 
 /**
- * Run one preset and normalise its outcome.
+ * Run one check and normalise its outcome.
  *
  * Any failure - a thrown dial-back, a timeout, a non-JSON body, or a body
  * without a usable Nagios code - becomes an UNKNOWN result carrying the reason,
- * so a single broken preset degrades the aggregate instead of aborting it.
+ * so a single broken check degrades the aggregate instead of aborting it.
  */
-const runPreset = async (
-	preset: UnifiedPreset,
+const runCheck = async (
+	check: UnifiedCheck,
 	apiKey: string | undefined,
 	requireApiKey: boolean,
 ): Promise<UnifiedPresetResult> => {
 	try {
 		const response = await makeInternalRequest({
 			method: 'GET',
-			path: commandToRoutePath(preset.command),
-			params: preset.params,
+			path: check.path,
+			params: check.params,
 			apiKey,
 			apiKeyHeader: env.API_KEY_HEADER,
 			requireApiKey,
 			// Pass our deadline down so a hung plugin's socket is destroyed rather
-			// than left open after we have already reported the preset as UNKNOWN.
+			// than left open after we have already reported the check as UNKNOWN.
 			timeoutMs: env.UNIFIED_TIMEOUT_MS,
 		});
 
@@ -97,7 +102,7 @@ const runPreset = async (
 			parsed = JSON.parse(response.body);
 		} catch {
 			return {
-				key: preset.key,
+				key: check.key,
 				code: NagiosReturnCodes.UNKNOWN,
 				message: 'Invalid response from plugin',
 			};
@@ -105,7 +110,7 @@ const runPreset = async (
 
 		if (!isRecord(parsed)) {
 			return {
-				key: preset.key,
+				key: check.key,
 				code: NagiosReturnCodes.UNKNOWN,
 				message: 'Invalid response from plugin',
 			};
@@ -123,10 +128,10 @@ const runPreset = async (
 				? parsed.performanceData
 				: undefined;
 
-		return {key: preset.key, code, message, performanceData};
+		return {key: check.key, code, message, performanceData};
 	} catch (error) {
 		// A socket timeout surfaces as a known sentinel; anything else (transport
-		// error, missing key) reports its own message. Either way the preset
+		// error, missing key) reports its own message. Either way the check
 		// degrades to UNKNOWN instead of aborting the aggregate.
 		const errorMessage = getErrorMessage(error);
 		const message =
@@ -134,7 +139,7 @@ const runPreset = async (
 				? `Timed out after ${env.UNIFIED_TIMEOUT_MS} ms`
 				: errorMessage;
 		return {
-			key: preset.key,
+			key: check.key,
 			code: NagiosReturnCodes.UNKNOWN,
 			message,
 		};
@@ -190,17 +195,11 @@ export const unifiedCheck = async (
 			return;
 		}
 
-		const presets = getUnifiedPresetEntries();
-		if (presets.length === 0) {
-			res.status(HttpStatusCodes.OK).json({
-				code: NagiosReturnCodes.UNKNOWN,
-				message: 'NEST UNIFIED: no presets are enabled for the unified check',
-			});
-			return;
-		}
-
+		// Built-in routes are always included, so there is always at least one
+		// check to run; opted-in plugin presets are appended after them.
+		const checks = getUnifiedChecks();
 		const results = await Promise.all(
-			presets.map((preset) => runPreset(preset, apiKey, requireApiKey)),
+			checks.map((check) => runCheck(check, apiKey, requireApiKey)),
 		);
 		const aggregate = aggregateUnifiedResults(results);
 

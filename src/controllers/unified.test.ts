@@ -5,8 +5,7 @@ import {HttpStatusCodes} from '../lib/http-status-codes';
 import {makeInternalRequest} from '../lib/internal-http-client';
 import {hasRuntimeValidationFailed} from '../lib/local-config';
 import {logger} from '../lib/logger';
-import {commandToRoutePath} from '../lib/plugin-utils';
-import {getUnifiedPresetEntries} from '../lib/unified-check';
+import {getUnifiedChecks} from '../lib/unified-check';
 import {unifiedCheck} from './unified';
 
 jest.mock('../lib/browser-auth');
@@ -19,12 +18,11 @@ jest.mock('../lib/internal-http-client', () => {
 });
 jest.mock('../lib/local-config');
 jest.mock('../lib/logger');
-jest.mock('../lib/plugin-utils');
 jest.mock('../lib/unified-check', () => {
 	const actual = jest.requireActual('../lib/unified-check');
 	return {
 		...actual,
-		getUnifiedPresetEntries: jest.fn(),
+		getUnifiedChecks: jest.fn(),
 	};
 });
 jest.mock('../config/env', () => ({
@@ -42,8 +40,7 @@ const mockedMakeInternalRequest = jest.mocked(makeInternalRequest);
 const mockedHasRuntimeValidationFailed = jest.mocked(
 	hasRuntimeValidationFailed,
 );
-const mockedCommandToRoutePath = jest.mocked(commandToRoutePath);
-const mockedGetUnifiedPresetEntries = jest.mocked(getUnifiedPresetEntries);
+const mockedGetUnifiedChecks = jest.mocked(getUnifiedChecks);
 const mockedLoggerWarn = jest.mocked(logger.warn);
 
 type MockResponse = {
@@ -76,7 +73,6 @@ describe('unified controller', () => {
 		(env as {API_KEY: string}).API_KEY = '';
 		mockedHasRuntimeValidationFailed.mockReturnValue(false);
 		mockedExtractApiKey.mockReturnValue('');
-		mockedCommandToRoutePath.mockImplementation((c) => `/plugins/${c}`);
 	});
 
 	it('serves the help page when ?help is present', async () => {
@@ -94,8 +90,8 @@ describe('unified controller', () => {
 		expect(res.send).toHaveBeenCalledWith(
 			expect.stringContaining('Built-in Help: /unified'),
 		);
-		// The help branch must short-circuit before any preset work.
-		expect(mockedGetUnifiedPresetEntries).not.toHaveBeenCalled();
+		// The help branch must short-circuit before any check work.
+		expect(mockedGetUnifiedChecks).not.toHaveBeenCalled();
 	});
 
 	it('returns 403 when runtime validation failed', async () => {
@@ -126,8 +122,8 @@ describe('unified controller', () => {
 		expect(mockedLoggerWarn).toHaveBeenCalled();
 	});
 
-	it('reports UNKNOWN when no presets are enabled', async () => {
-		mockedGetUnifiedPresetEntries.mockReturnValue([]);
+	it('reports UNKNOWN when the check list is empty', async () => {
+		mockedGetUnifiedChecks.mockReturnValue([]);
 		const res = makeResponse();
 
 		await unifiedCheck(makeRequest('GET'), res as unknown as Response);
@@ -135,12 +131,12 @@ describe('unified controller', () => {
 		expect(res.status).toHaveBeenCalledWith(HttpStatusCodes.OK);
 		expect(res.json).toHaveBeenCalledWith({
 			code: 3,
-			message: 'NEST UNIFIED: no presets are enabled for the unified check',
+			message: 'NEST UNIFIED: UNKNOWN - no presets were run',
 		});
 	});
 
 	it('returns a Nagios JSON 500 when an unexpected error is thrown', async () => {
-		mockedGetUnifiedPresetEntries.mockImplementation(() => {
+		mockedGetUnifiedChecks.mockImplementation(() => {
 			throw new Error('boom');
 		});
 		const res = makeResponse();
@@ -157,9 +153,9 @@ describe('unified controller', () => {
 	});
 
 	it('aggregates results and forwards the worst status', async () => {
-		mockedGetUnifiedPresetEntries.mockReturnValue([
-			{key: 'a', command: 'check-a', params: {host: 'h'}},
-			{key: 'b', command: 'check-b', params: {}},
+		mockedGetUnifiedChecks.mockReturnValue([
+			{key: 'a', path: '/plugins/check-a', params: {host: 'h'}},
+			{key: 'b', path: '/plugins/check-b', params: {}},
 		]);
 		mockedMakeInternalRequest.mockImplementation(async ({path}) => ({
 			statusCode: 200,
@@ -184,8 +180,8 @@ describe('unified controller', () => {
 	it('passes the resolved API key through to the dial-back', async () => {
 		mockedEnvApiKey('secret');
 		mockedExtractApiKey.mockReturnValue('caller-key');
-		mockedGetUnifiedPresetEntries.mockReturnValue([
-			{key: 'a', command: 'check-a', params: {}},
+		mockedGetUnifiedChecks.mockReturnValue([
+			{key: 'a', path: '/plugins/check-a', params: {}},
 		]);
 		mockedMakeInternalRequest.mockResolvedValue({
 			statusCode: 200,
@@ -204,8 +200,8 @@ describe('unified controller', () => {
 	it('falls back to the configured key for a keyless GET', async () => {
 		mockedEnvApiKey('secret');
 		mockedExtractApiKey.mockReturnValue('');
-		mockedGetUnifiedPresetEntries.mockReturnValue([
-			{key: 'a', command: 'check-a', params: {}},
+		mockedGetUnifiedChecks.mockReturnValue([
+			{key: 'a', path: '/plugins/check-a', params: {}},
 		]);
 		mockedMakeInternalRequest.mockResolvedValue({
 			statusCode: 200,
@@ -221,10 +217,10 @@ describe('unified controller', () => {
 		);
 	});
 
-	describe('runPreset failure handling', () => {
+	describe('runCheck failure handling', () => {
 		const singlePreset = () =>
-			mockedGetUnifiedPresetEntries.mockReturnValue([
-				{key: 'a', command: 'check-a', params: {}},
+			mockedGetUnifiedChecks.mockReturnValue([
+				{key: 'a', path: '/plugins/check-a', params: {}},
 			]);
 
 		it('marks a preset UNKNOWN when the dial-back times out', async () => {

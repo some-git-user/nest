@@ -114,10 +114,12 @@ See `plugins/configs/local-presets.conf.example` for setup instructions and secu
 
 ### Unified Check
 
-The `/unified` endpoint runs a **set** of presets in one request and returns the
-worst status, so many Nagios services collapse into a single check. Opt a preset
-in by adding the reserved parameter `nestUnified=true` to its line (or tick
-**Include in unified check** in the admin editor):
+The `/unified` endpoint runs a **set** of checks in one request and returns the
+worst status, so many Nagios services collapse into a single check. The built-in
+routes `/nagios` (process and host health) and `/nagios/honey-pot` (intrusion
+signals) are **always** included; they need no opt-in. Plugin presets join them
+when you opt each one in by adding the reserved parameter `nestUnified=true` to
+its line (or tick **Include in unified check** in the admin editor):
 
 ```
 disk_root=check-disk warn=80% crit=90% nestUnified=true
@@ -134,21 +136,21 @@ never receives a parameter it did not declare.
 curl -k https://localhost:5000/unified -H "x-api-key: $NEST_API_KEY"
 ```
 
-**Response** (worst code wins; every non-OK preset is listed, OK presets are
-counted and still contribute performance data):
+**Response** (worst code wins; every non-OK check is listed, OK checks are
+counted and still contribute performance data — here the two built-ins and
+`cert_expiry` are OK, so only `disk_root` is listed out of four checks):
 
 ```json
 {
-	"message": "NEST UNIFIED: CRITICAL - 1 problem(s) of 2; disk_root: CRITICAL - / at 95%",
+	"message": "NEST UNIFIED: CRITICAL - 1 problem(s) of 4; disk_root: CRITICAL - / at 95%",
 	"code": 2,
 	"performanceData": "'disk_root'=95%;80;90 'cert_expiry'=42"
 }
 ```
 
-Severity order is `CRITICAL > UNKNOWN > WARNING > OK`. Presets run in parallel,
-each capped at `UNIFIED_TIMEOUT_MS` (default 15 s); a preset that errors or
+Severity order is `CRITICAL > UNKNOWN > WARNING > OK`. Checks run in parallel,
+each capped at `UNIFIED_TIMEOUT_MS` (default 15 s); a check that errors or
 exceeds the timeout is reported as `UNKNOWN` rather than stalling the aggregate.
-With no preset opted in, the check returns `UNKNOWN`.
 
 ### Admin UI (Local Config Editor)
 
@@ -319,7 +321,7 @@ file on disk, so parallel workers would fight over it.
 ./scripts/check_nest.sh check-test nagiosReturnMessage=test nagiosReturnValue=0
 ```
 
-Run the aggregate check over every preset opted into the unified check:
+Run the aggregate check (built-in routes plus every opted-in preset):
 
 ```bash
 ./scripts/check_nest.sh --unified

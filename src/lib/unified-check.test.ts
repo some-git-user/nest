@@ -1,15 +1,21 @@
 import type {LocalConfigEntry} from './local-config';
 import {getConfigKeys, safeLookupConfig} from './local-config';
 import {getNagiosStatusText} from './nagios';
+import {commandToRoutePath} from './plugin-utils';
 import {
+	BUILT_IN_UNIFIED_CHECKS,
 	NEST_UNIFIED_PARAM,
 	aggregateUnifiedResults,
+	getUnifiedChecks,
 	getUnifiedPresetEntries,
 	isUnifiedEnabled,
 	stripUnifiedParam,
 } from './unified-check';
 
 jest.mock('./local-config');
+jest.mock('./plugin-utils', () => ({
+	commandToRoutePath: jest.fn((command: string) => `/plugins/${command}`),
+}));
 jest.mock('./nagios', () => ({
 	getNagiosStatusText: jest.fn((code: number) => {
 		const names: Record<number, string> = {
@@ -25,10 +31,12 @@ jest.mock('./nagios', () => ({
 const mockedGetConfigKeys = jest.mocked(getConfigKeys);
 const mockedSafeLookupConfig = jest.mocked(safeLookupConfig);
 const mockedStatusText = jest.mocked(getNagiosStatusText);
+const mockedCommandToRoutePath = jest.mocked(commandToRoutePath);
 
 describe('unified-check', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		mockedCommandToRoutePath.mockImplementation((c) => `/plugins/${c}`);
 	});
 
 	describe('NEST_UNIFIED_PARAM', () => {
@@ -80,8 +88,9 @@ describe('unified-check', () => {
 			);
 
 			expect(getUnifiedPresetEntries()).toEqual([
-				{key: 'a', command: 'check-a', params: {host: 'h'}},
+				{key: 'a', path: '/plugins/check-a', params: {host: 'h'}},
 			]);
+			expect(mockedCommandToRoutePath).toHaveBeenCalledWith('check-a');
 		});
 
 		it('skips a key whose entry is missing from the cache', () => {
@@ -96,6 +105,37 @@ describe('unified-check', () => {
 
 			expect(getUnifiedPresetEntries()).toEqual([]);
 			expect(mockedSafeLookupConfig).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('BUILT_IN_UNIFIED_CHECKS', () => {
+		it('always includes the nagios and honey-pot routes', () => {
+			expect(BUILT_IN_UNIFIED_CHECKS).toEqual([
+				{key: 'nagios', path: '/nagios', params: {}},
+				{key: 'honey-pot', path: '/nagios/honey-pot', params: {}},
+			]);
+		});
+	});
+
+	describe('getUnifiedChecks', () => {
+		it('leads with the built-in routes then appends opted-in presets', () => {
+			mockedGetConfigKeys.mockReturnValue(['a']);
+			mockedSafeLookupConfig.mockReturnValue({
+				command: 'check-a',
+				params: {nestUnified: 'true'},
+			});
+
+			expect(getUnifiedChecks()).toEqual([
+				{key: 'nagios', path: '/nagios', params: {}},
+				{key: 'honey-pot', path: '/nagios/honey-pot', params: {}},
+				{key: 'a', path: '/plugins/check-a', params: {}},
+			]);
+		});
+
+		it('still includes the built-ins when no preset opts in', () => {
+			mockedGetConfigKeys.mockReturnValue([]);
+
+			expect(getUnifiedChecks()).toEqual(BUILT_IN_UNIFIED_CHECKS);
 		});
 	});
 

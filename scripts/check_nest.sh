@@ -59,8 +59,8 @@ Notes:
     - Duplicate parameter keys keep the last value.
     - Use --help or -h to print this help.
     - Use --local-config <key> to call a plugin using a server-side config preset.
-    - Use --unified to run the aggregate check over every preset opted into the
-      unified check (nestUnified=true) and report the worst status.
+    - Use --unified to run the aggregate check (built-in routes plus every
+      preset opted in with nestUnified=true) and report the worst status.
 EOF
 }
 

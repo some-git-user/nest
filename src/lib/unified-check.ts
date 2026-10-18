@@ -2,6 +2,7 @@ import type {NagiosReturnCode} from '../types/nagios';
 import {NagiosReturnCodes} from '../types/nagios';
 import {getConfigKeys, safeLookupConfig} from './local-config';
 import {getNagiosStatusText} from './nagios';
+import {commandToRoutePath} from './plugin-utils';
 
 /**
  * Reserved parameter name that opts a preset into the unified check.
@@ -42,24 +43,45 @@ export const stripUnifiedParam = (
 	return rest;
 };
 
-/** A preset selected for the unified check, ready to dial back. */
-export type UnifiedPreset = {
+/**
+ * A single check folded into the unified aggregate: a route to dial back into,
+ * the parameters to send it, and the key that labels it in the output.
+ *
+ * Two sources produce these. Plugin presets opt in via `nestUnified=true` and
+ * resolve to their `/plugins/<command>` route; the built-in monitoring routes
+ * (`/nagios`, `/nagios/honey-pot`) are always included and carry their route
+ * path directly. Keeping an explicit `path` lets both share one executor.
+ */
+export type UnifiedCheck = {
 	key: string;
-	command: string;
-	/** Parameters with the reserved unified flag stripped. */
+	path: string;
 	params: Record<string, string>;
 };
 
 /**
- * The presets opted into the unified check, from the startup-approved cache.
+ * The built-in monitoring routes that are always part of the unified check.
+ *
+ * Unlike plugin presets these need no opt-in: they are core Nest health
+ * signals (process/host metrics and honeypot activity) that should always be
+ * reflected in the aggregate. They dial back into their own routes like any
+ * other check, so they pass through the same access control and timeout.
+ */
+export const BUILT_IN_UNIFIED_CHECKS: UnifiedCheck[] = [
+	{key: 'nagios', path: '/nagios', params: {}},
+	{key: 'honey-pot', path: '/nagios/honey-pot', params: {}},
+];
+
+/**
+ * The plugin presets opted into the unified check, from the startup-approved cache.
  *
  * Reads the same in-memory cache the single-key `/local-config` route uses, so
  * the aggregate honours the approved-hash gate: a drifted or unapproved file yields
  * no keys here, exactly as it does there. Keys are returned in the cache's
- * insertion order (file order), so the aggregate output is stable.
+ * insertion order (file order), so the aggregate output is stable. Each preset's
+ * command is resolved to its `/plugins/<command>` route.
  */
-export const getUnifiedPresetEntries = (): UnifiedPreset[] => {
-	const presets: UnifiedPreset[] = [];
+export const getUnifiedPresetEntries = (): UnifiedCheck[] => {
+	const presets: UnifiedCheck[] = [];
 	for (const key of getConfigKeys()) {
 		const entry = safeLookupConfig(key);
 		if (!entry || !isUnifiedEnabled(entry.params)) {
@@ -67,12 +89,22 @@ export const getUnifiedPresetEntries = (): UnifiedPreset[] => {
 		}
 		presets.push({
 			key,
-			command: entry.command,
+			path: commandToRoutePath(entry.command),
 			params: stripUnifiedParam(entry.params),
 		});
 	}
 	return presets;
 };
+
+/**
+ * Everything the unified check runs: the built-in routes first, then the
+ * opted-in plugin presets. Built-ins lead so the aggregate's stable ordering
+ * always starts with the core Nest signals regardless of preset file order.
+ */
+export const getUnifiedChecks = (): UnifiedCheck[] => [
+	...BUILT_IN_UNIFIED_CHECKS,
+	...getUnifiedPresetEntries(),
+];
 
 /** The outcome of running one preset inside the aggregate. */
 export type UnifiedPresetResult = {
